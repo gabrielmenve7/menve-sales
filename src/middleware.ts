@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSubdomain } from "@/lib/tenant-edge";
+import { getSubdomain, resolveTenantSlug } from "@/lib/tenant-edge";
 
 /**
  * Bundle mínimo para o Edge (limite 1 MB no plano Hobby da Vercel).
@@ -22,7 +22,7 @@ function hasSessionCookie(req: NextRequest): boolean {
 export function middleware(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
   const sub = getSubdomain(host);
-  const slug = sub ?? process.env.DEFAULT_TENANT_SLUG ?? "demo";
+  const slug = resolveTenantSlug(sub, process.env.DEFAULT_TENANT_SLUG);
 
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-tenant-slug", slug);
@@ -30,6 +30,7 @@ export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const isPublic =
     path.startsWith("/login") ||
+    path.startsWith("/setup") ||
     path.startsWith("/api/auth") ||
     path.startsWith("/api/webhooks");
 

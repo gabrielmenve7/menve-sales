@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import type { UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -36,10 +36,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.role = user.role;
         token.tenantId = user.tenantId;
+      }
+      if (token.sub) {
+        const roleMissing =
+          token.role == null ||
+          token.role === "" ||
+          (typeof token.role === "string" && token.role.trim() === "");
+        const needsTenant =
+          token.role === UserRole.SUPER_ADMIN
+            ? false
+            : token.tenantId == null || token.tenantId === "";
+        if (roleMissing || needsTenant) {
+          try {
+            const { default: prisma } = await import("@/lib/prisma");
+            const u = await prisma.user.findUnique({
+              where: { id: token.sub },
+              select: { role: true, tenantId: true },
+            });
+            if (u) {
+              token.role = u.role;
+              token.tenantId = u.tenantId;
+            }
+          } catch {
+            // Falha transitória do DB no JWT não deve derrubar toda a sessão;
+            // getActiveTenantId() reidrata role/tenantId via Prisma quando precisar.
+          }
+        }
       }
       return token;
     },

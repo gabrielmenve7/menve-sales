@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { resolveTenantSlug } from "@/lib/tenant-edge";
 
 export function getSubdomain(host: string): string | null {
   const hostOnly = host.split(":")[0]?.toLowerCase() ?? "";
@@ -12,16 +14,16 @@ export function getSubdomain(host: string): string | null {
 
 export async function getTenantFromRequest() {
   const h = await headers();
-  const slug =
-    h.get("x-tenant-slug") ??
-    process.env.DEFAULT_TENANT_SLUG ??
-    "demo";
+  const slug = resolveTenantSlug(
+    h.get("x-tenant-slug"),
+    process.env.DEFAULT_TENANT_SLUG,
+  );
   const tenant = await prisma.tenant.findUnique({ where: { slug } });
   return tenant;
 }
 
 export async function requireTenant() {
   const tenant = await getTenantFromRequest();
-  if (!tenant) throw new Error("Tenant não encontrado");
+  if (!tenant) redirect("/setup");
   return tenant;
 }
