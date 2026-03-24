@@ -13,4 +13,8 @@ describe("getSubdomain", () => {
   it("returns null for www apex-style", () => {
     expect(getSubdomain("www.app.com")).toBeNull();
   });
+
+  it("returns null for vercel.app preview/production host", () => {
+    expect(getSubdomain("menve-sales-abc123.vercel.app")).toBeNull();
+  });
 });
