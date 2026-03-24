@@ -26,9 +26,12 @@ export default function SetupPage() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>
-            No ambiente de produção (ex.: Neon + Vercel), rode contra o mesmo{" "}
+            O deploy na Vercel já roda{" "}
+            <code className="rounded bg-muted px-1 py-0.5">prisma db seed</code>{" "}
+            após as migrations. Se você vê esta página, aguarde um redeploy
+            recente ou rode manualmente no mesmo{" "}
             <code className="rounded bg-muted px-1 py-0.5">DATABASE_URL</code>{" "}
-            configurado no deploy:
+            da Vercel:
           </p>
           <pre className="overflow-x-auto rounded-md border bg-muted/50 p-3 text-xs text-foreground">
             {`npx prisma migrate deploy
