@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { getSubdomain } from "@/lib/tenant-edge";
 
 /**
- * Não importar `@/auth` aqui: isso puxa bcrypt + Prisma no bundle Edge e estoura
- * o limite de 1 MB do plano Hobby na Vercel. Só validamos o JWT da sessão.
+ * Bundle mínimo para o Edge (limite 1 MB no plano Hobby da Vercel).
+ * Não importar `next-auth/jwt` nem `@/auth` — ainda assim passavam de 1 MB.
+ *
+ * Aqui só verificamos se o cookie de sessão do Auth.js existe; a validade do JWT
+ * é conferida nas rotas/API com `auth()`.
  */
-export async function middleware(req: NextRequest) {
+function hasSessionCookie(req: NextRequest): boolean {
+  const c = req.headers.get("cookie") ?? "";
+  return (
+    c.includes("__Secure-authjs.session-token=") ||
+    c.includes("authjs.session-token=") ||
+    c.includes("__Secure-next-auth.session-token=") ||
+    c.includes("next-auth.session-token=")
+  );
+}
+
+export function middleware(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
   const sub = getSubdomain(host);
   const slug = sub ?? process.env.DEFAULT_TENANT_SLUG ?? "demo";
@@ -25,13 +37,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
-  const token = await getToken({
-    req,
-    secret,
-  });
-
-  if (!token) {
+  if (!hasSessionCookie(req)) {
     return NextResponse.redirect(new URL("/login", req.nextUrl.origin));
   }
 
