@@ -14,7 +14,7 @@ Recomendação para o primeiro go-live: **Path A (PaaS)** — menos manutenção
 
 ### Repositório Git e Vercel
 
-1. Crie um repositório no GitHub (ou GitLab/Bitbucket), com o código commitado.
+1. Crie um repositório no GitHub (ou GitLab/Bitbucket). No clone local com commits: `git remote add origin <url-do-repo>` e `git push -u origin main` (ou `master`, conforme o branch padrão).
 2. Em [vercel.com](https://vercel.com): **Add New… → Project** → importe o repositório.
 3. **Environment Variables:** configure todas as variáveis da tabela abaixo (Production). `DATABASE_URL` deve estar presente **antes** do build (a migração roda no build).
 4. Faça o primeiro deploy. A URL será `https://<nome-do-projeto>.vercel.app` (ou domínio customizado).
