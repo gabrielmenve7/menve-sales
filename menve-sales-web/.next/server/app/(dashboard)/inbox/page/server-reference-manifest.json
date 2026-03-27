@@ -1,0 +1,89 @@
+{
+  "node": {
+    "40c5d57728a20cccfd3d1d1451282d63e5bc209b91": {
+      "workers": {
+        "app/(dashboard)/inbox/page": {
+          "moduleId": 90842,
+          "async": false,
+          "exportedName": "addConversationNote",
+          "filename": "menve-sales-web/src/actions/conversation-notes.ts"
+        }
+      },
+      "exportedName": "addConversationNote",
+      "filename": "menve-sales-web/src/actions/conversation-notes.ts"
+    },
+    "40f1846b4811c23c2f39787f442b6b2ea80b8cb674": {
+      "workers": {
+        "app/(dashboard)/inbox/page": {
+          "moduleId": 90842,
+          "async": false,
+          "exportedName": "sendWhatsAppMessage",
+          "filename": "menve-sales-web/src/actions/messages.ts"
+        }
+      },
+      "exportedName": "sendWhatsAppMessage",
+      "filename": "menve-sales-web/src/actions/messages.ts"
+    },
+    "4047938006727182a48efc0e7775c081eb9ab0fbbd": {
+      "workers": {
+        "app/(dashboard)/inbox/page": {
+          "moduleId": 90842,
+          "async": false,
+          "exportedName": "deleteWhatsAppConnection",
+          "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+        }
+      },
+      "exportedName": "deleteWhatsAppConnection",
+      "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+    },
+    "4014d266503435e6d4d2f5db3802c4c5293db63c0f": {
+      "workers": {
+        "app/(dashboard)/inbox/page": {
+          "moduleId": 90842,
+          "async": false,
+          "exportedName": "pollEvolutionStatus",
+          "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+        }
+      },
+      "exportedName": "pollEvolutionStatus",
+      "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+    },
+    "40a31b7cd825c65e68af9198297e4843bb29b6df09": {
+      "workers": {
+        "app/(dashboard)/inbox/page": {
+          "moduleId": 90842,
+          "async": false,
+          "exportedName": "reapplyEvolutionWebhook",
+          "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+        }
+      },
+      "exportedName": "reapplyEvolutionWebhook",
+      "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+    },
+    "40c4c96681e3f11fab3ba7dc39d291429bde51d0ae": {
+      "workers": {
+        "app/(dashboard)/inbox/page": {
+          "moduleId": 90842,
+          "async": false,
+          "exportedName": "refreshEvolutionQr",
+          "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+        }
+      },
+      "exportedName": "refreshEvolutionQr",
+      "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+    },
+    "40f3b981d1a7c04749b888f04558167321b7043043": {
+      "workers": {
+        "app/(dashboard)/inbox/page": {
+          "moduleId": 90842,
+          "async": false,
+          "exportedName": "startEvolutionPairing",
+          "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+        }
+      },
+      "exportedName": "startEvolutionPairing",
+      "filename": "menve-sales-web/src/actions/whatsapp-connections.ts"
+    }
+  },
+  "edge": {}
+}

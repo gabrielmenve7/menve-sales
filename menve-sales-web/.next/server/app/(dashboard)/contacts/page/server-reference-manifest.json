@@ -1,0 +1,53 @@
+{
+  "node": {
+    "40d62d317a112a36a4cdcda1c05af87e518a3d3372": {
+      "workers": {
+        "app/(dashboard)/contacts/page": {
+          "moduleId": 86955,
+          "async": false,
+          "exportedName": "createContact",
+          "filename": "menve-sales-web/src/actions/contacts.ts"
+        }
+      },
+      "exportedName": "createContact",
+      "filename": "menve-sales-web/src/actions/contacts.ts"
+    },
+    "40d8ff8de9c3abcb9fe7981825755b1a3511d1100e": {
+      "workers": {
+        "app/(dashboard)/contacts/page": {
+          "moduleId": 86955,
+          "async": false,
+          "exportedName": "deleteContact",
+          "filename": "menve-sales-web/src/actions/contacts.ts"
+        }
+      },
+      "exportedName": "deleteContact",
+      "filename": "menve-sales-web/src/actions/contacts.ts"
+    },
+    "00c2c0925de2f598128bfac8116e2c371e17a43b10": {
+      "workers": {
+        "app/(dashboard)/contacts/page": {
+          "moduleId": 86955,
+          "async": false,
+          "exportedName": "exportContactsCsv",
+          "filename": "menve-sales-web/src/actions/contacts.ts"
+        }
+      },
+      "exportedName": "exportContactsCsv",
+      "filename": "menve-sales-web/src/actions/contacts.ts"
+    },
+    "40924c32cc1c78e55ff4461083e81a32b58367729d": {
+      "workers": {
+        "app/(dashboard)/contacts/page": {
+          "moduleId": 86955,
+          "async": false,
+          "exportedName": "importContactsCsv",
+          "filename": "menve-sales-web/src/actions/import-csv.ts"
+        }
+      },
+      "exportedName": "importContactsCsv",
+      "filename": "menve-sales-web/src/actions/import-csv.ts"
+    }
+  },
+  "edge": {}
+}

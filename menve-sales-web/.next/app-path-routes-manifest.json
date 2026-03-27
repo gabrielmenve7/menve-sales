@@ -1,0 +1,22 @@
+{
+  "/(auth)/login/page": "/login",
+  "/(dashboard)/activities/page": "/activities",
+  "/(dashboard)/admin/page": "/admin",
+  "/(dashboard)/analytics/page": "/analytics",
+  "/(dashboard)/contacts/[id]/page": "/contacts/[id]",
+  "/(dashboard)/contacts/page": "/contacts",
+  "/(dashboard)/dashboard/page": "/dashboard",
+  "/(dashboard)/inbox/page": "/inbox",
+  "/(dashboard)/pipeline/page": "/pipeline",
+  "/(dashboard)/settings/page": "/settings",
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/auth/[...nextauth]/route": "/api/auth/[...nextauth]",
+  "/api/health/route": "/api/health",
+  "/api/inbox/route": "/api/inbox",
+  "/api/webhooks/whatsapp/evolution/[connectionId]/[[...event]]/route": "/api/webhooks/whatsapp/evolution/[connectionId]/[[...event]]",
+  "/api/webhooks/whatsapp/meta/route": "/api/webhooks/whatsapp/meta",
+  "/favicon.ico/route": "/favicon.ico",
+  "/page": "/",
+  "/setup/page": "/setup"
+}

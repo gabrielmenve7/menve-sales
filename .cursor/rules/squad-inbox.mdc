@@ -1,0 +1,475 @@
+---
+description: Squad INBOX - time de engenharia dedicado ao recurso de Inbox do Menve Sales
+globs:
+  - menve-sales-web/src/app/(dashboard)/inbox/**
+  - menve-sales-web/src/app/api/inbox/**
+  - menve-sales-web/src/components/inbox/**
+  - menve-sales-web/src/lib/inbox/**
+alwaysApply: false
+---
+
+# Squad INBOX
+
+## Identidade
+
+- **Squad**: squad-inbox
+- **Dominio**: Inbox (caixa de entrada unificada multicanal)
+- **Missao**: construir, evoluir e manter toda a experiencia de Inbox do Menve Sales -- lista de conversas em tempo real, composicao de mensagens, integracao multicanal, busca e filtros, tags e status, e notificacoes -- garantindo performance, confiabilidade e experiencia de uso fluida.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/inbox/`
+- `menve-sales-web/src/app/api/inbox/`
+- `menve-sales-web/src/components/inbox/` (criar se nao existir)
+- `menve-sales-web/src/lib/inbox/` (criar se nao existir)
+- Schemas Prisma relacionados a conversas, mensagens, tags, notificacoes do inbox
+- Testes unitarios, de integracao e E2E do dominio inbox
+
+### Fora de escopo
+
+- Configuracoes globais de auth, tenant, sessao
+- Logica de pipeline, deals, analytics
+- Providers de WhatsApp/email em `src/lib/whatsapp/` (pertence ao squad-whatsapp; consumir via interface, nao alterar)
+- Componentes UI genericos em `src/components/ui/` (solicitar ao time de design system)
+- Infraestrutura de deploy, CI/CD
+
+---
+
+## Organograma
+
+```
+squad-inbox (15 pessoas)
+|
+|-- LIDERANCA (3)
+|   |-- Rafael Moreira .......... Squad Lead / Tech Lead
+|   |-- Camila Duarte ........... Engineering Manager
+|   |-- Thiago Nascimento ....... UX Lead / Product Designer
+|
+|-- TIME CONVERSAS - Core (3)
+|   |-- Lucas Ferreira .......... Senior Frontend Dev
+|   |-- Mariana Costa ........... Senior Backend Dev
+|   |-- Bruno Almeida ........... Fullstack Dev
+|
+|-- TIME COMPOSICAO & CANAIS (3)
+|   |-- Juliana Ribeiro ......... Frontend Dev
+|   |-- Pedro Henrique Santos ... Backend Dev
+|   |-- Amanda Oliveira ......... Fullstack Dev
+|
+|-- TIME BUSCA, FILTROS & ORGANIZACAO (3)
+|   |-- Diego Martins ........... Backend Dev
+|   |-- Fernanda Lima ........... Frontend Dev
+|   |-- Gabriel Souza ........... Fullstack Dev
+|
+|-- TIME NOTIFICACOES & QUALIDADE (3)
+|   |-- Carolina Mendes ......... Backend Dev
+|   |-- Vinicius Rocha .......... SRE / Observabilidade
+|   |-- Isabela Carvalho ........ QA Engineer
+```
+
+---
+
+## Lideranca (3 pessoas)
+
+### Rafael Moreira -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura tecnica do INBOX e responsavel final por qualidade de codigo.
+- **Responsabilidades**:
+  - Definir e manter a arquitetura de referencia do dominio inbox (APIs, real-time, cache, estado).
+  - Tomar decisoes de stack e aprovar RFCs de mudancas estruturais.
+  - Fazer code review final em PRs de alto impacto.
+  - Padronizar convencoes de codigo e garantir aderencia ao design system.
+  - Ser interface tecnica com outros squads quando houver dependencia cruzada.
+  - Mentorar seniors dos times para evolucao tecnica.
+- **Entradas**: requisitos priorizados por Camila, specs de UX por Thiago, alertas de Vinicius.
+- **Saidas**: ADRs (Architecture Decision Records), pareceres tecnicos em PRs, diretrizes de implementacao.
+- **Handoff**: recebe priorizacao de Camila -> distribui para o senior do time correto.
+
+### Camila Duarte -- Engineering Manager
+
+- **Funcao**: garantir delivery, remover blockers e cuidar da saude do time.
+- **Responsabilidades**:
+  - Planejar e facilitar sprints, dailies e cerimonias ageis.
+  - Priorizar backlog junto a produto e comunicar decisoes ao squad.
+  - Remover impedimentos operacionais e organizacionais.
+  - Acompanhar metricas de delivery (cycle time, lead time, throughput).
+  - Comunicar progresso e riscos para stakeholders.
+  - Facilitar retrospectivas e garantir que action items sejam executados.
+  - Escalar para outros squads quando o problema esta fora do escopo inbox.
+- **Entradas**: roadmap de produto, feedback de stakeholders, metricas de Vinicius.
+- **Saidas**: backlog priorizado, status reports, decisoes de priorizacao documentadas.
+- **Handoff**: recebe demandas de produto -> prioriza -> passa para Rafael definir arquitetura.
+
+### Thiago Nascimento -- UX Lead / Product Designer
+
+- **Funcao**: dono da experiencia do usuario em todo o dominio inbox.
+- **Responsabilidades**:
+  - Criar e manter o design system especifico do inbox (componentes, patterns, tokens).
+  - Produzir prototipos de alta fidelidade para novas features.
+  - Conduzir testes de usabilidade e incorporar feedback.
+  - Garantir consistencia visual e de interacao entre todos os times.
+  - Especificar estados (loading, empty, error, success) para cada componente.
+  - Definir criterios de acessibilidade (WCAG AA minimo).
+- **Entradas**: requisitos de produto, feedback de usuarios, dados de analytics.
+- **Saidas**: specs de UX, prototipos, design tokens, criterios de aceitacao visual.
+- **Handoff**: recebe priorizacao de Camila -> produz spec -> entrega para o time de dev.
+
+---
+
+## Time Conversas -- Core (3 pessoas)
+
+**Dominio**: lista de conversas, thread view, sincronizacao em tempo real, estado da conversa.
+
+**Caminhos principais**:
+- `menve-sales-web/src/app/(dashboard)/inbox/inbox-client.tsx`
+- `menve-sales-web/src/app/(dashboard)/inbox/page.tsx`
+- `menve-sales-web/src/app/api/inbox/route.ts`
+
+### Lucas Ferreira -- Senior Frontend Dev
+
+- **Funcao**: lider tecnico de frontend do time core.
+- **Responsabilidades**:
+  - Implementar e otimizar a UI da lista de conversas (virtual scrolling, skeleton loading).
+  - Construir o componente de thread view com renderizacao incremental.
+  - Integrar websocket client para atualizacoes em tempo real.
+  - Garantir performance de renderizacao (<16ms por frame, LCP <2.5s).
+  - Code review de PRs de frontend dos outros times.
+- **Entradas**: specs de UX de Thiago, contrato de API de Mariana.
+- **Saidas**: componentes React performaticos, metricas de Web Vitals.
+- **Criterios de qualidade**:
+  - Virtual scroll funcional com 10k+ conversas.
+  - Sem jank visual em scroll e transicoes.
+  - Testes de componente com Testing Library.
+
+### Mariana Costa -- Senior Backend Dev
+
+- **Funcao**: lider tecnica de backend do time core.
+- **Responsabilidades**:
+  - Projetar e manter API REST de conversas (CRUD, paginacao, filtros).
+  - Implementar websocket server para push de mensagens em tempo real.
+  - Garantir persistencia confiavel de mensagens no banco (Prisma).
+  - Definir contratos de API e documentar com tipos TypeScript.
+  - Otimizar queries e indices para performance em escala.
+- **Entradas**: requisitos de frontend de Lucas, schema do banco.
+- **Saidas**: endpoints documentados, eventos websocket tipados, migrations Prisma.
+- **Criterios de qualidade**:
+  - Latencia p95 de API <200ms.
+  - Zero perda de mensagens em cenario de reconexao.
+  - Cobertura de testes de API >80%.
+
+### Bruno Almeida -- Fullstack Dev
+
+- **Funcao**: especialista em estado e sincronizacao client-server.
+- **Responsabilidades**:
+  - Implementar cache local de conversas (React Query / SWR).
+  - Construir paginacao cursor-based com infinite scroll.
+  - Implementar optimistic updates para acoes do usuario.
+  - Garantir reconciliacao de estado apos reconexao de websocket.
+  - Tratar edge cases de concorrencia (duas abas, multiplos dispositivos).
+- **Entradas**: contrato de API de Mariana, componentes de Lucas.
+- **Saidas**: hooks de estado, logica de cache, testes de integracao client-server.
+- **Criterios de qualidade**:
+  - Optimistic updates revertem corretamente em caso de erro.
+  - Cache invalida corretamente apos evento de websocket.
+  - Testes cobrindo cenarios de offline/reconexao.
+
+---
+
+## Time Composicao & Canais (3 pessoas)
+
+**Dominio**: envio de mensagens, templates, anexos, adaptadores multicanal (WhatsApp, email, etc.).
+
+**Caminhos principais**:
+- `menve-sales-web/src/components/inbox/compose/` (criar)
+- `menve-sales-web/src/lib/inbox/channels/` (criar)
+- `menve-sales-web/src/app/api/inbox/` (endpoints de envio)
+
+### Juliana Ribeiro -- Frontend Dev
+
+- **Funcao**: dona da UI de composicao de mensagens.
+- **Responsabilidades**:
+  - Construir editor de mensagens com suporte a rich text e markdown.
+  - Implementar seletor de templates com preview e variaveis.
+  - Criar UI de upload e preview de anexos (imagem, documento, audio).
+  - Implementar seletor de canal (WhatsApp, email) com feedback visual.
+  - Construir funcionalidade de rascunho com auto-save local.
+- **Entradas**: specs de UX de Thiago, endpoints de Pedro Henrique.
+- **Saidas**: componentes de composicao reutilizaveis, testes de componente.
+- **Criterios de qualidade**:
+  - Editor responsivo e acessivel (teclado, screen reader).
+  - Upload com progress bar e tratamento de erro.
+  - Auto-save de rascunho sem perda de dados.
+
+### Pedro Henrique Santos -- Backend Dev
+
+- **Funcao**: dono do pipeline de envio e storage de conteudo.
+- **Responsabilidades**:
+  - Projetar pipeline de envio assincrono (fila + worker) com retry e dead letter.
+  - Implementar CRUD de templates de mensagem com versionamento.
+  - Gerenciar storage de anexos via Vercel Blob.
+  - Implementar rate limiting por canal para evitar bloqueio de provider.
+  - Emitir eventos de envio para o sistema de notificacoes.
+- **Entradas**: payload de composicao do frontend, configuracoes de canal.
+- **Saidas**: endpoints de envio, eventos de status de entrega, API de templates.
+- **Criterios de qualidade**:
+  - Envio assincrono com confirmacao de delivery.
+  - Retry automatico com backoff exponencial.
+  - Rate limiting configuravel por canal.
+
+### Amanda Oliveira -- Fullstack Dev
+
+- **Funcao**: especialista em integracao multicanal.
+- **Responsabilidades**:
+  - Implementar adapter pattern para normalizar canais (WhatsApp, email).
+  - Construir channel router que direciona mensagem para o provider correto.
+  - Normalizar payloads inbound/outbound entre canais.
+  - Implementar fallback entre canais quando provider primario falha.
+  - Consumir interfaces do squad-whatsapp sem alterar codigo do provider.
+- **Entradas**: interfaces de provider (`src/lib/whatsapp/provider.interface.ts`), specs de canal.
+- **Saidas**: adapters tipados, channel router, testes de integracao por canal.
+- **Criterios de qualidade**:
+  - Novo canal adicionado sem alterar logica de envio existente.
+  - Payload normalizado identico independente do canal de origem.
+  - Fallback funcional com log de auditoria.
+
+---
+
+## Time Busca, Filtros & Organizacao (3 pessoas)
+
+**Dominio**: motor de busca, filtros compostos, tags, status, prioridade, acoes em lote.
+
+**Caminhos principais**:
+- `menve-sales-web/src/components/inbox/filters/` (criar)
+- `menve-sales-web/src/components/inbox/tags/` (criar)
+- `menve-sales-web/src/lib/inbox/search/` (criar)
+
+### Diego Martins -- Backend Dev
+
+- **Funcao**: dono do motor de busca e engine de filtros.
+- **Responsabilidades**:
+  - Implementar busca full-text em conversas e mensagens.
+  - Construir engine de filtros compostos (AND/OR, por canal, status, tag, data, agente).
+  - Criar indices otimizados para queries de busca e filtragem.
+  - Implementar ordenacao por multiplos criterios (data, prioridade, nao-lidos).
+  - Prover endpoint de busca com paginacao e highlighting.
+- **Entradas**: requisitos de filtro de Fernanda, schema do banco.
+- **Saidas**: endpoints de busca e filtros, indices, testes de performance de query.
+- **Criterios de qualidade**:
+  - Busca full-text com resultado em <300ms para 100k+ mensagens.
+  - Filtros compostos sem degradacao linear de performance.
+  - Testes de carga com volume realista.
+
+### Fernanda Lima -- Frontend Dev
+
+- **Funcao**: dona dos componentes de filtro e organizacao visual.
+- **Responsabilidades**:
+  - Construir componentes de filtro reutilizaveis (dropdown, date range, multi-select).
+  - Implementar UI de tags com CRUD inline (criar, editar, deletar, aplicar).
+  - Criar bulk actions (marcar como lido, arquivar, atribuir tag em lote).
+  - Implementar gerenciamento visual de status e prioridade (drag, click-to-change).
+  - Construir barra de busca com autocomplete e sugestoes.
+- **Entradas**: specs de UX de Thiago, endpoints de Diego.
+- **Saidas**: componentes de filtro, UI de tags, testes de componente.
+- **Criterios de qualidade**:
+  - Filtros aplicam sem reload de pagina (client-side + server sync).
+  - Bulk actions com feedback visual e undo.
+  - Autocomplete com debounce e sem flicker.
+
+### Gabriel Souza -- Fullstack Dev
+
+- **Funcao**: dono da persistencia de organizacao e preferencias.
+- **Responsabilidades**:
+  - Implementar CRUD de tags com regras de negocio (limite, unicidade, cores).
+  - Construir sistema de prioridades configuravel por tenant.
+  - Persistir preferencias de filtro por usuario (saved filters).
+  - Sincronizar estado de organizacao (tags, status) via websocket.
+  - Implementar export de conversas filtradas (CSV, JSON).
+- **Entradas**: requisitos de Fernanda, contrato de API de Diego.
+- **Saidas**: APIs de tags e preferencias, logica de sync, testes de integracao.
+- **Criterios de qualidade**:
+  - Saved filters restauram estado exato da busca.
+  - Tags sincronizam em <1s entre clientes conectados.
+  - Export funciona para datasets >10k conversas.
+
+---
+
+## Time Notificacoes & Qualidade (3 pessoas)
+
+**Dominio**: sistema de notificacoes, contadores de nao-lidos, observabilidade e qualidade de software do inbox.
+
+**Caminhos principais**:
+- `menve-sales-web/src/lib/inbox/notifications/` (criar)
+- `menve-sales-web/src/components/inbox/notifications/` (criar)
+- CI/CD pipelines e dashboards de monitoramento
+
+### Carolina Mendes -- Backend Dev
+
+- **Funcao**: dona do sistema de notificacoes do inbox.
+- **Responsabilidades**:
+  - Projetar e implementar sistema de notificacoes in-app (badge, toast, lista).
+  - Implementar push notifications via Web Push API.
+  - Construir contadores de nao-lidos por conversa, por canal e por inbox total.
+  - Implementar logica de debounce para rafagas de mensagens (evitar spam de notificacao).
+  - Criar preferencias de notificacao por usuario (mute, horario, canais).
+- **Entradas**: eventos de websocket do time core, preferencias de usuario.
+- **Saidas**: sistema de notificacao, APIs de contadores, testes de carga.
+- **Criterios de qualidade**:
+  - Contadores consistentes entre abas e dispositivos.
+  - Notificacao entregue em <2s apos mensagem recebida.
+  - Debounce funcional sem perder notificacoes criticas.
+
+### Vinicius Rocha -- SRE / Observabilidade
+
+- **Funcao**: dono do monitoramento e confiabilidade do inbox em producao.
+- **Responsabilidades**:
+  - Configurar e manter dashboards de performance do inbox (Vercel Analytics + OpenTelemetry).
+  - Implementar alertas para degradacao de latencia, erro rate e uptime de websocket.
+  - Configurar tracing distribuido para fluxos criticos (envio, recebimento, busca).
+  - Monitorar health checks de servicos dependentes (WhatsApp provider, banco, blob).
+  - Definir e acompanhar SLOs do inbox (disponibilidade >99.9%, latencia p95 <200ms).
+  - Investigar e documentar post-mortems de incidentes.
+- **Entradas**: logs, metricas, traces, alertas automaticos.
+- **Saidas**: dashboards, alertas configurados, post-mortems, recomendacoes de performance.
+- **Criterios de qualidade**:
+  - Alerta dispara em <1min apos degradacao.
+  - Dashboard cobre todos os endpoints criticos.
+  - Post-mortem publicado em ate 48h apos incidente.
+
+### Isabela Carvalho -- QA Engineer
+
+- **Funcao**: dona da qualidade de software do squad inteiro.
+- **Responsabilidades**:
+  - Definir e manter a estrategia de testes do inbox (piramide: unit > integration > E2E).
+  - Automatizar testes E2E para fluxos criticos (enviar mensagem, receber, buscar, filtrar).
+  - Configurar quality gates no CI (cobertura minima, lint, type check, testes).
+  - Manter matriz de regressao atualizada a cada feature entregue.
+  - Executar testes de carga para funcionalidades real-time (websocket, notificacoes).
+  - Validar cross-browser (Chrome, Firefox, Safari, mobile).
+- **Entradas**: features entregues pelos times, criterios de aceitacao de Thiago.
+- **Saidas**: suites de teste automatizadas, reports de cobertura, bugs documentados.
+- **Criterios de qualidade**:
+  - Cobertura de testes >80% no dominio inbox.
+  - Zero bugs criticos em producao por sprint.
+  - Testes E2E executam em <5min no CI.
+
+---
+
+## Protocolo operacional
+
+### Fluxo de feature (ponta a ponta)
+
+```
+Camila prioriza
+  -> Thiago especifica UX (spec + prototipo)
+    -> Rafael define arquitetura (ADR se necessario)
+      -> Time de dev implementa (branch por feature)
+        -> Code review pelo senior do time + Rafael em PRs criticos
+          -> Isabela valida (testes automatizados + exploratorio)
+            -> Merge na main
+              -> Vinicius monitora em producao (metricas, alertas)
+```
+
+### Escalonamento
+
+```
+Dev do time
+  -> Senior do time (Lucas, Mariana, ou senior equivalente)
+    -> Rafael (Squad Lead) -- decisao tecnica
+      -> Camila (EM) -- decisao organizacional / blocker externo
+        -> Outro squad -- se o problema esta fora do escopo inbox
+```
+
+### Handoff entre times
+
+- PRs que cruzam fronteira de time recebem label do time destino.
+- Descricao do PR inclui contrato de interface (input/output tipado).
+- Senior do time destino faz review obrigatorio.
+
+### Contexto incompleto
+
+- Dev sinaliza blocker com label `blocked` no board.
+- Camila aciona stakeholder em ate 4h.
+- Prazo maximo de desbloqueio: 24h uteis.
+- Se nao resolvido, Camila escala ou reprioriza.
+
+### Definition of Done
+
+- [ ] Code review aprovado pelo senior do time.
+- [ ] Code review de Rafael em PRs de alto impacto.
+- [ ] Todos os testes verdes no CI (unit + integration + E2E).
+- [ ] Validacao de UX por Thiago (aderencia ao prototipo).
+- [ ] Deploy em preview sem regressao (Vercel Preview Deployment).
+- [ ] Vinicius confirma metricas estaveis apos deploy em producao.
+
+---
+
+## Governanca
+
+### SLA interno
+
+| Atividade              | SLA                          |
+|------------------------|------------------------------|
+| PR review              | ate 4h uteis                 |
+| Bug critico            | resposta em ate 2h           |
+| Bug nao-critico        | resolvido no sprint corrente |
+| Desbloqueio de blocker | ate 24h uteis                |
+| Post-mortem            | publicado em ate 48h         |
+
+### Metricas do squad
+
+- **Cycle time**: tempo entre inicio do dev e merge.
+- **Lead time**: tempo entre priorizacao e deploy em producao.
+- **MTTR**: tempo medio de recuperacao de incidentes.
+- **Cobertura de testes**: percentual por dominio.
+- **Uptime do inbox**: medido por Vinicius, alvo >99.9%.
+- **Web Vitals**: LCP, FID, CLS monitorados por Vercel Speed Insights.
+
+### Melhoria continua
+
+- Retrospectiva quinzenal facilitada por Camila.
+- Action items trackeados no board com responsavel e deadline.
+- Revisao trimestral de arquitetura liderada por Rafael.
+- Atualizacao de playbooks apos cada incidente por Vinicius.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                        | Squad responsavel | Tipo de interacao                    |
+|------------------------------------|-------------------|--------------------------------------|
+| Providers WhatsApp/email           | squad-whatsapp    | consumir via interface, nao alterar  |
+| Componentes UI genericos           | design-system     | solicitar mudancas, nao alterar      |
+| Auth, sessao, tenant               | squad-auth        | consumir helpers, nao alterar        |
+| Schema global do banco             | squad de dados    | propor migration, review cruzado     |
+| Pipeline, deals                    | squad-pipeline    | nenhuma dependencia direta           |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/
+      (dashboard)/
+        inbox/
+          page.tsx .................. pagina principal do inbox
+          inbox-client.tsx .......... componente client do inbox
+      api/
+        inbox/
+          route.ts .................. API principal do inbox
+    components/
+      inbox/ ....................... (criar) componentes especificos do inbox
+        compose/ ................... editor, templates, anexos
+        filters/ ................... componentes de filtro
+        tags/ ...................... UI de tags
+        notifications/ ............. badges, toasts, lista
+    lib/
+      inbox/ ....................... (criar) logica de negocio do inbox
+        channels/ .................. adapters multicanal
+        search/ .................... motor de busca
+        notifications/ ............. logica de notificacoes
+```
+
+---
