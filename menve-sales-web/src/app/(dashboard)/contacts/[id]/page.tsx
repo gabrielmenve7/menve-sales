@@ -1,6 +1,4 @@
-import prisma from "@/lib/prisma";
-import { getActiveTenantId } from "@/lib/session";
-import { findContactCustomFieldDefinitions } from "@/lib/custom-fields-load";
+import { apiServer } from "@/lib/api-server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -21,50 +19,34 @@ function initials(name: string): string {
   return `${parts[0]!.slice(0, 1)}${parts[1]!.slice(0, 1)}`.toUpperCase();
 }
 
+type ContactBundle = {
+  contact: {
+    name: string;
+    phone: string | null;
+    email: string | null;
+    customData: unknown;
+  };
+  allTags: unknown[];
+  customFields: unknown[];
+  activities: unknown[];
+  messages: unknown[];
+};
+
 export default async function ContactDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const tenantId = await getActiveTenantId();
 
-  const contact = await prisma.contact.findFirst({
-    where: { id, tenantId },
-    include: {
-      campaignSource: true,
-      contactTags: { include: { tag: true } },
-      deals: {
-        include: { stage: true, pipeline: true, assignedTo: true },
-        orderBy: { updatedAt: "desc" },
-      },
-    },
-  });
+  let bundle: ContactBundle;
+  try {
+    bundle = await apiServer<ContactBundle>(`/contacts/${id}`);
+  } catch {
+    notFound();
+  }
 
-  if (!contact) notFound();
-
-  const [allTags, customFields] = await Promise.all([
-    prisma.tag.findMany({
-      where: { tenantId },
-      orderBy: { name: "asc" },
-    }),
-    findContactCustomFieldDefinitions(tenantId),
-  ]);
-
-  const [activities, messages] = await Promise.all([
-    prisma.activity.findMany({
-      where: { tenantId, contactId: id },
-      orderBy: { createdAt: "desc" },
-      include: { user: { select: { name: true, email: true } } },
-      take: 100,
-    }),
-    prisma.message.findMany({
-      where: { tenantId, contactId: id },
-      orderBy: { createdAt: "desc" },
-      include: { user: { select: { name: true, email: true } } },
-      take: 100,
-    }),
-  ]);
+  const { contact, allTags, customFields, activities, messages } = bundle;
   const photoUrl = getContactPhotoUrl(contact.customData);
 
   return (
@@ -97,11 +79,11 @@ export default async function ContactDetailPage({
       </div>
 
       <ContactDetailClient
-        contact={contact}
-        activities={activities}
-        messages={messages}
-        allTags={allTags}
-        customFields={customFields}
+        contact={bundle.contact as never}
+        activities={activities as never}
+        messages={messages as never}
+        allTags={allTags as never}
+        customFields={customFields as never}
       />
     </div>
   );

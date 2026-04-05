@@ -1,7 +1,7 @@
 "use client";
 
 import type { CustomField } from "@prisma/client";
-import { CUSTOM_FIELD_ENTITY } from "@/lib/custom-field-entity";
+import type { CustomFieldEntityLiteral } from "@/lib/custom-field-entity";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -23,8 +23,23 @@ import { Label } from "@/components/ui/label";
 
 const TYPES = ["TEXT", "NUMBER", "DATE", "SELECT"] as const;
 
-/** Apenas campos de entidade CONTACT (página já filtra). */
-export function SettingsCustomFields({ fields: initial }: { fields: CustomField[] }) {
+export function SettingsCustomFields({
+  fields: initial,
+  entity,
+  title,
+  description,
+  listLabel,
+  newFieldTitle,
+  idPrefix,
+}: {
+  fields: CustomField[];
+  entity: CustomFieldEntityLiteral;
+  title: string;
+  description: string;
+  listLabel: string;
+  newFieldTitle: string;
+  idPrefix: string;
+}) {
   const router = useRouter();
   const [fields, setFields] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -41,7 +56,7 @@ export function SettingsCustomFields({ fields: initial }: { fields: CustomField[
     try {
       await reorderCustomFields({
         orderedIds: next.map((f) => f.id),
-        entity: CUSTOM_FIELD_ENTITY.CONTACT,
+        entity,
       });
       router.refresh();
     } catch (e) {
@@ -63,11 +78,8 @@ export function SettingsCustomFields({ fields: initial }: { fields: CustomField[
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Campos customizados (contatos)</CardTitle>
-        <CardDescription>
-          Definições por tenant. Valores ficam em cada contato (ficha). Chave técnica
-          única por tenant (slug).
-        </CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {error ? (
@@ -75,6 +87,9 @@ export function SettingsCustomFields({ fields: initial }: { fields: CustomField[
         ) : null}
 
         <NewFieldForm
+          entity={entity}
+          formTitle={newFieldTitle}
+          idPrefix={idPrefix}
           busy={busy}
           onError={setError}
           onBusy={setBusy}
@@ -83,7 +98,7 @@ export function SettingsCustomFields({ fields: initial }: { fields: CustomField[
 
         <div>
           <p className="mb-2 text-sm font-medium">
-            Campos de contato ({fields.length})
+            {listLabel} ({fields.length})
           </p>
           {fields.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -115,11 +130,17 @@ export function SettingsCustomFields({ fields: initial }: { fields: CustomField[
 }
 
 function NewFieldForm({
+  entity,
+  formTitle,
+  idPrefix,
   busy,
   onError,
   onBusy,
   onDone,
 }: {
+  entity: CustomFieldEntityLiteral;
+  formTitle: string;
+  idPrefix: string;
   busy: boolean;
   onError: (s: string | null) => void;
   onBusy: (v: boolean) => void;
@@ -148,7 +169,7 @@ function NewFieldForm({
         key: key.trim(),
         fieldType,
         options,
-        entity: CUSTOM_FIELD_ENTITY.CONTACT,
+        entity,
         required,
       });
       setName("");
@@ -169,31 +190,31 @@ function NewFieldForm({
       onSubmit={(e) => void onSubmit(e)}
       className="space-y-3 rounded-lg border p-3"
     >
-      <p className="text-sm font-medium">Novo campo (contato)</p>
+      <p className="text-sm font-medium">{formTitle}</p>
       <div className="flex flex-wrap gap-3">
         <div className="grid min-w-[140px] gap-1">
-          <Label htmlFor="cf-name">Nome</Label>
+          <Label htmlFor={`${idPrefix}-cf-name`}>Nome</Label>
           <Input
-            id="cf-name"
+            id={`${idPrefix}-cf-name`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
           />
         </div>
         <div className="grid min-w-[120px] gap-1">
-          <Label htmlFor="cf-key">Chave (slug)</Label>
+          <Label htmlFor={`${idPrefix}-cf-key`}>Chave (slug)</Label>
           <Input
-            id="cf-key"
+            id={`${idPrefix}-cf-key`}
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder="ex: cargo"
+            placeholder="ex: linkedin"
             required
           />
         </div>
         <div className="grid gap-1">
-          <Label htmlFor="cf-type">Tipo</Label>
+          <Label htmlFor={`${idPrefix}-cf-type`}>Tipo</Label>
           <select
-            id="cf-type"
+            id={`${idPrefix}-cf-type`}
             className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             value={fieldType}
             onChange={(e) =>
@@ -218,9 +239,11 @@ function NewFieldForm({
       </div>
       {fieldType === "SELECT" ? (
         <div className="grid gap-1">
-          <Label htmlFor="cf-opt">Opções (uma por linha ou separadas por vírgula)</Label>
+          <Label htmlFor={`${idPrefix}-cf-opt`}>
+            Opções (uma por linha ou separadas por vírgula)
+          </Label>
           <textarea
-            id="cf-opt"
+            id={`${idPrefix}-cf-opt`}
             value={optionsText}
             onChange={(e) => setOptionsText(e.target.value)}
             className="min-h-[72px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"

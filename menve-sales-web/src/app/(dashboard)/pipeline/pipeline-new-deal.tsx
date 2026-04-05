@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import type { Pipeline, Stage } from "@prisma/client";
 
 type ContactOpt = { id: string; name: string; phone: string | null };
@@ -21,15 +22,20 @@ type ContactOpt = { id: string; name: string; phone: string | null };
 export function PipelineNewDeal({
   pipeline,
   contacts,
+  defaultStageId,
+  variant = "toolbar",
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   contacts: ContactOpt[];
+  defaultStageId?: string;
+  variant?: "toolbar" | "column";
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const firstStageId = pipeline.stages[0]?.id;
-  if (!firstStageId) return null;
+  const stageId = defaultStageId ?? pipeline.stages[0]?.id;
+
+  if (!stageId) return null;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -46,7 +52,7 @@ export function PipelineNewDeal({
     await createDeal({
       contactId,
       pipelineId: pipeline.id,
-      stageId: firstStageId,
+      stageId,
       title,
       value: Number.isFinite(value) ? value : undefined,
     });
@@ -58,17 +64,31 @@ export function PipelineNewDeal({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" className="shrink-0 font-medium">
-          + Novo lead
-        </Button>
+        {variant === "column" ? (
+          <button
+            type="button"
+            className={cn(
+              "w-full rounded-xl border border-dashed border-border/70 bg-background/60 py-2.5 text-[13px] font-medium text-muted-foreground transition-colors",
+              "hover:border-foreground/25 hover:bg-background hover:text-foreground",
+            )}
+          >
+            + Novo lead
+          </button>
+        ) : (
+          <Button type="button" className="shrink-0 font-medium">
+            + Novo lead
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={onSubmit}>
           <DialogHeader>
-            <DialogTitle>Novo deal</DialogTitle>
+            <DialogTitle>Novo lead</DialogTitle>
             <DialogDescription>
-              Cria no primeiro estágio:{" "}
-              <strong>{pipeline.stages[0]?.name}</strong>
+              Será criado na etapa:{" "}
+              <strong>
+                {pipeline.stages.find((s) => s.id === stageId)?.name ?? "—"}
+              </strong>
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -94,7 +114,12 @@ export function PipelineNewDeal({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="title">Título da oportunidade</Label>
-              <Input id="title" name="title" required placeholder="Ex: Proposta anual" />
+              <Input
+                id="title"
+                name="title"
+                required
+                placeholder="Ex: Proposta anual"
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="value">Valor (opcional)</Label>

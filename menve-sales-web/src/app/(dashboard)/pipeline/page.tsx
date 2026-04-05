@@ -1,6 +1,22 @@
-import prisma from "@/lib/prisma";
-import { getActiveTenantId } from "@/lib/session";
+import type { CustomField } from "@prisma/client";
+import { apiServer } from "@/lib/api-server";
 import { PipelineView } from "./pipeline-view";
+
+type PipelineRow = {
+  id: string;
+  isDefault: boolean;
+  stages: unknown[];
+};
+
+type PipelineDealsPayload = {
+  deals: unknown[];
+  stats: {
+    openCount: number;
+    openSum: number;
+    wonCount: number;
+    lostCount: number;
+  };
+};
 
 export default async function PipelinePage({
   searchParams,
@@ -8,21 +24,13 @@ export default async function PipelinePage({
   searchParams: Promise<{ pipelineId?: string }>;
 }) {
   const { pipelineId: queryPipelineId } = await searchParams;
-  const tenantId = await getActiveTenantId();
 
-  const contacts = await prisma.contact.findMany({
-    where: { tenantId },
-    select: { id: true, name: true, phone: true },
-    orderBy: { name: "asc" },
-  });
-
-  const pipelines = await prisma.pipeline.findMany({
-    where: { tenantId },
-    orderBy: { sortOrder: "asc" },
-    include: {
-      stages: { orderBy: { sortOrder: "asc" } },
-    },
-  });
+  const [contacts, pipelines] = await Promise.all([
+    apiServer<{ id: string; name: string; phone: string | null }[]>(
+      "/contacts/for-pipeline",
+    ),
+    apiServer<PipelineRow[]>("/pipelines"),
+  ]);
 
   if (pipelines.length === 0) {
     return (
@@ -39,59 +47,29 @@ export default async function PipelinePage({
     pipelines.find((p) => p.isDefault) ??
     pipelines[0];
 
-  const [deals, openSum, wonCount, lostCount] = await Promise.all([
-    prisma.deal.findMany({
-      where: {
-        tenantId,
-        pipelineId: activePipeline.id,
-        status: "OPEN",
-      },
-      include: {
-        contact: { include: { campaignSource: true } },
-        stage: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
-    prisma.deal.aggregate({
-      where: {
-        tenantId,
-        pipelineId: activePipeline.id,
-        status: "OPEN",
-      },
-      _sum: { value: true },
-    }),
-    prisma.deal.count({
-      where: {
-        tenantId,
-        pipelineId: activePipeline.id,
-        status: "WON",
-      },
-    }),
-    prisma.deal.count({
-      where: {
-        tenantId,
-        pipelineId: activePipeline.id,
-        status: "LOST",
-      },
-    }),
-  ]);
-
-  const openCount = deals.length;
-  const stats = {
-    openCount,
-    openSum: Number(openSum._sum.value ?? 0),
-    wonCount,
-    lostCount,
-  };
+  const [dealsResult, contactCustomFieldDefs, dealCustomFieldDefs] =
+    await Promise.all([
+      apiServer<PipelineDealsPayload>(
+        `/pipelines/${activePipeline!.id}/deals`,
+      ),
+      apiServer<unknown>("/custom-fields?entity=CONTACT")
+        .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
+        .catch(() => [] as CustomField[]),
+      apiServer<unknown>("/custom-fields?entity=DEAL")
+        .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
+        .catch(() => [] as CustomField[]),
+    ]);
 
   return (
     <div className="p-6">
       <PipelineView
-        pipelines={pipelines}
-        activePipeline={activePipeline}
-        deals={deals}
+        pipelines={pipelines as never}
+        activePipeline={activePipeline as never}
+        deals={dealsResult.deals as never}
         contacts={contacts}
-        stats={stats}
+        stats={dealsResult.stats}
+        contactCustomFieldDefs={contactCustomFieldDefs}
+        dealCustomFieldDefs={dealCustomFieldDefs}
       />
     </div>
   );

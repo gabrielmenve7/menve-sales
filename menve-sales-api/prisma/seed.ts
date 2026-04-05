@@ -1,9 +1,30 @@
 import {
   PrismaClient,
+  Prisma,
   UserRole,
   DealStatus,
   WhatsAppProvider,
 } from "@prisma/client";
+
+const REMOVED_CUSTOM_FIELD_KEYS = [
+  "cargo",
+  "segmento",
+  "funcionarios",
+  "prioridade",
+  "observacoes",
+] as const;
+
+function omitCustomDataKeys(
+  raw: unknown,
+  keys: readonly string[],
+): Prisma.InputJsonValue {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {} as Prisma.InputJsonValue;
+  }
+  const o = { ...(raw as Record<string, unknown>) };
+  for (const k of keys) delete o[k];
+  return o as Prisma.InputJsonValue;
+}
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -86,6 +107,19 @@ async function main() {
     });
   }
 
+  let prospectingSource = await prisma.campaignSource.findFirst({
+    where: { tenantId: tenant.id, code: "prospecting" },
+  });
+  if (!prospectingSource) {
+    prospectingSource = await prisma.campaignSource.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Prospecção Ativa",
+        code: "prospecting",
+      },
+    });
+  }
+
   for (const name of ["MQL", "SQL", "Quente"]) {
     await prisma.tag.upsert({
       where: {
@@ -95,6 +129,13 @@ async function main() {
       update: {},
     });
   }
+
+  await prisma.customField.deleteMany({
+    where: {
+      tenantId: tenant.id,
+      key: { in: [...REMOVED_CUSTOM_FIELD_KEYS] },
+    },
+  });
 
   let contact = await prisma.contact.findFirst({
     where: { tenantId: tenant.id, phone: "+5511999999999" },
@@ -126,11 +167,11 @@ async function main() {
     });
   }
 
-  const existingDeal = await prisma.deal.findFirst({
+  let deal = await prisma.deal.findFirst({
     where: { tenantId: tenant.id, title: "Oportunidade Demo" },
   });
-  if (!existingDeal && stages[1]) {
-    await prisma.deal.create({
+  if (!deal && stages[1]) {
+    deal = await prisma.deal.create({
       data: {
         tenantId: tenant.id,
         contactId: contact.id,
@@ -141,6 +182,28 @@ async function main() {
         probability: 25,
         assignedToId: owner.id,
         status: DealStatus.OPEN,
+      },
+    });
+  }
+
+  await prisma.contact.update({
+    where: { id: contact.id },
+    data: {
+      customData: omitCustomDataKeys(
+        contact.customData,
+        REMOVED_CUSTOM_FIELD_KEYS,
+      ),
+    },
+  });
+
+  if (deal) {
+    await prisma.deal.update({
+      where: { id: deal.id },
+      data: {
+        customData: omitCustomDataKeys(
+          deal.customData,
+          REMOVED_CUSTOM_FIELD_KEYS,
+        ),
       },
     });
   }

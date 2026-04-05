@@ -1,7 +1,10 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { getSubdomain, resolveTenantSlug } from "@/lib/tenant-edge";
+
+function apiBase() {
+  return process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://localhost:4000";
+}
 
 export async function getTenantFromRequest() {
   const h = await headers();
@@ -13,7 +16,12 @@ export async function getTenantFromRequest() {
     sub ?? h.get("x-tenant-slug"),
     process.env.DEFAULT_TENANT_SLUG,
   );
-  const tenant = await prisma.tenant.findUnique({ where: { slug } });
+  const res = await fetch(
+    `${apiBase()}/tenants/by-slug/${encodeURIComponent(slug)}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) return null;
+  const tenant = await res.json();
   return tenant;
 }
 

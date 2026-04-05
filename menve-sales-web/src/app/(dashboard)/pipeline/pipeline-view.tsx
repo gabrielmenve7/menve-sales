@@ -1,13 +1,13 @@
 "use client";
 
-import type { Pipeline, Stage } from "@prisma/client";
+import type { CustomField, Pipeline, Stage } from "@prisma/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, Settings } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { PipelineBoard, type DealRow } from "./pipeline-board";
-import { PipelineNewDeal } from "./pipeline-new-deal";
+import { PipelineBoard } from "./pipeline-board";
+import type { DealRow } from "./pipeline-types";
 
 export function PipelineView({
   pipelines,
@@ -15,6 +15,8 @@ export function PipelineView({
   deals,
   contacts,
   stats,
+  contactCustomFieldDefs,
+  dealCustomFieldDefs,
 }: {
   pipelines: Pipeline[];
   activePipeline: Pipeline & { stages: Stage[] };
@@ -26,6 +28,8 @@ export function PipelineView({
     wonCount: number;
     lostCount: number;
   };
+  contactCustomFieldDefs: CustomField[];
+  dealCustomFieldDefs: CustomField[];
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -46,17 +50,19 @@ export function PipelineView({
     n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-2">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">Pipeline</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {activePipeline.name}
+            </h1>
             <Link
               href="/settings"
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Configurações"
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Configurações do funil"
             >
-              <Settings className="size-4" strokeWidth={1.75} />
+              <Settings className="size-[18px]" strokeWidth={1.75} />
             </Link>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -68,11 +74,9 @@ export function PipelineView({
               value={activePipeline.id}
               onChange={(e) => {
                 const id = e.target.value;
-                router.push(
-                  `/pipeline?pipelineId=${encodeURIComponent(id)}`,
-                );
+                router.push(`/pipeline?pipelineId=${encodeURIComponent(id)}`);
               }}
-              className="h-9 max-w-[min(100%,280px)] rounded-md border border-border/60 bg-background px-3 text-[13px] text-foreground"
+              className="h-9 max-w-full rounded-xl border border-border/60 bg-card px-3 text-[13px] font-medium text-foreground shadow-sm"
             >
               {pipelines.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -82,39 +86,48 @@ export function PipelineView({
               ))}
             </select>
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px] text-muted-foreground">
             <span>
-              <strong className="font-medium text-foreground">{stats.openCount}</strong>{" "}
+              <strong className="font-semibold text-foreground">
+                {stats.openCount}
+              </strong>{" "}
               leads
             </span>
-            <span>{fmt(stats.openSum)} em aberto</span>
+            <span className="font-semibold text-foreground">
+              {fmt(stats.openSum)} em aberto
+            </span>
             <span className="text-emerald-600 dark:text-emerald-500">
-              <strong className="font-medium">{stats.wonCount}</strong> ganhos
+              <strong className="font-semibold">{stats.wonCount}</strong> ganhos
             </span>
             <span className="text-rose-600 dark:text-rose-500">
-              <strong className="font-medium">{stats.lostCount}</strong> perdidos
+              <strong className="font-semibold">{stats.lostCount}</strong>{" "}
+              perdidos
             </span>
           </div>
         </div>
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
-          <div className="relative w-full sm:max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar leads…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 border-border/60 bg-background pl-9 text-[13px]"
-            />
-          </div>
-          <PipelineNewDeal pipeline={activePipeline} contacts={contacts} />
+        <div className="relative w-full sm:max-w-sm lg:w-72 lg:shrink-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar leads…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-10 rounded-xl border-border/60 bg-card pl-10 text-[13px] shadow-sm"
+          />
         </div>
       </div>
 
-      <div className="text-[13px] text-muted-foreground">
-        Arraste os cards para mover o deal entre etapas. Use o menu (⋯) para ganho ou perda.
-      </div>
+      <p className="text-[12px] text-muted-foreground">
+        Arraste o card para mudar de etapa. Clique no card para abrir o detalhe
+        (ganho, perda e demais ações).
+      </p>
 
-      <PipelineBoard pipeline={activePipeline} deals={filteredDeals} />
+      <PipelineBoard
+        pipeline={activePipeline}
+        deals={filteredDeals}
+        contacts={contacts}
+        contactCustomFieldDefs={contactCustomFieldDefs}
+        dealCustomFieldDefs={dealCustomFieldDefs}
+      />
     </div>
   );
 }

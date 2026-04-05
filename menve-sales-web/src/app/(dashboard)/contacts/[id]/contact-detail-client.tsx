@@ -14,10 +14,11 @@ import type {
   Tag,
   User,
 } from "@prisma/client";
-import { ActivityType } from "@prisma/client";
+import { ActivityType } from "@/types/domain";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { updateContactCustomData } from "@/actions/custom-fields";
+import { CustomFieldsForm } from "@/components/custom-fields/custom-fields-form";
 import { createActivity } from "@/actions/activities";
 import {
   addTagToContact,
@@ -26,6 +27,8 @@ import {
 } from "@/actions/tags";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -33,8 +36,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
 type ActivityRow = Activity & {
@@ -83,133 +84,6 @@ type TimelineEntry =
       subtitle: string;
       badge: string;
     };
-
-function customDataToStringMap(
-  fields: CustomField[],
-  customData: unknown,
-): Record<string, string> {
-  const base =
-    customData && typeof customData === "object" && !Array.isArray(customData)
-      ? (customData as Record<string, unknown>)
-      : {};
-  const out: Record<string, string> = {};
-  for (const f of fields) {
-    const v = base[f.key];
-    if (v === undefined || v === null) out[f.key] = "";
-    else if (typeof v === "number") out[f.key] = String(v);
-    else {
-      const s = String(v);
-      out[f.key] =
-        f.fieldType === "DATE" && s.includes("T") ? s.slice(0, 10) : s;
-    }
-  }
-  return out;
-}
-
-function ContactCustomFieldsForm({
-  contactId,
-  fields,
-  customData,
-}: {
-  contactId: string;
-  fields: CustomField[];
-  customData: unknown;
-}) {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    customDataToStringMap(fields, customData),
-  );
-
-  useEffect(() => {
-    setValues(customDataToStringMap(fields, customData));
-  }, [contactId, fields, customData]);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setErr(null);
-    try {
-      const payload: Record<string, unknown> = {};
-      for (const f of fields) {
-        payload[f.key] = values[f.key] ?? "";
-      }
-      await updateContactCustomData({ contactId, values: payload });
-      router.refresh();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erro ao salvar");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <form onSubmit={(e) => void onSubmit(e)} className="space-y-3">
-      {err ? <p className="text-sm text-destructive">{err}</p> : null}
-      {fields.map((f) => {
-        const val = values[f.key] ?? "";
-        const label = (
-          <Label htmlFor={`cf-${f.id}`}>
-            {f.name}
-            {f.required ? <span className="text-destructive"> *</span> : null}
-          </Label>
-        );
-        if (f.fieldType === "SELECT") {
-          const opts = Array.isArray(f.options)
-            ? (f.options as unknown[]).map(String)
-            : [];
-          return (
-            <div key={f.id} className="grid gap-1">
-              {label}
-              <select
-                id={`cf-${f.id}`}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                required={f.required}
-                value={val}
-                onChange={(e) =>
-                  setValues((prev) => ({ ...prev, [f.key]: e.target.value }))
-                }
-              >
-                <option value="">
-                  {f.required ? "Selecione…" : "—"}
-                </option>
-                {opts.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            </div>
-          );
-        }
-        const inputType =
-          f.fieldType === "NUMBER"
-            ? "number"
-            : f.fieldType === "DATE"
-              ? "date"
-              : "text";
-        return (
-          <div key={f.id} className="grid gap-1">
-            {label}
-            <Input
-              id={`cf-${f.id}`}
-              type={inputType}
-              required={f.required}
-              value={val}
-              onChange={(e) =>
-                setValues((prev) => ({ ...prev, [f.key]: e.target.value }))
-              }
-            />
-          </div>
-        );
-      })}
-      <Button type="submit" disabled={loading} size="sm">
-        {loading ? "Salvando…" : "Salvar campos extras"}
-      </Button>
-    </form>
-  );
-}
 
 export function ContactDetailClient({
   contact,
@@ -370,10 +244,17 @@ export function ContactDetailClient({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ContactCustomFieldsForm
-                contactId={contact.id}
+              <CustomFieldsForm
                 fields={customFields}
                 customData={contact.customData}
+                idPrefix={`contact-${contact.id}`}
+                onSave={async (values) => {
+                  await updateContactCustomData({
+                    contactId: contact.id,
+                    values,
+                  });
+                  router.refresh();
+                }}
               />
             </CardContent>
           </Card>

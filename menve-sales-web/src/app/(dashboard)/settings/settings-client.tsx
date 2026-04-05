@@ -8,177 +8,86 @@ import type {
   Tag,
   WhatsAppConnection,
 } from "@prisma/client";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { createQuickReply, deleteQuickReply } from "@/actions/quick-replies";
-import { SettingsPipelineStages } from "./settings-pipeline-stages";
+import { Settings2, Radio, Users, Tag as TagIcon, Bell } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SettingsGeneral } from "./settings-general";
+import { SettingsChannels } from "./settings-channels";
+import { SettingsMembers } from "./settings-members";
 import { SettingsTagsCatalog } from "./settings-tags-catalog";
-import { SettingsCustomFields } from "./settings-custom-fields";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SettingsNotifications } from "./settings-notifications";
+
+type TenantInfo = { id: string; name: string; slug: string; plan: string };
+type Member = { id: string; name: string | null; email: string; role: string };
 
 export function SettingsClient({
+  tenant,
   connections,
   quickReplies,
-  appBaseUrl,
+  webhookBaseUrl,
   pipelines,
   tags,
   contactCustomFields,
+  dealCustomFields,
+  members,
 }: {
+  tenant: TenantInfo;
   connections: WhatsAppConnection[];
   quickReplies: QuickReply[];
-  appBaseUrl: string;
+  webhookBaseUrl: string;
   pipelines: (Pipeline & { stages: Stage[] })[];
   tags: Tag[];
   contactCustomFields: CustomField[];
+  dealCustomFields: CustomField[];
+  members: Member[];
 }) {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-
-  async function onCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim() || !body.trim()) return;
-    setLoading(true);
-    try {
-      await createQuickReply({ title: title.trim(), body: body.trim() });
-      setTitle("");
-      setBody("");
-      router.refresh();
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
-    <div className="space-y-6">
-      <SettingsPipelineStages pipelines={pipelines} />
-      <SettingsTagsCatalog tags={tags} />
-      <SettingsCustomFields fields={contactCustomFields} />
-      <Card>
-        <CardHeader>
-          <CardTitle>WhatsApp — Webhooks</CardTitle>
-          <CardDescription>
-            Configure Evolution API ou Meta Cloud API. URLs de webhook por conexão:
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          {connections.length === 0 ? (
-            <p className="text-muted-foreground">
-              Nenhuma conexão. Crie via seed ou API admin.
-            </p>
-          ) : (
-            connections.map((c) => (
-              <div key={c.id} className="rounded-lg border p-3">
-                <p className="font-medium">
-                  {c.name} — {c.provider}
-                </p>
-                {c.provider === "EVOLUTION" ? (
-                  <p className="mt-2 break-all text-xs text-muted-foreground">
-                    POST{" "}
-                    <code>
-                      {appBaseUrl}/api/webhooks/whatsapp/evolution/{c.id}
-                    </code>
-                  </p>
-                ) : (
-                  <p className="mt-2 break-all text-xs text-muted-foreground">
-                    Meta: configure o callback{" "}
-                    <code>{appBaseUrl}/api/webhooks/whatsapp/meta</code> no app
-                    da Meta + verify token.
-                  </p>
-                )}
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+    <Tabs defaultValue="general">
+      <TabsList>
+        <TabsTrigger value="general">
+          <Settings2 className="size-3.5" /> Geral
+        </TabsTrigger>
+        <TabsTrigger value="channels">
+          <Radio className="size-3.5" /> Canais
+        </TabsTrigger>
+        <TabsTrigger value="members">
+          <Users className="size-3.5" /> Membros
+        </TabsTrigger>
+        <TabsTrigger value="tags">
+          <TagIcon className="size-3.5" /> Tags
+        </TabsTrigger>
+        <TabsTrigger value="notifications">
+          <Bell className="size-3.5" /> Notificações
+        </TabsTrigger>
+      </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Respostas rápidas (Inbox)</CardTitle>
-          <CardDescription>
-            Atalhos no WhatsApp Inbox para preencher mensagens comuns.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <form onSubmit={onCreate} className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="qr-title">Título do botão</Label>
-                <Input
-                  id="qr-title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ex: Saudação"
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="qr-body">Texto da mensagem</Label>
-              <textarea
-                id="qr-body"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                className="min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                placeholder="Texto enviado ao clicar no atalho…"
-              />
-            </div>
-            <Button type="submit" disabled={loading || !title.trim() || !body.trim()}>
-              {loading ? "Salvando…" : "Adicionar resposta rápida"}
-            </Button>
-          </form>
+      <TabsContent value="general">
+        <SettingsGeneral
+          tenant={tenant}
+          pipelines={pipelines}
+          contactCustomFields={contactCustomFields}
+          dealCustomFields={dealCustomFields}
+        />
+      </TabsContent>
 
-          <div>
-            <p className="mb-2 text-sm font-medium">Cadastradas</p>
-            {quickReplies.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma ainda.</p>
-            ) : (
-              <ul className="space-y-2">
-                {quickReplies.map((q) => (
-                  <li
-                    key={q.id}
-                    className="flex flex-wrap items-start justify-between gap-2 rounded-lg border p-3 text-sm"
-                  >
-                    <div>
-                      <p className="font-medium">{q.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                        {q.body}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 text-destructive"
-                      onClick={async () => {
-                        if (!confirm("Remover esta resposta rápida?")) return;
-                        setLoading(true);
-                        try {
-                          await deleteQuickReply(q.id);
-                          router.refresh();
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                    >
-                      Excluir
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+      <TabsContent value="channels">
+        <SettingsChannels
+          connections={connections}
+          quickReplies={quickReplies}
+          webhookBaseUrl={webhookBaseUrl}
+        />
+      </TabsContent>
+
+      <TabsContent value="members">
+        <SettingsMembers members={members} />
+      </TabsContent>
+
+      <TabsContent value="tags">
+        <SettingsTagsCatalog tags={tags} />
+      </TabsContent>
+
+      <TabsContent value="notifications">
+        <SettingsNotifications />
+      </TabsContent>
+    </Tabs>
   );
 }
