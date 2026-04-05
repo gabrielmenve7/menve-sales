@@ -33,6 +33,7 @@ enum ActivityType {
 enum WhatsAppProvider {
   META
   EVOLUTION
+  INSTAGRAM
 }
 
 enum ConversationStatus {
@@ -49,6 +50,19 @@ enum MessageDirection {
 enum CustomFieldEntity {
   CONTACT
   DEAL
+}
+
+enum ProspectSource {
+  GOOGLE_SEARCH
+  GOOGLE_MAPS
+}
+
+enum ProspectStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  DISCARDED
 }
 
 model Tenant {
@@ -71,6 +85,8 @@ model Tenant {
   activities          Activity[]
   messages            Message[]
   quickReplies        QuickReply[]
+  prospectSearches    ProspectSearch[]
+  prospectResults     ProspectResult[]
 }
 
 model QuickReply {
@@ -101,6 +117,7 @@ model User {
   messages         Message[]
   conversations    Conversation[] @relation("AssignedConversations")
   internalNotes    InternalNote[]
+  prospectSearches ProspectSearch[] @relation("ProspectSearches")
 }
 
 model Contact {
@@ -111,6 +128,7 @@ model Contact {
   phone            String?
   email            String?
   company          String?
+  jobTitle         String?
   utmSource        String?
   utmMedium        String?
   utmCampaign      String?
@@ -125,9 +143,65 @@ model Contact {
   messages      Message[]
   conversations Conversation[]
   contactTags   ContactTag[]
+  prospectResults ProspectResult[]
 
   @@unique([tenantId, phone])
   @@index([tenantId, email])
+}
+
+model ProspectSearch {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("ProspectSearches", fields: [userId], references: [id])
+  query      String
+  location   String?
+  webCount            Int      @default(0)
+  mapsCount           Int      @default(0)
+  totalCount          Int      @default(0)
+  /** Última página da busca orgânica Google (Serper) já consumida; próximo "carregar mais" usa página + 1. */
+  lastWebPageFetched  Int      @default(1)
+  /** Não há mais páginas orgânicas no Google para esta query. */
+  webExhausted        Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  results ProspectResult[]
+
+  @@index([tenantId, createdAt])
+}
+
+model ProspectResult {
+  id            String         @id @default(cuid())
+  tenantId      String
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  searchId      String
+  search        ProspectSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  source        ProspectSource
+  position      Int?
+  name          String
+  website       String?
+  hasWebsite    Boolean        @default(false)
+  phone         String?
+  address       String?
+  snippet       String?
+  rating        Float?
+  reviewCount   Int?
+  googleMapsUrl String?
+  whatsapp      String?
+  email         String?
+  enrichmentData Json?
+  enrichedAt    DateTime?
+  status        ProspectStatus @default(NEW)
+  notes         String?
+  contactId     String?
+  contact       Contact?       @relation(fields: [contactId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([tenantId, searchId])
+  @@index([tenantId, status])
+  @@index([searchId, enrichedAt])
 }
 
 model Pipeline {
@@ -221,6 +295,7 @@ model CustomField {
   tenantId  String
   tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name      String
+  description String?
   key       String
   fieldType String
   options   Json?

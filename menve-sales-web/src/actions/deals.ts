@@ -14,6 +14,18 @@ export async function moveDealStage(dealId: string, stageId: string) {
   revalidatePath("/contacts", "layout");
 }
 
+export async function patchDeal(
+  dealId: string,
+  patch: { assignedToId?: string | null; value?: number | null },
+) {
+  await apiServer(`/deals/${dealId}`, {
+    method: "PATCH",
+    json: patch,
+  });
+  revalidatePath("/pipeline");
+  revalidatePath("/contacts", "layout");
+}
+
 const dealSchema = z.object({
   contactId: z.string(),
   pipelineId: z.string(),

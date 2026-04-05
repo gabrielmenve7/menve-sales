@@ -12,6 +12,7 @@ import {
 } from "@prisma/client";
 import {
   ArrowRight,
+  Briefcase,
   Building2,
   Calendar,
   CheckCircle2,
@@ -25,6 +26,7 @@ import {
   MessageSquare,
   Phone,
   Send,
+  Tag as TagIcon,
   User,
   XCircle,
 } from "lucide-react";
@@ -32,6 +34,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { patchContact } from "@/actions/contacts";
 import { updateCustomField, updateDealCustomData } from "@/actions/custom-fields";
 import {
   createDealActivity,
@@ -41,10 +44,17 @@ import {
   moveDealStage,
   patchDeal,
 } from "@/actions/deals";
+import {
+  addTagToContact,
+  createTag,
+  listTags,
+  removeTagFromContact,
+} from "@/actions/tags";
 import { CreateCustomFieldTrigger } from "@/components/custom-fields/create-custom-field-dialog";
 import { CustomFieldsInlineTable } from "@/components/custom-fields/custom-fields-inline-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -60,10 +70,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { CUSTOM_FIELD_ENTITY } from "@/lib/custom-field-entity";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { parseMenveActivityMeta } from "@/lib/deal-activity-meta";
+import { parseMoneyBrlFromInput } from "@/lib/custom-field-value-helpers";
 import { cn } from "@/lib/utils";
 import type { DealRow } from "./pipeline-types";
 
@@ -90,6 +106,8 @@ export type DealDetailPayload = {
   activities: DealActivityRow[];
   contactCustomFields?: CustomField[];
   dealCustomFields?: CustomField[];
+  allTags?: Tag[];
+  campaignSources?: CampaignSource[];
 };
 
 function activityTypeLabel(t: ActivityType) {
@@ -286,18 +304,11 @@ function DealHistoryRow({
   );
 }
 
-function readCustom(contact: Contact) {
-  const c = contact.customData;
-  if (!c || typeof c !== "object" || Array.isArray(c)) return {};
-  const o = c as Record<string, unknown>;
-  const website =
-    typeof o.website === "string"
-      ? o.website
-      : typeof o.site === "string"
-        ? o.site
-        : undefined;
-  return { website };
-}
+const sectionLabelClass =
+  "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
+
+const contactInputClass =
+  "w-full min-w-0 border-0 bg-transparent p-0 text-sm text-foreground shadow-none outline-none ring-0 placeholder:text-muted-foreground/80 placeholder:italic focus-visible:ring-0 disabled:opacity-50";
 
 function tagStyle(hex: string | null | undefined) {
   if (!hex || !/^#[0-9A-Fa-f]{6}$/.test(hex)) {
@@ -340,6 +351,16 @@ export function PipelineDealDetailDialog({
   const [headerBusy, setHeaderBusy] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+  const [contactFieldBusy, setContactFieldBusy] = useState(false);
+  const [emailLocal, setEmailLocal] = useState("");
+  const [phoneLocal, setPhoneLocal] = useState("");
+  const [companyLocal, setCompanyLocal] = useState("");
+  const [jobTitleLocal, setJobTitleLocal] = useState("");
+  const [dealValueLocal, setDealValueLocal] = useState("");
+  const [tagAddOpen, setTagAddOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [tagBusy, setTagBusy] = useState(false);
+
   const reload = useCallback(async () => {
     if (!initial?.id) return;
     setLoading(true);
@@ -361,6 +382,8 @@ export function PipelineDealDetailDialog({
       setLostOpen(false);
       setLostReason("");
       setNoteBody("");
+      setTagAddOpen(false);
+      setNewTagName("");
       return;
     }
     void reload();
@@ -436,7 +459,40 @@ export function PipelineDealDetailDialog({
     return rows;
   }, [activities]);
 
-  const custom = d ? readCustom(d.contact) : {};
+  const catalogTags = useMemo((): Tag[] => {
+    const raw = remote?.allTags;
+    if (!Array.isArray(raw)) return [];
+    return raw as Tag[];
+  }, [remote?.allTags]);
+
+  const campaignSources = useMemo((): CampaignSource[] => {
+    const raw = remote?.campaignSources;
+    if (!Array.isArray(raw)) return [];
+    return raw as CampaignSource[];
+  }, [remote?.campaignSources]);
+
+  const contactJobTitle =
+    d?.contact && "jobTitle" in d.contact
+      ? (d.contact as Contact & { jobTitle?: string | null }).jobTitle ?? ""
+      : "";
+
+  useEffect(() => {
+    if (!d) return;
+    setEmailLocal(d.contact.email?.trim() ?? "");
+    setPhoneLocal(d.contact.phone?.trim() ?? "");
+    setCompanyLocal(d.contact.company?.trim() ?? "");
+    setJobTitleLocal((contactJobTitle ?? "").trim());
+    if (d.value != null && Number.isFinite(Number(d.value))) {
+      setDealValueLocal(
+        Number(d.value).toLocaleString("pt-BR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+      );
+    } else {
+      setDealValueLocal("");
+    }
+  }, [d?.id, d?.contact.email, d?.contact.phone, d?.contact.company, d?.value, contactJobTitle]);
 
   const stageList = useMemo(() => {
     const fromApi = remote?.deal?.pipeline?.stages;
@@ -538,13 +594,115 @@ export function PipelineDealDetailDialog({
     return out;
   }, [d]);
 
-  if (!initial || !d) return null;
+  const contactTagIdSet = useMemo(() => {
+    if (!d) return new Set<string>();
+    return new Set((d.contact.contactTags ?? []).map((x) => x.tag.id));
+  }, [d]);
 
-  const fmtMoney = (v: unknown) =>
-    Number(v ?? 0).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
+  async function flushContactField(patch: {
+    email?: string;
+    phone?: string | null;
+    company?: string | null;
+    jobTitle?: string | null;
+    campaignSourceId?: string | null;
+  }) {
+    if (!d) return;
+    setContactFieldBusy(true);
+    try {
+      await patchContact({ contactId: d.contactId, ...patch });
+      await reload();
+      router.refresh();
+    } finally {
+      setContactFieldBusy(false);
+    }
+  }
+
+  async function commitDealValue() {
+    if (!d) return;
+    const raw = dealValueLocal.trim();
+    const prev = d.value != null ? Number(d.value) : null;
+    if (raw === "") {
+      if (prev == null) return;
+      setHeaderBusy(true);
+      try {
+        await patchDeal(d.id, { value: null });
+        await reload();
+        router.refresh();
+      } finally {
+        setHeaderBusy(false);
+      }
+      return;
+    }
+    const n = parseMoneyBrlFromInput(raw);
+    if (!Number.isFinite(n)) {
+      if (d.value != null && Number.isFinite(Number(d.value))) {
+        setDealValueLocal(
+          Number(d.value).toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }),
+        );
+      } else setDealValueLocal("");
+      return;
+    }
+    if (prev != null && Math.abs(prev - n) < 0.005) return;
+    setHeaderBusy(true);
+    try {
+      await patchDeal(d.id, { value: n });
+      await reload();
+      router.refresh();
+    } finally {
+      setHeaderBusy(false);
+    }
+  }
+
+  async function onAddTagFromCatalog(tagId: string) {
+    if (!d) return;
+    setTagBusy(true);
+    try {
+      await addTagToContact(d.contactId, tagId);
+      setTagAddOpen(false);
+      await reload();
+      router.refresh();
+    } finally {
+      setTagBusy(false);
+    }
+  }
+
+  async function onCreateTagAndAdd() {
+    if (!d) return;
+    const n = newTagName.trim();
+    if (n.length < 1) return;
+    setTagBusy(true);
+    try {
+      await createTag({ name: n });
+      const list = await listTags();
+      const t = list.find(
+        (x) => x.name.trim().toLowerCase() === n.toLowerCase(),
+      );
+      if (t) await addTagToContact(d.contactId, t.id);
+      setNewTagName("");
+      setTagAddOpen(false);
+      await reload();
+      router.refresh();
+    } finally {
+      setTagBusy(false);
+    }
+  }
+
+  async function onRemoveContactTag(tagId: string) {
+    if (!d) return;
+    setTagBusy(true);
+    try {
+      await removeTagFromContact(d.contactId, tagId);
+      await reload();
+      router.refresh();
+    } finally {
+      setTagBusy(false);
+    }
+  }
+
+  if (!initial || !d) return null;
 
   const created = new Date(d.createdAt).toLocaleDateString("pt-BR");
 
@@ -679,68 +837,133 @@ export function PipelineDealDetailDialog({
             ) : null}
 
             <div className="grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start lg:gap-x-8">
-            <div className="min-w-0 space-y-8 lg:pr-1">
-            <div className="grid gap-8 border-b border-border/50 pb-8 lg:grid-cols-2 lg:gap-12 lg:border-b-0 lg:pb-0">
-            <section className="space-y-3">
-              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Contato
-              </h4>
-              <ul className="space-y-2.5 text-sm">
-                <li className="flex items-start gap-2.5">
-                  <Mail className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="break-all text-foreground">
-                    {d.contact.email?.trim() || (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <Phone className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span>
-                    {d.contact.phone?.trim() || (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <Building2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span>
-                    {d.contact.company?.trim() || (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </span>
-                </li>
-              </ul>
+            <div className="min-w-0 space-y-10 lg:pr-1">
+            <section className="space-y-1">
+              <h4 className={sectionLabelClass}>Contato</h4>
+              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+                <Mail className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <input
+                  type="email"
+                  autoComplete="email"
+                  disabled={contactFieldBusy}
+                  placeholder="Adicionar email"
+                  className={contactInputClass}
+                  value={emailLocal}
+                  onChange={(e) => setEmailLocal(e.target.value)}
+                  onBlur={() => {
+                    const t = emailLocal.trim();
+                    const cur = d.contact.email?.trim() ?? "";
+                    if (t === cur) return;
+                    if (t === "") {
+                      void flushContactField({ email: "" });
+                      return;
+                    }
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) {
+                      setEmailLocal(cur);
+                      return;
+                    }
+                    void flushContactField({ email: t });
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+                <Phone className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <input
+                  type="tel"
+                  autoComplete="tel"
+                  disabled={contactFieldBusy}
+                  placeholder="Adicionar telefone"
+                  className={contactInputClass}
+                  value={phoneLocal}
+                  onChange={(e) => setPhoneLocal(e.target.value)}
+                  onBlur={() => {
+                    const t = phoneLocal.trim();
+                    const cur = d.contact.phone?.trim() ?? "";
+                    if (t === cur) return;
+                    void flushContactField({
+                      phone: t === "" ? null : t,
+                    });
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+                <Building2 className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <input
+                  type="text"
+                  disabled={contactFieldBusy}
+                  placeholder="Adicionar empresa"
+                  className={contactInputClass}
+                  value={companyLocal}
+                  onChange={(e) => setCompanyLocal(e.target.value)}
+                  onBlur={() => {
+                    const t = companyLocal.trim();
+                    const cur = d.contact.company?.trim() ?? "";
+                    if (t === cur) return;
+                    void flushContactField({
+                      company: t === "" ? null : t,
+                    });
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+                <Briefcase className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <input
+                  type="text"
+                  disabled={contactFieldBusy}
+                  placeholder="Adicionar cargo"
+                  className={contactInputClass}
+                  value={jobTitleLocal}
+                  onChange={(e) => setJobTitleLocal(e.target.value)}
+                  onBlur={() => {
+                    const t = jobTitleLocal.trim();
+                    const cur = (contactJobTitle ?? "").trim();
+                    if (t === cur) return;
+                    void flushContactField({
+                      jobTitle: t === "" ? null : t,
+                    });
+                  }}
+                />
+              </div>
             </section>
 
-            <section className="space-y-3">
-              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Informações
-              </h4>
-              <ul className="space-y-2.5 text-sm">
-                <li className="flex items-start gap-2.5">
-                  <User className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <section className="space-y-1">
+              <h4 className={sectionLabelClass}>Informações</h4>
+              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+                <User className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <div className="min-w-0 flex-1">
                   {d.status === "OPEN" && tenantMembers.length > 0 ? (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
+                        <button
                           type="button"
-                          variant="ghost"
-                          size="sm"
                           disabled={headerBusy}
-                          className="h-auto min-h-0 justify-start px-0 py-0 text-left text-sm font-normal hover:bg-transparent"
+                          className={cn(
+                            "flex w-full min-w-0 items-center gap-2.5 py-0.5 text-left text-sm outline-none",
+                            !d.assignedTo && "italic text-muted-foreground",
+                          )}
                         >
-                          <span className="text-foreground">
-                            {assigneePickLabel(d.assignedTo) || (
-                              <span className="text-muted-foreground">
-                                Escolher responsável…
+                          {d.assignedTo ? (
+                            <>
+                              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-medium text-white">
+                                {(
+                                  assigneePickLabel(d.assignedTo).slice(0, 1) ||
+                                  "?"
+                                ).toUpperCase()}
                               </span>
-                            )}
-                          </span>
-                          <ChevronDown className="ml-1 size-3.5 shrink-0 opacity-50" />
-                        </Button>
+                              <span className="truncate text-foreground">
+                                {assigneePickLabel(d.assignedTo)}
+                              </span>
+                            </>
+                          ) : (
+                            <span>Atribuir responsável</span>
+                          )}
+                          <ChevronDown className="ml-auto size-3.5 shrink-0 opacity-40" />
+                        </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                      <DropdownMenuContent
+                        align="start"
+                        className="max-h-64 w-[min(100vw-2rem,16rem)] overflow-y-auto"
+                      >
                         {d.assignedTo ? (
                           <>
                             <DropdownMenuItem
@@ -757,66 +980,103 @@ export function PipelineDealDetailDialog({
                             key={m.id}
                             disabled={headerBusy || m.id === d.assignedTo?.id}
                             onClick={() => void onAssigneePick(m.id)}
+                            className="gap-2"
                           >
-                            {assigneePickLabel(m) || m.email}
+                            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground">
+                              {(
+                                assigneePickLabel(m).slice(0, 1) || "?"
+                              ).toUpperCase()}
+                            </span>
+                            <span className="truncate">
+                              {assigneePickLabel(m) || m.email}
+                            </span>
                           </DropdownMenuItem>
                         ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : (
-                    <span>
+                    <span className="text-sm">
                       {assigneePickLabel(d.assignedTo) || (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </span>
                   )}
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <DollarSign className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="font-medium">
-                    {d.value != null ? fmtMoney(d.value) : "—"}
-                  </span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <Globe className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  {custom.website ? (
-                    <a
-                      href={
-                        custom.website.startsWith("http")
-                          ? custom.website
-                          : `https://${custom.website}`
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary underline-offset-4 hover:underline"
-                    >
-                      {custom.website}
-                    </a>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="text-muted-foreground">
-                    Criado em {created}
-                  </span>
-                </li>
-              </ul>
-            </section>
-            </div>
+                </div>
+              </div>
 
-            {allTags.length > 0 ? (
-              <section className="space-y-2">
-                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tags
-                </h4>
-                <div className="flex flex-wrap gap-1.5">
+              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+                <DollarSign className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <Input
+                  inputMode="decimal"
+                  disabled={headerBusy}
+                  placeholder="R$ 0,00"
+                  className="h-9 border-border/50 bg-transparent text-sm font-medium shadow-none focus-visible:ring-1"
+                  value={dealValueLocal}
+                  onChange={(e) => setDealValueLocal(e.target.value)}
+                  onBlur={() => void commitDealValue()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+                <Globe className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={contactFieldBusy}
+                      className={cn(
+                        "flex w-full min-w-0 items-center gap-2 py-0.5 text-left text-sm outline-none",
+                        !d.contact.campaignSource &&
+                          "italic text-muted-foreground",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {d.contact.campaignSource?.name ?? "Adicionar origem"}
+                      </span>
+                      <ChevronDown className="size-3.5 shrink-0 opacity-40" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    className="max-h-64 w-[min(100vw-2rem,14rem)] overflow-y-auto"
+                  >
+                    <DropdownMenuItem
+                      disabled={contactFieldBusy}
+                      onClick={() =>
+                        void flushContactField({ campaignSourceId: null })
+                      }
+                    >
+                      Nenhuma
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    {campaignSources.map((s) => (
+                      <DropdownMenuItem
+                        key={s.id}
+                        disabled={contactFieldBusy}
+                        onClick={() =>
+                          void flushContactField({
+                            campaignSourceId: s.id,
+                          })
+                        }
+                      >
+                        {s.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 rounded-lg py-3 transition-colors hover:bg-muted/35">
+                <TagIcon className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
                   {allTags.map(({ tag }) => (
                     <span
-                      key={`${tag.id}-${tag.name}`}
+                      key={tag.id}
                       className={cn(
-                        "rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                        "inline-flex items-center gap-0.5 rounded-full border px-2 py-0.5 text-[11px] font-medium",
                         tagStyle(tag.color),
                       )}
                       style={
@@ -826,67 +1086,121 @@ export function PipelineDealDetailDialog({
                       }
                     >
                       {tag.name}
+                      {contactTagIdSet.has(tag.id) ? (
+                        <button
+                          type="button"
+                          disabled={tagBusy}
+                          className="ml-0.5 rounded p-0.5 text-muted-foreground hover:bg-black/10 hover:text-foreground"
+                          aria-label={`Remover tag ${tag.name}`}
+                          onClick={() => void onRemoveContactTag(tag.id)}
+                        >
+                          ×
+                        </button>
+                      ) : null}
                     </span>
                   ))}
+                  <Popover open={tagAddOpen} onOpenChange={setTagAddOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={tagBusy}
+                        className="inline-flex items-center gap-1 rounded-full border border-dashed border-border/70 px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/40 hover:text-foreground"
+                      >
+                        + Tag
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-3" align="start">
+                      <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Adicionar tag
+                      </p>
+                      <div className="max-h-40 space-y-0.5 overflow-y-auto">
+                        {catalogTags
+                          .filter((t) => !contactTagIdSet.has(t.id))
+                          .map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              disabled={tagBusy}
+                              className="flex w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                              onClick={() => void onAddTagFromCatalog(t.id)}
+                            >
+                              {t.name}
+                            </button>
+                          ))}
+                      </div>
+                      <div className="mt-3 border-t border-border/50 pt-3">
+                        <input
+                          type="text"
+                          value={newTagName}
+                          onChange={(e) => setNewTagName(e.target.value)}
+                          placeholder="Nova tag…"
+                          className="mb-2 w-full rounded-md border border-border/60 bg-background px-2 py-1.5 text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void onCreateTagAndAdd();
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="w-full"
+                          disabled={tagBusy || newTagName.trim().length < 1}
+                          onClick={() => void onCreateTagAndAdd()}
+                        >
+                          Criar e aplicar
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              </section>
-            ) : null}
+              </div>
 
-            <section className="space-y-4 lg:min-w-0">
+              <div className="flex items-center gap-3 rounded-lg py-3 text-sm">
+                <Calendar className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
+                <span>
+                  <span className="text-muted-foreground">Criado: </span>
+                  <span className="text-foreground">{created}</span>
+                </span>
+              </div>
+            </section>
+
+            <section className="space-y-3 lg:min-w-0">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Campos
-                </h4>
+                <h4 className={sectionLabelClass}>Oportunidade</h4>
                 <CreateCustomFieldTrigger
                   defaultEntity={CUSTOM_FIELD_ENTITY.DEAL}
                   idPrefix={`pd-new-${d.id}`}
                   onCreated={onCustomFieldCreated}
                 />
               </div>
-              <p className="text-[12px] leading-snug text-muted-foreground">
-                Passe o mouse e edite na linha — listas e pessoas salvam ao
-                selecionar; demais tipos ao sair do campo (Enter também salva).
-              </p>
-
-              <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
-                <div className="border-b border-border/50 bg-muted/25 px-3 py-2 sm:px-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Oportunidade
-                  </span>
-                </div>
-                <div className="min-h-0">
-                  {dealCustomFieldDefs.length > 0 ? (
-                    <CustomFieldsInlineTable
-                      embedded
-                      variant="board"
-                      fields={dealCustomFieldDefs}
-                      customData={d.customData}
-                      idPrefix={`pd-d-${d.id}`}
-                      members={tenantMembers}
-                      onSaveField={async (key, value) => {
-                        await updateDealCustomData({
-                          dealId: d.id,
-                          values: { [key]: value },
-                        });
-                        await reload();
-                        router.refresh();
-                      }}
-                      onReorderSelectOptions={onReorderSelectOptions}
-                      onAppendSelectOption={onAppendSelectOption}
-                    />
-                  ) : (
-                    <p className="px-3 py-4 text-[12px] text-muted-foreground sm:px-4">
-                      Nenhum campo de oportunidade. Use «Criar campo» ou
-                      Configurações.
-                    </p>
-                  )}
-                </div>
-              </div>
+              {dealCustomFieldDefs.length > 0 ? (
+                <CustomFieldsInlineTable
+                  embedded
+                  variant="minimal"
+                  fields={dealCustomFieldDefs}
+                  customData={d.customData}
+                  idPrefix={`pd-d-${d.id}`}
+                  members={tenantMembers}
+                  onSaveField={async (key, value) => {
+                    await updateDealCustomData({
+                      dealId: d.id,
+                      values: { [key]: value },
+                    });
+                    await reload();
+                    router.refresh();
+                  }}
+                  onReorderSelectOptions={onReorderSelectOptions}
+                  onAppendSelectOption={onAppendSelectOption}
+                />
+              ) : (
+                <p className="text-[12px] text-muted-foreground">
+                  Nenhum campo extra. Use «Criar campo» ou Configurações.
+                </p>
+              )}
             </section>
 
             {d.title ? (
               <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Oportunidade:</span>{" "}
+                <span className="font-medium text-foreground">Título:</span>{" "}
                 {d.title}
               </p>
             ) : null}

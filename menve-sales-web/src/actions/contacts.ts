@@ -1,7 +1,6 @@
 "use server";
 
-import prisma from "@/lib/prisma";
-import { getActiveTenantId } from "@/lib/session";
+import { apiServer, apiServerText } from "@/lib/api-server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -10,79 +9,67 @@ const contactSchema = z.object({
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
   company: z.string().optional(),
+  jobTitle: z.string().optional(),
   utmSource: z.string().optional(),
   utmMedium: z.string().optional(),
   utmCampaign: z.string().optional(),
+  campaignSourceId: z.string().optional(),
 });
 
 export async function createContact(input: z.infer<typeof contactSchema>) {
-  const tenantId = await getActiveTenantId();
   const data = contactSchema.parse(input);
-  await prisma.contact.create({
-    data: {
-      tenantId,
+  await apiServer("/contacts", {
+    method: "POST",
+    json: {
       name: data.name,
-      phone: data.phone || null,
-      email: data.email || null,
-      company: data.company || null,
-      utmSource: data.utmSource || null,
-      utmMedium: data.utmMedium || null,
-      utmCampaign: data.utmCampaign || null,
+      phone: data.phone || undefined,
+      email: data.email || undefined,
+      company: data.company || undefined,
+      jobTitle: data.jobTitle || undefined,
+      utmSource: data.utmSource || undefined,
+      utmMedium: data.utmMedium || undefined,
+      utmCampaign: data.utmCampaign || undefined,
+      campaignSourceId: data.campaignSourceId || undefined,
     },
   });
   revalidatePath("/contacts");
 }
 
 export async function deleteContact(id: string) {
-  const tenantId = await getActiveTenantId();
-  await prisma.contact.deleteMany({ where: { id, tenantId } });
+  await apiServer(`/contacts/${id}`, { method: "DELETE" });
   revalidatePath("/contacts");
 }
 
-function csvEscape(value: string) {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
+export async function exportContactsCsv(): Promise<string> {
+  return apiServerText("/contacts/export/csv");
 }
 
-/** CSV UTF-8 com cabeçalho (use BOM no cliente se quiser Excel). */
-export async function exportContactsCsv(): Promise<string> {
-  const tenantId = await getActiveTenantId();
-  const rows = await prisma.contact.findMany({
-    where: { tenantId },
-    orderBy: { name: "asc" },
-    include: {
-      campaignSource: true,
-      contactTags: { include: { tag: true } },
-    },
+const patchContactSchema = z.object({
+  contactId: z.string().min(1),
+  email: z.union([z.string().email(), z.literal("")]).optional(),
+  phone: z.string().nullable().optional(),
+  company: z.string().nullable().optional(),
+  jobTitle: z.string().nullable().optional(),
+  campaignSourceId: z.union([z.string().cuid(), z.null()]).optional(),
+});
+
+export async function patchContact(
+  input: z.infer<typeof patchContactSchema>,
+) {
+  const { contactId, ...body } = patchContactSchema.parse(input);
+  const payload: Record<string, unknown> = {};
+  if (body.email !== undefined) payload.email = body.email;
+  if (body.phone !== undefined) payload.phone = body.phone;
+  if (body.company !== undefined) payload.company = body.company;
+  if (body.jobTitle !== undefined) payload.jobTitle = body.jobTitle;
+  if (body.campaignSourceId !== undefined) {
+    payload.campaignSourceId = body.campaignSourceId;
+  }
+  await apiServer(`/contacts/${contactId}`, {
+    method: "PATCH",
+    json: payload,
   });
-
-  const header = [
-    "name",
-    "phone",
-    "email",
-    "company",
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "campaign",
-    "tags",
-  ];
-
-  const lines = rows.map((r) =>
-    [
-      csvEscape(r.name),
-      csvEscape(r.phone ?? ""),
-      csvEscape(r.email ?? ""),
-      csvEscape(r.company ?? ""),
-      csvEscape(r.utmSource ?? ""),
-      csvEscape(r.utmMedium ?? ""),
-      csvEscape(r.utmCampaign ?? ""),
-      csvEscape(r.campaignSource?.name ?? ""),
-      csvEscape(r.contactTags.map((ct) => ct.tag.name).join("; ")),
-    ].join(","),
-  );
-
-  return [header.join(","), ...lines].join("\n");
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${contactId}`);
+  revalidatePath("/pipeline");
 }
