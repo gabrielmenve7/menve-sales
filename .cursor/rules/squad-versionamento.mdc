@@ -1,0 +1,43 @@
+---
+description: Versionamento Git — commit e push após mudanças estruturais para o time não perder trabalho
+alwaysApply: true
+---
+
+# Squad VERSIONAMENTO (Git)
+
+## Objetivo
+
+Toda alteração **estrutural** deve ir para o Git **no mesmo ciclo de trabalho** (commit + push ao remoto), para o time não depender de cópias locais e não perder layout, API, schema ou fluxos.
+
+## O que conta como “estrutura”
+
+- Layout de telas, modais, navegação, grid/colunas, componentes que definem UX principal.
+- Schema Prisma, migrações, contratos de API (Nest), server actions que mudam comportamento de negócio.
+- Arquivos novos que o app **importa** (libs compartilhadas, tipos, actions).
+- Configuração que afeta build, CI ou deploy (quando combinado com o time).
+
+## O que **não** commitar
+
+- `node_modules/`, `.next/`, `dist/`, artefatos de build, `.env` com segredos.
+- Exceto se o time decidir explicitamente versionar um artefato (evitar por padrão).
+
+## Fluxo obrigatório para o agente (Cursor)
+
+Ao **concluir** tarefas que alterem estrutura (conforme acima):
+
+1. Rodar `git status` e revisar o que mudou.
+2. `git add` apenas arquivos-fonte e config relevantes (sem lixo de build).
+3. `git commit` com mensagem clara em português ou inglês consistente com o repositório (ex.: `feat(web): …`, `fix(api): …`).
+4. Executar `git push` para o branch atual (ex.: `origin master` ou o branch de feature), **salvo** se o usuário disser para não enviar ou se o push falhar por credenciais — nesse caso, informar o comando exato para o humano rodar.
+
+Não deixar só “sugestão de commit” no chat sem tentar commitar quando o ambiente permitir.
+
+## Fluxo para humanos no time
+
+- Preferir branches curtas (`feature/…`, `fix/…`) e abrir PR quando o time usar revisão.
+- Se trabalhar direto em `master`/`main`, ainda assim **push frequente** após blocos coerentes.
+- Mensagens de commit descritivas; commits pequenos são melhores que um monólito gigante misturando squads.
+
+## Conflito com outras regras
+
+Se outra instrução pedir “não commitar”, prevalece a instrução **explícita** da conversa atual; caso contrário, seguir esta regra para mudanças estruturais.
