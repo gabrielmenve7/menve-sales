@@ -28,6 +28,7 @@ const lostSchema = z.object({
 const patchDealSchema = z.object({
   assignedToId: z.string().min(1).nullable().optional(),
   value: z.number().nullable().optional(),
+  title: z.string().min(1).max(500).optional(),
 });
 
 /** Metadado para o front renderizar ícones/pílulas (prefixo em `Activity.description`). */
@@ -208,6 +209,37 @@ export class DealsService {
     body: unknown,
   ) {
     const data = patchDealSchema.parse(body);
+
+    if (data.title !== undefined) {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: dealId, tenantId },
+      });
+      if (!deal) throw new BadRequestException("Deal não encontrado");
+      const next = data.title.trim();
+      if (deal.title !== next) {
+        await this.prisma.$transaction([
+          this.prisma.deal.update({
+            where: { id: dealId },
+            data: { title: next },
+          }),
+          this.prisma.activity.create({
+            data: {
+              tenantId,
+              userId: actorUserId,
+              dealId,
+              contactId: deal.contactId,
+              type: ActivityType.NOTE,
+              title: "Título da oportunidade atualizado",
+              description: this.metaDescription({
+                k: "deal_title",
+                from: deal.title,
+                to: next,
+              }),
+            },
+          }),
+        ]);
+      }
+    }
 
     if (data.value !== undefined) {
       const n = await this.prisma.deal.updateMany({
@@ -435,5 +467,46 @@ export class DealsService {
         },
       }),
     ]);
+  }
+
+  async remove(tenantId: string, dealId: string) {
+    const r = await this.prisma.deal.deleteMany({
+      where: { id: dealId, tenantId },
+    });
+    if (r.count === 0) throw new NotFoundException();
+    return { ok: true as const };
+  }
+
+  async archive(tenantId: string, actorUserId: string, dealId: string) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, tenantId },
+    });
+    if (!deal) throw new NotFoundException();
+    if (deal.status === "ARCHIVED") {
+      return { ok: true as const };
+    }
+    if (deal.status !== "OPEN") {
+      throw new BadRequestException(
+        "Só é possível arquivar oportunidades em aberto",
+      );
+    }
+    await this.prisma.$transaction([
+      this.prisma.deal.update({
+        where: { id: dealId },
+        data: { status: "ARCHIVED" },
+      }),
+      this.prisma.activity.create({
+        data: {
+          tenantId,
+          userId: actorUserId,
+          dealId,
+          contactId: deal.contactId,
+          type: ActivityType.NOTE,
+          title: "Oportunidade arquivada",
+          description: this.metaDescription({ k: "deal_archived" }),
+        },
+      }),
+    ]);
+    return { ok: true as const };
   }
 }

@@ -46,6 +46,7 @@ export async function exportContactsCsv(): Promise<string> {
 
 const patchContactSchema = z.object({
   contactId: z.string().min(1),
+  name: z.string().min(1).max(200).optional(),
   email: z.union([z.string().email(), z.literal("")]).optional(),
   phone: z.string().nullable().optional(),
   company: z.string().nullable().optional(),
@@ -58,6 +59,7 @@ export async function patchContact(
 ) {
   const { contactId, ...body } = patchContactSchema.parse(input);
   const payload: Record<string, unknown> = {};
+  if (body.name !== undefined) payload.name = body.name;
   if (body.email !== undefined) payload.email = body.email;
   if (body.phone !== undefined) payload.phone = body.phone;
   if (body.company !== undefined) payload.company = body.company;

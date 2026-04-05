@@ -76,12 +76,93 @@
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Cursor de mão em links e elementos clicáveis nativos (além do componente Button). */
+@layer base {
+  a[href]:not([href=""]) {
+    cursor: pointer;
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  input[type="submit"]:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="reset"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input[type="submit"]:disabled,
+  input[type="button"]:disabled,
+  input[type="reset"]:disabled {
+    cursor: not-allowed;
+  }
+
+  [role="button"]:not([aria-disabled="true"]),
+  [role="link"],
+  [role="tab"],
+  [role="menuitem"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  [role="button"][aria-disabled="true"],
+  [role="menuitem"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+/* Barra horizontal do pipeline (opacidades do thumb/track a metade do bloco anterior). */
+@layer components {
+  .pipeline-board-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(85 85 85 / 0.26) rgb(0 0 0 / 0.04);
+  }
+
+  .dark .pipeline-board-scroll {
+    scrollbar-color: rgb(255 255 255 / 0.24) rgb(255 255 255 / 0.04);
+  }
+
+  .pipeline-board-scroll::-webkit-scrollbar {
+    height: 11px;
+  }
+
+  .pipeline-board-scroll::-webkit-scrollbar-track {
+    background: rgb(0 0 0 / 0.04);
+    border-radius: 9999px;
+  }
+
+  .pipeline-board-scroll::-webkit-scrollbar-thumb {
+    background: rgb(85 85 85 / 0.26);
+    border-radius: 9999px;
+  }
+
+  .pipeline-board-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(85 85 85 / 0.34);
+  }
+
+  .dark .pipeline-board-scroll::-webkit-scrollbar-track {
+    background: rgb(255 255 255 / 0.04);
+  }
+
+  .dark .pipeline-board-scroll::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.24);
+  }
+
+  .dark .pipeline-board-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.31);
+  }
 }

@@ -4,6 +4,7 @@ import {
   UserRole,
   DealStatus,
   WhatsAppProvider,
+  CustomFieldEntity,
 } from "@prisma/client";
 
 const REMOVED_CUSTOM_FIELD_KEYS = [
@@ -12,6 +13,7 @@ const REMOVED_CUSTOM_FIELD_KEYS = [
   "funcionarios",
   "prioridade",
   "observacoes",
+  "oportunidade",
 ] as const;
 
 function omitCustomDataKeys(
@@ -136,6 +138,88 @@ async function main() {
       key: { in: [...REMOVED_CUSTOM_FIELD_KEYS] },
     },
   });
+
+  const dealCustomFieldSeeds: Array<{
+    key: string;
+    name: string;
+    fieldType: string;
+    sortOrder: number;
+    options?: string[];
+  }> = [
+    {
+      key: "origem",
+      name: "Origem",
+      fieldType: "SELECT",
+      sortOrder: 11,
+      options: [
+        "Inbound",
+        "Outbound",
+        "Indicação",
+        "Site",
+        "Evento",
+        "Parceiro",
+        "Outro",
+      ],
+    },
+    { key: "responsavel", name: "Responsável", fieldType: "USER", sortOrder: 12 },
+    {
+      key: "motivo_perda",
+      name: "Motivo de perda",
+      fieldType: "SELECT",
+      sortOrder: 13,
+      options: [
+        "Preço",
+        "Concorrência",
+        "Sem resposta",
+        "Timing",
+        "Não é prioridade",
+        "Outro",
+      ],
+    },
+    {
+      key: "produto",
+      name: "Produto",
+      fieldType: "SELECT",
+      sortOrder: 14,
+      options: ["Plano A", "Plano B", "Plano Enterprise", "Serviço avulso"],
+    },
+    {
+      key: "atividade",
+      name: "Atividade",
+      fieldType: "SELECT",
+      sortOrder: 15,
+      options: [
+        "Ligação",
+        "E-mail",
+        "Reunião",
+        "Follow-up",
+        "Proposta",
+        "WhatsApp",
+      ],
+    },
+  ];
+
+  for (const df of dealCustomFieldSeeds) {
+    const exists = await prisma.customField.findFirst({
+      where: { tenantId: tenant.id, key: df.key },
+    });
+    if (!exists) {
+      await prisma.customField.create({
+        data: {
+          tenantId: tenant.id,
+          entity: CustomFieldEntity.DEAL,
+          name: df.name,
+          key: df.key,
+          fieldType: df.fieldType,
+          sortOrder: df.sortOrder,
+          required: false,
+          options: df.options
+            ? (df.options as unknown as Prisma.InputJsonValue)
+            : undefined,
+        },
+      });
+    }
+  }
 
   let contact = await prisma.contact.findFirst({
     where: { tenantId: tenant.id, phone: "+5511999999999" },

@@ -19,6 +19,7 @@ enum DealStatus {
   OPEN
   WON
   LOST
+  ARCHIVED
 }
 
 enum ActivityType {

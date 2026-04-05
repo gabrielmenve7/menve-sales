@@ -22,6 +22,7 @@ const contactSchema = z.object({
 });
 
 const patchContactSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
   email: z.union([z.string().email(), z.literal("")]).optional(),
   phone: z.string().nullable().optional(),
   company: z.string().nullable().optional(),
@@ -136,6 +137,9 @@ export class ContactsService {
     if (!existing) throw new NotFoundException();
 
     const update: Prisma.ContactUpdateInput = {};
+    if (data.name !== undefined) {
+      update.name = data.name.trim();
+    }
     if (data.email !== undefined) {
       update.email = data.email === "" ? null : data.email;
     }

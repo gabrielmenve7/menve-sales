@@ -15,22 +15,26 @@ import {
   Briefcase,
   Building2,
   Calendar,
+  Check,
   CheckCircle2,
   ChevronDown,
   DollarSign,
-  ExternalLink,
   FilePlus,
   Globe,
   List,
   Mail,
+  Maximize2,
   MessageSquare,
+  PanelRight,
   Phone,
   Send,
+  Settings2,
+  Square,
+  X,
   Tag as TagIcon,
   User,
   XCircle,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -39,8 +43,6 @@ import { updateCustomField, updateDealCustomData } from "@/actions/custom-fields
 import {
   createDealActivity,
   getDealDetail,
-  markDealLost,
-  markDealWon,
   moveDealStage,
   patchDeal,
 } from "@/actions/deals";
@@ -57,9 +59,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -80,6 +81,12 @@ import { CUSTOM_FIELD_ENTITY } from "@/lib/custom-field-entity";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { parseMenveActivityMeta } from "@/lib/deal-activity-meta";
 import { parseMoneyBrlFromInput } from "@/lib/custom-field-value-helpers";
+import {
+  formatBrazilPhoneInput,
+  nationalDigitsFromInput,
+  nationalDigitsFromStored,
+  storedPhoneFromNational,
+} from "@/lib/phone-br";
 import { cn } from "@/lib/utils";
 import type { DealRow } from "./pipeline-types";
 
@@ -304,6 +311,8 @@ function DealHistoryRow({
   );
 }
 
+type DealDetailLayoutMode = "central" | "lateral" | "fullscreen";
+
 const sectionLabelClass =
   "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
 
@@ -345,9 +354,6 @@ export function PipelineDealDetailDialog({
   const [remote, setRemote] = useState<DealDetailPayload | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [lostOpen, setLostOpen] = useState(false);
-  const [lostReason, setLostReason] = useState("");
-  const [outcomePending, setOutcomePending] = useState(false);
   const [headerBusy, setHeaderBusy] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
@@ -360,6 +366,8 @@ export function PipelineDealDetailDialog({
   const [tagAddOpen, setTagAddOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [tagBusy, setTagBusy] = useState(false);
+  const [dealCardLayout, setDealCardLayout] =
+    useState<DealDetailLayoutMode>("central");
 
   const reload = useCallback(async () => {
     if (!initial?.id) return;
@@ -379,8 +387,6 @@ export function PipelineDealDetailDialog({
     if (!open || !initial?.id) {
       setRemote(null);
       setLoadErr(null);
-      setLostOpen(false);
-      setLostReason("");
       setNoteBody("");
       setTagAddOpen(false);
       setNewTagName("");
@@ -479,7 +485,9 @@ export function PipelineDealDetailDialog({
   useEffect(() => {
     if (!d) return;
     setEmailLocal(d.contact.email?.trim() ?? "");
-    setPhoneLocal(d.contact.phone?.trim() ?? "");
+    setPhoneLocal(
+      formatBrazilPhoneInput(nationalDigitsFromStored(d.contact.phone)),
+    );
     setCompanyLocal(d.contact.company?.trim() ?? "");
     setJobTitleLocal((contactJobTitle ?? "").trim());
     if (d.value != null && Number.isFinite(Number(d.value))) {
@@ -522,35 +530,6 @@ export function PipelineDealDetailDialog({
       router.refresh();
     } finally {
       setHeaderBusy(false);
-    }
-  }
-
-  async function onWon() {
-    if (!d) return;
-    setOutcomePending(true);
-    try {
-      await markDealWon(d.id);
-      onOpenChange(false);
-      router.refresh();
-    } finally {
-      setOutcomePending(false);
-    }
-  }
-
-  async function onLostSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!d) return;
-    const r = lostReason.trim();
-    if (r.length < 2) return;
-    setOutcomePending(true);
-    try {
-      await markDealLost(d.id, r);
-      setLostOpen(false);
-      setLostReason("");
-      onOpenChange(false);
-      router.refresh();
-    } finally {
-      setOutcomePending(false);
     }
   }
 
@@ -705,17 +684,30 @@ export function PipelineDealDetailDialog({
   if (!initial || !d) return null;
 
   const created = new Date(d.createdAt).toLocaleDateString("pt-BR");
+  const lateral = dealCardLayout === "lateral";
+  const fieldRowClass =
+    "flex items-center gap-3 rounded-lg py-1 transition-colors hover:bg-muted/35";
+  const tagFieldRowClass =
+    "flex flex-wrap items-center gap-2 rounded-lg py-1 transition-colors hover:bg-muted/35";
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
+          hideClose
+          overlayClassName="bg-black/30 backdrop-blur-md"
           className={cn(
-            "flex max-h-[min(94vh,920px)] w-[min(100vw-1rem,80rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl",
+            "flex flex-col gap-0 overflow-hidden border-0 bg-background p-0 shadow-lg duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+            dealCardLayout === "central" &&
+              "left-[50%] top-[50%] max-h-[min(94vh,920px)] w-[min(100vw-1rem,80rem)] max-w-none translate-x-[-50%] translate-y-[-50%] data-[state=open]:zoom-in-95 sm:rounded-lg",
+            dealCardLayout === "lateral" &&
+              "left-auto right-0 top-0 h-[100dvh] max-h-[100dvh] w-[min(100vw,28rem)] max-w-none translate-x-0 translate-y-0 rounded-none rounded-l-lg data-[state=open]:slide-in-from-right-4 data-[state=open]:zoom-in-95 sm:w-[min(100vw,40rem)]",
+            dealCardLayout === "fullscreen" &&
+              "left-0 top-0 h-[100dvh] max-h-[100dvh] w-full max-w-full translate-x-0 translate-y-0 rounded-none data-[state=open]:zoom-in-95 sm:rounded-none",
           )}
         >
         <DialogHeader className="space-y-3 border-b border-border/60 px-6 pb-4 pt-6 text-left">
-          <div className="flex items-start justify-between gap-4 pr-8">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-2">
               <DialogTitle className="text-2xl font-semibold tracking-tight">
                 {d.contact.name}
@@ -785,48 +777,95 @@ export function PipelineDealDetailDialog({
                       ? d.stage.name
                       : d.status === "WON"
                         ? "Ganho"
-                        : "Perdido"}
+                        : d.status === "LOST"
+                          ? "Perdido"
+                          : "Arquivado"}
                   </span>
                 )}
               </div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5"
-              asChild
-            >
-              <Link href={`/contacts/${d.contactId}`}>
-                <ExternalLink className="size-3.5" />
-                Contato
-              </Link>
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-md"
+                    aria-label="Visualização do painel"
+                  >
+                    <Settings2 className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[12rem]">
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    Visualização
+                  </div>
+                  <DropdownMenuSeparator className="my-1" />
+                  <DropdownMenuItem
+                    className="gap-2"
+                    onClick={() => setDealCardLayout("lateral")}
+                  >
+                    <PanelRight className="size-4 shrink-0 opacity-70" />
+                    <span className="flex-1">Lateral</span>
+                    <Check
+                      className={cn(
+                        "size-4 shrink-0",
+                        dealCardLayout === "lateral"
+                          ? "text-foreground"
+                          : "text-transparent",
+                      )}
+                      aria-hidden
+                    />
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="gap-2"
+                    onClick={() => setDealCardLayout("central")}
+                  >
+                    <Square className="size-4 shrink-0 opacity-70" />
+                    <span className="flex-1">Central</span>
+                    <Check
+                      className={cn(
+                        "size-4 shrink-0",
+                        dealCardLayout === "central"
+                          ? "text-foreground"
+                          : "text-transparent",
+                      )}
+                      aria-hidden
+                    />
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="gap-2"
+                    onClick={() => setDealCardLayout("fullscreen")}
+                  >
+                    <Maximize2 className="size-4 shrink-0 opacity-70" />
+                    <span className="flex-1">Tela cheia</span>
+                    <Check
+                      className={cn(
+                        "size-4 shrink-0",
+                        dealCardLayout === "fullscreen"
+                          ? "text-foreground"
+                          : "text-transparent",
+                      )}
+                      aria-hidden
+                    />
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DialogClose asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 rounded-md"
+                >
+                  <X className="size-4" />
+                  <span className="sr-only">Fechar</span>
+                </Button>
+              </DialogClose>
+            </div>
           </div>
         </DialogHeader>
-
-        {d.status === "OPEN" ? (
-          <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-6 py-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={outcomePending}
-              onClick={() => void onWon()}
-            >
-              Marcar como ganho
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={outcomePending}
-              onClick={() => setLostOpen(true)}
-            >
-              Marcar como perdido…
-            </Button>
-          </div>
-        ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10 sm:pb-8">
             {loadErr ? (
@@ -836,11 +875,27 @@ export function PipelineDealDetailDialog({
               <p className="text-sm text-muted-foreground">Carregando…</p>
             ) : null}
 
-            <div className="grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start lg:gap-x-8">
-            <div className="min-w-0 space-y-10 lg:pr-1">
-            <section className="space-y-1">
-              <h4 className={sectionLabelClass}>Contato</h4>
-              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+            <div
+              className={cn(
+                dealCardLayout === "lateral"
+                  ? "flex flex-col gap-6"
+                  : "grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start lg:gap-x-8",
+              )}
+            >
+            <div
+              className={cn(
+                "min-w-0 space-y-6",
+                dealCardLayout !== "lateral" && "lg:pr-1",
+              )}
+            >
+            <section
+              className={cn(
+                "space-y-0",
+                lateral && "border-b border-border/50 pb-6",
+              )}
+            >
+              <h4 className={cn(sectionLabelClass, "mb-2")}>Contato</h4>
+              <div className={fieldRowClass}>
                 <Mail className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <input
                   type="email"
@@ -866,27 +921,41 @@ export function PipelineDealDetailDialog({
                   }}
                 />
               </div>
-              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+              <div className={fieldRowClass}>
                 <Phone className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <input
                   type="tel"
                   autoComplete="tel"
+                  inputMode="numeric"
                   disabled={contactFieldBusy}
-                  placeholder="Adicionar telefone"
+                  placeholder="(00) 00000-0000"
                   className={contactInputClass}
                   value={phoneLocal}
-                  onChange={(e) => setPhoneLocal(e.target.value)}
+                  onChange={(e) =>
+                    setPhoneLocal(
+                      formatBrazilPhoneInput(
+                        nationalDigitsFromInput(e.target.value),
+                      ),
+                    )
+                  }
                   onBlur={() => {
-                    const t = phoneLocal.trim();
-                    const cur = d.contact.phone?.trim() ?? "";
-                    if (t === cur) return;
-                    void flushContactField({
-                      phone: t === "" ? null : t,
-                    });
+                    const n = nationalDigitsFromInput(phoneLocal);
+                    const curN = nationalDigitsFromStored(d.contact.phone);
+                    if (n === curN) return;
+                    if (n.length === 0) {
+                      void flushContactField({ phone: null });
+                      return;
+                    }
+                    const stored = storedPhoneFromNational(n);
+                    if (!stored) {
+                      setPhoneLocal(formatBrazilPhoneInput(curN));
+                      return;
+                    }
+                    void flushContactField({ phone: stored });
                   }}
                 />
               </div>
-              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+              <div className={fieldRowClass}>
                 <Building2 className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <input
                   type="text"
@@ -905,7 +974,7 @@ export function PipelineDealDetailDialog({
                   }}
                 />
               </div>
-              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+              <div className={fieldRowClass}>
                 <Briefcase className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <input
                   type="text"
@@ -927,17 +996,27 @@ export function PipelineDealDetailDialog({
             </section>
 
             <section
-              className="space-y-1 lg:min-w-0"
+              className="space-y-0 lg:min-w-0"
               aria-label="Campos da oportunidade e do lead"
             >
-              <div className="flex justify-end pb-1">
+              <div
+                className={cn(
+                  "flex",
+                  lateral
+                    ? "items-center justify-between gap-2 pb-2"
+                    : "justify-end pb-1",
+                )}
+              >
+                {lateral ? (
+                  <h4 className={sectionLabelClass}>Campos</h4>
+                ) : null}
                 <CreateCustomFieldTrigger
                   defaultEntity={CUSTOM_FIELD_ENTITY.DEAL}
                   idPrefix={`pd-new-${d.id}`}
                   onCreated={onCustomFieldCreated}
                 />
               </div>
-              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+              <div className={fieldRowClass}>
                 <User className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   {d.status === "OPEN" && tenantMembers.length > 0 ? (
@@ -1013,13 +1092,13 @@ export function PipelineDealDetailDialog({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+              <div className={fieldRowClass}>
                 <DollarSign className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <Input
                   inputMode="decimal"
                   disabled={headerBusy}
                   placeholder="R$ 0,00"
-                  className="h-9 border-border/50 bg-transparent text-sm font-medium shadow-none focus-visible:ring-1"
+                  className="h-8 min-h-0 border-border/50 bg-transparent text-sm font-medium shadow-none focus-visible:ring-1"
                   value={dealValueLocal}
                   onChange={(e) => setDealValueLocal(e.target.value)}
                   onBlur={() => void commitDealValue()}
@@ -1029,7 +1108,7 @@ export function PipelineDealDetailDialog({
                 />
               </div>
 
-              <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
+              <div className={fieldRowClass}>
                 <Globe className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1078,7 +1157,7 @@ export function PipelineDealDetailDialog({
                 </DropdownMenu>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 rounded-lg py-3 transition-colors hover:bg-muted/35">
+              <div className={tagFieldRowClass}>
                 <TagIcon className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
                   {allTags.map(({ tag }) => (
@@ -1163,7 +1242,7 @@ export function PipelineDealDetailDialog({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 rounded-lg py-3 text-sm">
+              <div className={cn(fieldRowClass, "text-sm")}>
                 <Calendar className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <span>
                   <span className="text-muted-foreground">Criado: </span>
@@ -1191,7 +1270,7 @@ export function PipelineDealDetailDialog({
                   onAppendSelectOption={onAppendSelectOption}
                 />
               ) : (
-                <p className="py-2 text-[12px] text-muted-foreground">
+                <p className="py-1 text-[12px] text-muted-foreground">
                   Nenhum campo extra nesta oportunidade. Use «Criar campo» acima
                   ou Configurações.
                 </p>
@@ -1206,8 +1285,15 @@ export function PipelineDealDetailDialog({
             ) : null}
             </div>
 
-            <div className="min-w-0 space-y-8 max-lg:mt-8 max-lg:border-t max-lg:border-border/50 max-lg:pt-8 lg:border-l lg:border-border/60 lg:pl-8">
-            <section className="space-y-3">
+            <div
+              className={cn(
+                "min-w-0 space-y-6",
+                lateral && "border-t border-border/50 pt-6",
+                dealCardLayout !== "lateral" &&
+                  "max-lg:mt-8 max-lg:border-t max-lg:border-border/50 max-lg:pt-8 lg:border-l lg:border-border/60 lg:pl-8",
+              )}
+            >
+            <section className="space-y-2">
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Notas
               </h4>
@@ -1240,7 +1326,12 @@ export function PipelineDealDetailDialog({
               </div>
             </section>
 
-            <section className="space-y-4">
+            <section
+              className={cn(
+                "space-y-3",
+                lateral && "border-t border-border/50 pt-6",
+              )}
+            >
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Histórico
               </h4>
@@ -1280,42 +1371,6 @@ export function PipelineDealDetailDialog({
             </div>
             </div>
         </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={lostOpen} onOpenChange={setLostOpen}>
-        <DialogContent
-          onPointerDown={(e) => e.stopPropagation()}
-          className="sm:max-w-md"
-        >
-          <form onSubmit={onLostSubmit}>
-            <DialogHeader>
-              <DialogTitle>Marcar como perdido</DialogTitle>
-              <DialogDescription>
-                Informe o motivo da perda (obrigatório para análise de campanha).
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-2 py-4">
-              <Label htmlFor={`lost-deal-${d.id}`}>Motivo</Label>
-              <textarea
-                id={`lost-deal-${d.id}`}
-                value={lostReason}
-                onChange={(e) => setLostReason(e.target.value)}
-                className="min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                placeholder="Ex: preço, concorrente, sem resposta…"
-                required
-                minLength={2}
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="submit"
-                disabled={outcomePending || lostReason.trim().length < 2}
-              >
-                {outcomePending ? "Salvando…" : "Confirmar perda"}
-              </Button>
-            </DialogFooter>
-          </form>
         </DialogContent>
       </Dialog>
     </>

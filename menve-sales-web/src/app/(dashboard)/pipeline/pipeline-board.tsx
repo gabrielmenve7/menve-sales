@@ -2,20 +2,27 @@
 
 import {
   DndContext,
-  DragOverlay,
   PointerSensor,
   useDndMonitor,
   useSensor,
   useSensors,
   type DragEndEvent,
-  type DragStartEvent,
 } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import type { CustomField, Pipeline, Stage } from "@prisma/client";
-import { User } from "lucide-react";
+import { MoreVertical, User } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
-import { moveDealStage } from "@/actions/deals";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { patchContact } from "@/actions/contacts";
+import { archiveDeal, deleteDeal, moveDealStage } from "@/actions/deals";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import { PipelineDealDetailDialog } from "./pipeline-deal-detail-dialog";
 import { PipelineNewDeal } from "./pipeline-new-deal";
@@ -23,7 +30,6 @@ import type { DealRow } from "./pipeline-types";
 
 export type { DealRow } from "./pipeline-types";
 
-/** Cor de acento quando a etapa não tem `color` no banco (B2B / qualificação / etc.) */
 const FALLBACK_STAGE_HEX = [
   "#2563eb",
   "#7c3aed",
@@ -39,19 +45,30 @@ function stageAccentHex(stage: Stage, index: number) {
   return FALLBACK_STAGE_HEX[index % FALLBACK_STAGE_HEX.length];
 }
 
-/** Coluna: quase a cor da página, só um fio da cor da etapa */
 function columnSurfaceStyle(hex: string) {
   return {
     backgroundColor: `color-mix(in srgb, var(--background) 98.5%, ${hex} 1.5%)`,
   } as const;
 }
 
-/** Badge do título: fundo pastel + texto forte na mesma família de cor */
 function stageBadgeStyle(hex: string) {
   return {
     backgroundColor: `color-mix(in srgb, var(--card) 78%, ${hex} 22%)`,
     color: `color-mix(in srgb, ${hex} 72%, var(--foreground) 28%)`,
   } as const;
+}
+
+function relativeShort(iso: Date | string): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  const diff = Date.now() - d.getTime();
+  if (diff < 0 || Number.isNaN(d.getTime())) return "—";
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+  if (days >= 1) return `${days}d`;
+  if (hrs >= 1) return `${hrs}h`;
+  if (mins >= 1) return `${mins}m`;
+  return "agora";
 }
 
 function assigneeInitials(
@@ -73,7 +90,6 @@ function assigneeInitials(
   return "";
 }
 
-/** Avatar do responsável (modelo CRM: canto superior direito). Sem foto no banco: iniciais. */
 function LeadAssigneeAvatar({
   assignedTo,
 }: {
@@ -89,16 +105,16 @@ function LeadAssigneeAvatar({
     <span
       title={title}
       aria-label={assignedTo ? `Responsável: ${title}` : "Sem responsável"}
-      className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-[10px] font-semibold uppercase tracking-tight text-white dark:bg-violet-500"
+      className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-[9px] font-semibold uppercase tracking-tight text-white dark:bg-violet-500"
     >
       {assignedTo ? (
         label ? (
           label
         ) : (
-          <User className="size-3.5 text-white" strokeWidth={2} />
+          <User className="size-3 text-white" strokeWidth={2} />
         )
       ) : (
-        <User className="size-3.5 text-white/80" strokeWidth={2} />
+        <User className="size-3 text-white/80" strokeWidth={2} />
       )}
     </span>
   );
@@ -111,7 +127,49 @@ function DealCard({
   deal: DealRow;
   onOpenDetail: (d: DealRow) => void;
 }) {
+  const router = useRouter();
   const suppressOpenRef = useRef(false);
+  const suppressOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const [cardMenuOpen, setCardMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameLeadName, setRenameLeadName] = useState(deal.contact.name);
+  const [renameBusy, setRenameBusy] = useState(false);
+
+  function armSuppressDetailOpen(ms = 450) {
+    suppressOpenRef.current = true;
+    if (suppressOpenTimerRef.current) {
+      clearTimeout(suppressOpenTimerRef.current);
+    }
+    suppressOpenTimerRef.current = setTimeout(() => {
+      suppressOpenRef.current = false;
+      suppressOpenTimerRef.current = null;
+    }, ms);
+  }
+
+  useEffect(() => {
+    if (!renaming) setRenameLeadName(deal.contact.name);
+  }, [deal.contact.name, renaming]);
+
+  useEffect(
+    () => () => {
+      if (suppressOpenTimerRef.current) {
+        clearTimeout(suppressOpenTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (renaming) {
+      requestAnimationFrame(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      });
+    }
+  }, [renaming]);
 
   useDndMonitor({
     onDragEnd({ active }) {
@@ -178,49 +236,224 @@ function DealCard({
   }
 
   function handleCardClick() {
-    if (suppressOpenRef.current) return;
+    if (renaming || cardMenuOpen || suppressOpenRef.current) return;
     onOpenDetail(deal);
+  }
+
+  async function onRenameSave() {
+    const t = renameLeadName.trim();
+    if (t.length < 1) return;
+    if (t === deal.contact.name.trim()) {
+      setRenaming(false);
+      return;
+    }
+    setRenameBusy(true);
+    try {
+      await patchContact({ contactId: deal.contactId, name: t });
+      setRenaming(false);
+      router.refresh();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
+  function onRenameBlur() {
+    if (renameBusy) return;
+    const t = renameLeadName.trim();
+    if (t.length < 1) {
+      setRenameLeadName(deal.contact.name);
+      setRenaming(false);
+      return;
+    }
+    if (t === deal.contact.name.trim()) {
+      setRenaming(false);
+      return;
+    }
+    void onRenameSave();
+  }
+
+  async function onDelete() {
+    if (
+      !window.confirm(
+        "Excluir esta oportunidade? Esta ação não pode ser desfeita.",
+      )
+    )
+      return;
+    try {
+      await deleteDeal(deal.id);
+      router.refresh();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Erro ao excluir.");
+    }
+  }
+
+  async function onArchive() {
+    if (
+      !window.confirm(
+        "Arquivar esta oportunidade? Ela sai do funil, mas o histórico no contato é mantido.",
+      )
+    )
+      return;
+    try {
+      await archiveDeal(deal.id);
+      router.refresh();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Erro ao arquivar.");
+    }
   }
 
   return (
     <div
       ref={setNodeRef}
       style={style}
+      data-pipeline-card
       {...listeners}
       {...attributes}
       role="button"
       tabIndex={0}
       aria-label={`Lead ${deal.contact.name}. Arraste para mover de etapa ou clique para abrir.`}
       className={cn(
-        "w-full touch-none overflow-hidden rounded-[10px] border border-border/60 bg-card font-sans shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "group w-full touch-none overflow-hidden rounded-md border border-border/60 bg-card font-sans shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isDragging
-          ? "cursor-grabbing opacity-60 ring-2 ring-foreground/10"
+          ? "cursor-grabbing z-10 shadow-md ring-1 ring-foreground/15"
           : "cursor-grab active:cursor-grabbing",
       )}
       onClick={handleCardClick}
-      onKeyDown={onCardKeyDown}
+      onKeyDown={(e) => {
+        if (renaming || cardMenuOpen) return;
+        onCardKeyDown(e);
+      }}
     >
-      <div className="p-4 font-sans">
-        <div className="flex items-start justify-between gap-3">
-          <p className="min-w-0 flex-1 text-[16px] font-semibold leading-tight tracking-normal text-foreground">
-            {deal.contact.name}
-          </p>
-          <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
+      <div className="px-3 py-2.5 font-sans">
+        <div className="flex items-start justify-between gap-2">
+          <div
+            className="min-w-0 flex-1"
+            onPointerDown={(e) => renaming && e.stopPropagation()}
+            onClick={(e) => renaming && e.stopPropagation()}
+          >
+            {renaming ? (
+              <Input
+                ref={renameInputRef}
+                disabled={renameBusy}
+                placeholder="Nome do lead"
+                className="h-8 border-0 bg-transparent px-0 text-[15px] font-semibold shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                aria-label="Nome do lead"
+                value={renameLeadName}
+                onChange={(e) => setRenameLeadName(e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void onRenameSave();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setRenameLeadName(deal.contact.name);
+                    setRenaming(false);
+                  }
+                }}
+                onBlur={() => onRenameBlur()}
+              />
+            ) : (
+              <p className="text-[15px] font-semibold leading-[1.2] tracking-tight text-foreground">
+                {deal.contact.name}
+              </p>
+            )}
+          </div>
+          {!renaming ? (
+            <div className="relative size-6 shrink-0">
+              <span
+                className={cn(
+                  "absolute inset-0 flex items-center justify-center transition-opacity duration-150",
+                  cardMenuOpen
+                    ? "pointer-events-none opacity-0"
+                    : "opacity-100 group-hover:pointer-events-none group-hover:opacity-0 group-focus-within:pointer-events-none group-focus-within:opacity-0",
+                )}
+              >
+                <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
+              </span>
+              <DropdownMenu
+                open={cardMenuOpen}
+                onOpenChange={(open) => {
+                  setCardMenuOpen(open);
+                  if (!open) armSuppressDetailOpen();
+                }}
+              >
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "absolute inset-0 flex items-center justify-center rounded-md text-muted-foreground outline-none transition-opacity duration-150 hover:bg-muted/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                      cardMenuOpen
+                        ? "pointer-events-auto opacity-100"
+                        : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+                    )}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Mais ações"
+                  >
+                    <MoreVertical className="size-4" strokeWidth={2} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-44"
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setCardMenuOpen(false);
+                      setRenameLeadName(deal.contact.name);
+                      setRenaming(true);
+                    }}
+                  >
+                    Renomear
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setCardMenuOpen(false);
+                      void onDelete();
+                    }}
+                  >
+                    Excluir
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setCardMenuOpen(false);
+                      void onArchive();
+                    }}
+                  >
+                    Arquivar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : null}
         </div>
-        <p className="mt-0 text-[13px] font-normal leading-[1.25] tracking-normal text-zinc-500 dark:text-zinc-400">
+        <p className="mt-0.5 text-[12px] font-normal leading-[1.2] text-muted-foreground">
           {deal.contact.company?.trim() || "—"}
         </p>
         {deal.value != null ? (
-          <p className="mt-[14px] text-[16px] font-bold leading-tight tabular-nums tracking-normal text-foreground">
+          <p className="mt-2 text-[15px] font-bold leading-[1.2] tabular-nums tracking-tight text-foreground">
             {Number(deal.value).toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
             })}
           </p>
         ) : null}
-        <p className="mt-[14px] text-[12px] font-normal leading-normal tracking-normal text-zinc-400 dark:text-zinc-500">
-          {originLine ?? "—"}
-        </p>
+        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-normal leading-none text-muted-foreground">
+          <span className="min-w-0 truncate">{originLine ?? "—"}</span>
+          <span className="shrink-0 tabular-nums" title="Atualizado">
+            {relativeShort(deal.updatedAt)}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -251,7 +484,7 @@ function StageColumn({
       ref={setNodeRef}
       style={columnSurfaceStyle(accent)}
       className={cn(
-        "flex w-[min(100vw-2rem,20rem)] shrink-0 flex-col overflow-hidden rounded-2xl border border-border/35",
+        "flex w-[min(100vw-2rem,20rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/35",
         isOver &&
           "ring-2 ring-foreground/12 ring-offset-2 ring-offset-background",
       )}
@@ -278,7 +511,7 @@ function StageColumn({
         </div>
       </div>
 
-      <div className="flex min-h-[min(420px,50vh)] flex-1 flex-col gap-3 px-3 pb-3 pt-0">
+      <div className="flex min-h-[min(420px,50vh)] flex-1 flex-col gap-2 px-3 pb-3 pt-0">
         {deals.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-muted-foreground">
             Arraste leads aqui
@@ -303,40 +536,108 @@ export function PipelineBoard({
   pipeline,
   deals,
   contacts,
-  contactCustomFieldDefs,
   dealCustomFieldDefs,
+  tenantMembers = [],
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   deals: DealRow[];
   contacts: { id: string; name: string; phone: string | null }[];
-  contactCustomFieldDefs: CustomField[];
   dealCustomFieldDefs: CustomField[];
+  tenantMembers?: TenantMemberOption[];
 }) {
   const router = useRouter();
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const panningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, scrollLeft: 0 });
+  const [isPanningBoard, setIsPanningBoard] = useState(false);
+
   const [detailDeal, setDetailDeal] = useState<DealRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [optimisticStageByDealId, setOptimisticStageByDealId] = useState<
+    Record<string, string>
+  >({});
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
+
+  const displayedDeals = useMemo(() => {
+    return deals.map((d) => {
+      const sid = optimisticStageByDealId[d.id];
+      return sid ? { ...d, stageId: sid } : d;
+    });
+  }, [deals, optimisticStageByDealId]);
 
   const byStage = useMemo(() => {
     const map = new Map<string, DealRow[]>();
     for (const s of pipeline.stages) map.set(s.id, []);
-    for (const d of deals) {
+    for (const d of displayedDeals) {
       const list = map.get(d.stageId);
       if (list) list.push(d);
     }
     return map;
-  }, [pipeline.stages, deals]);
+  }, [pipeline.stages, displayedDeals]);
 
-  function onDragStart(e: DragStartEvent) {
-    setActiveId(String(e.active.id));
-  }
+  useEffect(() => {
+    setOptimisticStageByDealId((prev) => {
+      const ids = Object.keys(prev);
+      if (ids.length === 0) return prev;
+      const next = { ...prev };
+      let changed = false;
+      for (const id of ids) {
+        const server = deals.find((d) => d.id === id);
+        if (server && server.stageId === prev[id]) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [deals]);
 
-  async function onDragEnd(e: DragEndEvent) {
-    setActiveId(null);
+  const onBoardPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-pipeline-card]")) return;
+      if (
+        target.closest(
+          "button, a, input, textarea, select, [role='button'], [role='menuitem']",
+        )
+      )
+        return;
+      const el = scrollRef.current;
+      if (!el) return;
+      panningRef.current = true;
+      setIsPanningBoard(true);
+      panStartRef.current = { x: e.clientX, scrollLeft: el.scrollLeft };
+      el.setPointerCapture(e.pointerId);
+    },
+    [],
+  );
+
+  const onBoardPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!panningRef.current || !scrollRef.current) return;
+      e.preventDefault();
+      const dx = e.clientX - panStartRef.current.x;
+      scrollRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
+    },
+    [],
+  );
+
+  const endBoardPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!scrollRef.current || !panningRef.current) return;
+    try {
+      scrollRef.current.releasePointerCapture(e.pointerId);
+    } catch {
+      /* já liberado */
+    }
+    panningRef.current = false;
+    setIsPanningBoard(false);
+  }, []);
+
+  function onDragEnd(e: DragEndEvent) {
     const dealId = String(e.active.id);
     const overId = e.over?.id ? String(e.over.id) : null;
     if (!overId) return;
@@ -345,19 +646,29 @@ export function PipelineBoard({
     if (pipeline.stages.some((s) => s.id === overId)) {
       targetStageId = overId;
     } else {
-      const overDeal = deals.find((d) => d.id === overId);
+      const overDeal = displayedDeals.find((d) => d.id === overId);
       if (overDeal) targetStageId = overDeal.stageId;
     }
     if (!targetStageId) return;
 
-    const from = deals.find((d) => d.id === dealId);
+    const from = displayedDeals.find((d) => d.id === dealId);
     if (!from || from.stageId === targetStageId) return;
 
-    await moveDealStage(dealId, targetStageId);
-    router.refresh();
-  }
+    setOptimisticStageByDealId((prev) => ({ ...prev, [dealId]: targetStageId }));
 
-  const activeDeal = activeId ? deals.find((d) => d.id === activeId) : null;
+    void (async () => {
+      try {
+        await moveDealStage(dealId, targetStageId);
+        router.refresh();
+      } catch {
+        setOptimisticStageByDealId((prev) => {
+          const next = { ...prev };
+          delete next[dealId];
+          return next;
+        });
+      }
+    })();
+  }
 
   function openDetail(d: DealRow) {
     setDetailDeal(d);
@@ -365,13 +676,22 @@ export function PipelineBoard({
   }
 
   return (
-    <>
-      <DndContext
-        sensors={sensors}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-      >
-        <div className="flex gap-4 overflow-x-auto pb-6 pt-1">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <div
+          ref={scrollRef}
+          role="region"
+          aria-label="Etapas do funil: arraste nesta área para rolar horizontalmente ou use a barra de rolagem."
+          className={cn(
+            "pipeline-board-scroll flex min-h-0 flex-1 gap-4 overflow-x-auto overscroll-x-contain pt-1",
+            "cursor-grab touch-pan-x",
+            isPanningBoard && "cursor-grabbing select-none",
+          )}
+          onPointerDown={onBoardPointerDown}
+          onPointerMove={onBoardPointerMove}
+          onPointerUp={endBoardPan}
+          onPointerCancel={endBoardPan}
+        >
           {pipeline.stages.map((stage, idx) => (
             <StageColumn
               key={stage.id}
@@ -384,29 +704,6 @@ export function PipelineBoard({
             />
           ))}
         </div>
-        <DragOverlay>
-          {activeDeal ? (
-            <div className="w-[min(100vw-2rem,18rem)] rounded-[10px] border border-border/60 bg-card p-4 font-sans shadow-xl">
-              <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 flex-1 text-[16px] font-semibold leading-tight text-foreground">
-                  {activeDeal.contact.name}
-                </p>
-                <LeadAssigneeAvatar assignedTo={activeDeal.assignedTo} />
-              </div>
-              <p className="mt-0 text-[13px] font-normal leading-[1.25] text-zinc-500 dark:text-zinc-400">
-                {activeDeal.contact.company?.trim() || "—"}
-              </p>
-              {activeDeal.value != null ? (
-                <p className="mt-[14px] text-[16px] font-bold leading-tight tabular-nums text-foreground">
-                  {Number(activeDeal.value).toLocaleString("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  })}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </DragOverlay>
       </DndContext>
 
       <PipelineDealDetailDialog
@@ -417,9 +714,10 @@ export function PipelineBoard({
           if (!v) setDetailDeal(null);
         }}
         pipelineName={pipeline.name}
-        contactCustomFieldDefs={contactCustomFieldDefs}
+        stages={pipeline.stages}
         dealCustomFieldDefs={dealCustomFieldDefs}
+        tenantMembers={tenantMembers}
       />
-    </>
+    </div>
   );
 }

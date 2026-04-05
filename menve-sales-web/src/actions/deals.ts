@@ -16,12 +16,28 @@ export async function moveDealStage(dealId: string, stageId: string) {
 
 export async function patchDeal(
   dealId: string,
-  patch: { assignedToId?: string | null; value?: number | null },
+  patch: {
+    assignedToId?: string | null;
+    value?: number | null;
+    title?: string;
+  },
 ) {
   await apiServer(`/deals/${dealId}`, {
     method: "PATCH",
     json: patch,
   });
+  revalidatePath("/pipeline");
+  revalidatePath("/contacts", "layout");
+}
+
+export async function deleteDeal(dealId: string) {
+  await apiServer(`/deals/${dealId}`, { method: "DELETE" });
+  revalidatePath("/pipeline");
+  revalidatePath("/contacts", "layout");
+}
+
+export async function archiveDeal(dealId: string) {
+  await apiServer(`/deals/${dealId}/archive`, { method: "PATCH" });
   revalidatePath("/pipeline");
   revalidatePath("/contacts", "layout");
 }

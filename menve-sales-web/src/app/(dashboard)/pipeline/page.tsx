@@ -1,5 +1,6 @@
 import type { CustomField } from "@prisma/client";
 import { apiServer } from "@/lib/api-server";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { PipelineView } from "./pipeline-view";
 
 type PipelineRow = {
@@ -47,29 +48,26 @@ export default async function PipelinePage({
     pipelines.find((p) => p.isDefault) ??
     pipelines[0];
 
-  const [dealsResult, contactCustomFieldDefs, dealCustomFieldDefs] =
-    await Promise.all([
-      apiServer<PipelineDealsPayload>(
-        `/pipelines/${activePipeline!.id}/deals`,
-      ),
-      apiServer<unknown>("/custom-fields?entity=CONTACT")
-        .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
-        .catch(() => [] as CustomField[]),
-      apiServer<unknown>("/custom-fields?entity=DEAL")
-        .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
-        .catch(() => [] as CustomField[]),
-    ]);
+  const [dealsResult, dealCustomFieldDefs, members] = await Promise.all([
+    apiServer<PipelineDealsPayload>(`/pipelines/${activePipeline!.id}/deals`),
+    apiServer<unknown>("/custom-fields?entity=DEAL")
+      .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
+      .catch(() => [] as CustomField[]),
+    apiServer<TenantMemberOption[]>("/settings/members").catch(
+      () => [] as TenantMemberOption[],
+    ),
+  ]);
 
   return (
-    <div className="p-6">
+    <div className="flex min-h-[calc(100dvh-3rem)] flex-col p-6">
       <PipelineView
         pipelines={pipelines as never}
         activePipeline={activePipeline as never}
         deals={dealsResult.deals as never}
         contacts={contacts}
         stats={dealsResult.stats}
-        contactCustomFieldDefs={contactCustomFieldDefs}
         dealCustomFieldDefs={dealCustomFieldDefs}
+        tenantMembers={members}
       />
     </div>
   );
