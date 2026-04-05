@@ -53,9 +53,9 @@ const optionRowClass = cn(
   "hover:bg-muted/70 dark:border-white/10 dark:bg-[#333333] dark:hover:bg-[#3a3a3a]",
 );
 
-/** Opção «limpar» com valor vazio selecionado: pílula escura (captura de referência). */
+/** Opção «limpar» com valor vazio selecionado: mesmo fundo claro das demais opções. */
 const optionClearSelectedClass =
-  "border-foreground bg-foreground text-background hover:bg-foreground/90 dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200";
+  "border-border/80 bg-background text-muted-foreground ring-1 ring-border/50 hover:bg-muted/70 dark:border-white/10 dark:bg-[#333333] dark:text-neutral-400 dark:ring-white/15 dark:hover:bg-[#3a3a3a]";
 
 const optionSelectedClass =
   "border-primary bg-primary text-primary-foreground hover:bg-primary dark:border-blue-600 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-600";
