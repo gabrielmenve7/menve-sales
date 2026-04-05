@@ -1215,17 +1215,6 @@ export function PipelineDealDetailDialog({
                 Escreva observações livres; elas entram no histórico abaixo.
               </p>
               <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  className="absolute right-4 top-4 z-10 gap-1.5 shadow-sm"
-                  disabled={noteSaving || noteBody.trim().length < 1}
-                  onClick={() => void onSaveNote()}
-                >
-                  <Send className="size-3.5" />
-                  {noteSaving ? "Salvando…" : "Salvar"}
-                </Button>
                 <Label htmlFor={`pd-note-${d.id}`} className="sr-only">
                   Nova nota
                 </Label>
@@ -1235,8 +1224,19 @@ export function PipelineDealDetailDialog({
                   onChange={(e) => setNoteBody(e.target.value)}
                   placeholder="Escreva uma nota..."
                   rows={5}
-                  className="min-h-[120px] w-full resize-none border-0 bg-transparent px-4 pb-4 pr-28 pt-14 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-0"
+                  className="min-h-[128px] w-full resize-none border-0 bg-transparent px-4 pt-4 pb-14 pr-28 text-left align-top text-sm leading-normal outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-0"
                 />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="absolute bottom-4 right-4 z-10 gap-1.5 shadow-sm"
+                  disabled={noteSaving || noteBody.trim().length < 1}
+                  onClick={() => void onSaveNote()}
+                >
+                  <Send className="size-3.5" />
+                  {noteSaving ? "Salvando…" : "Salvar"}
+                </Button>
               </div>
             </section>
 
