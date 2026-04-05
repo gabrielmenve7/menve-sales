@@ -11,30 +11,38 @@ import {
   type Tag,
 } from "@prisma/client";
 import {
+  ArrowRight,
   Building2,
   Calendar,
+  CheckCircle2,
+  ChevronDown,
   DollarSign,
   ExternalLink,
+  FilePlus,
   Globe,
+  List,
   Mail,
+  MessageSquare,
   Phone,
   Send,
   User,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  updateContactCustomData,
-  updateDealCustomData,
-} from "@/actions/custom-fields";
+import { updateCustomField, updateDealCustomData } from "@/actions/custom-fields";
 import {
   createDealActivity,
   getDealDetail,
   markDealLost,
   markDealWon,
+  moveDealStage,
+  patchDeal,
 } from "@/actions/deals";
-import { CustomFieldsForm } from "@/components/custom-fields/custom-fields-form";
+import { CreateCustomFieldTrigger } from "@/components/custom-fields/create-custom-field-dialog";
+import { CustomFieldsInlineTable } from "@/components/custom-fields/custom-fields-inline-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,12 +53,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CUSTOM_FIELD_ENTITY } from "@/lib/custom-field-entity";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
+import { parseMenveActivityMeta } from "@/lib/deal-activity-meta";
 import { cn } from "@/lib/utils";
 import type { DealRow } from "./pipeline-types";
 
-type ActivityRow = {
+export type DealActivityRow = {
   id: string;
   type: ActivityType;
   title: string;
@@ -66,14 +83,208 @@ export type DealDetailPayload = {
       contactTags: { tag: Tag }[];
     };
     stage: Stage;
-    pipeline: Pipeline;
+    pipeline: Pipeline & { stages: Stage[] };
     dealTags: { tag: Tag }[];
     assignedTo: { id: string; name: string | null; email: string } | null;
   };
-  activities: ActivityRow[];
+  activities: DealActivityRow[];
   contactCustomFields?: CustomField[];
   dealCustomFields?: CustomField[];
 };
+
+function activityTypeLabel(t: ActivityType) {
+  const m: Record<ActivityType, string> = {
+    NOTE: "Nota",
+    CALL: "Ligação",
+    EMAIL: "Email",
+    MEETING: "Reunião",
+    TASK: "Tarefa",
+    WHATSAPP: "WhatsApp",
+  };
+  return m[t] ?? t;
+}
+
+function startOfCalendarDayMs(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x.getTime();
+}
+
+/** Cabeçalho de grupo tipo HOJE / ONTEM / N DIAS ATRÁS */
+function groupLabelForDay(now: Date, activityDate: Date) {
+  const diffDays = Math.round(
+    (startOfCalendarDayMs(now) - startOfCalendarDayMs(activityDate)) /
+      (24 * 60 * 60 * 1000),
+  );
+  if (diffDays <= 0) return "HOJE";
+  if (diffDays === 1) return "ONTEM";
+  return `${diffDays} DIAS ATRÁS`;
+}
+
+function stagePillDotColor(color: string | null) {
+  if (color && /^#[0-9A-Fa-f]{6}$/.test(color)) return color;
+  return "hsl(262 83% 58%)";
+}
+
+function StagePill({
+  name,
+  color,
+}: {
+  name: string;
+  color: string | null;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
+      <span
+        className="size-2 shrink-0 rounded-full"
+        style={{ backgroundColor: stagePillDotColor(color) }}
+      />
+      {name}
+    </span>
+  );
+}
+
+function timelineIconWrap(children: ReactNode, className?: string) {
+  return (
+    <div
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DealHistoryRow({
+  a,
+  isLast,
+}: {
+  a: DealActivityRow;
+  isLast: boolean;
+}) {
+  const meta = parseMenveActivityMeta(a.description);
+  const timeStr = new Date(a.createdAt).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const userName = a.user.name?.trim() || a.user.email;
+
+  let icon: ReactNode = timelineIconWrap(
+    <MessageSquare className="size-3.5" />,
+  );
+  let body: ReactNode;
+
+  if (meta?.k === "stage_change") {
+    icon = timelineIconWrap(<ArrowRight className="size-3.5" />);
+    body = (
+      <>
+        <p className="text-sm text-foreground/90">{a.title}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <StagePill name={meta.from.name} color={meta.from.color} />
+          <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+          <StagePill name={meta.to.name} color={meta.to.color} />
+        </div>
+      </>
+    );
+  } else if (meta?.k === "assignee") {
+    icon = timelineIconWrap(<User className="size-3.5" />);
+    body = <p className="text-sm text-foreground/90">{a.title}</p>;
+  } else if (meta?.k === "deal_outcome") {
+    icon =
+      meta.outcome === "WON"
+        ? timelineIconWrap(
+            <CheckCircle2 className="size-3.5 text-emerald-600" />,
+            "border-emerald-200/70 text-emerald-700",
+          )
+        : timelineIconWrap(
+            <XCircle className="size-3.5 text-rose-600" />,
+            "border-rose-200/70 text-rose-700",
+          );
+    body = (
+      <>
+        <p className="text-sm text-foreground/90">{a.title}</p>
+        {meta.outcome === "LOST" && meta.reason ? (
+          <p className="mt-1.5 rounded-lg border border-border/50 bg-muted/35 px-3 py-2 text-sm text-foreground/90 whitespace-pre-wrap">
+            {meta.reason}
+          </p>
+        ) : null}
+      </>
+    );
+  } else if (meta?.k === "deal_created") {
+    icon = timelineIconWrap(<FilePlus className="size-3.5" />);
+    body = <p className="text-sm text-foreground/90">{a.title}</p>;
+  } else if (meta?.k === "deal_custom") {
+    icon = timelineIconWrap(<List className="size-3.5" />);
+    body = (
+      <>
+        <p className="text-sm text-foreground/90">{a.title}</p>
+        {meta.fields.length > 0 ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {meta.fields.join(" · ")}
+          </p>
+        ) : null}
+      </>
+    );
+  } else if (meta) {
+    body = <p className="text-sm text-foreground/90">{a.title}</p>;
+  } else if (a.type === ActivityType.NOTE) {
+    const combined =
+      a.description && !a.description.startsWith("__MENVE_META__:")
+        ? `${a.title}${a.description}`
+        : a.title;
+    body = (
+      <>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Nota
+        </p>
+        <div className="mt-1.5 rounded-lg border border-border/50 bg-muted/35 px-3 py-2.5 text-sm text-foreground/90 whitespace-pre-wrap">
+          {combined}
+        </div>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {activityTypeLabel(a.type)}
+        </p>
+        <p className="mt-1 text-sm font-medium text-foreground">{a.title}</p>
+        {a.description ? (
+          <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+            {a.description}
+          </p>
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex w-10 flex-col items-center">
+        {icon}
+        {!isLast ? (
+          <div className="mt-1 min-h-[28px] w-px flex-1 bg-border/70" />
+        ) : null}
+      </div>
+      <div className="min-w-0 flex-1 pb-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-sm font-semibold text-foreground">
+            {userName}
+          </span>
+          <time
+            className="text-[11px] tabular-nums text-muted-foreground"
+            dateTime={a.createdAt}
+          >
+            {timeStr}
+          </time>
+        </div>
+        <div className="mt-1">{body}</div>
+      </div>
+    </div>
+  );
+}
 
 function readCustom(contact: Contact) {
   const c = contact.customData;
@@ -88,47 +299,6 @@ function readCustom(contact: Contact) {
   return { website };
 }
 
-function probLabel(p: number | null | undefined) {
-  if (p == null) return null;
-  if (p >= 70) return { text: "Alta", className: "text-amber-600" };
-  if (p >= 40) return { text: "Média", className: "text-amber-500" };
-  return { text: "Baixa", className: "text-muted-foreground" };
-}
-
-function activityTypeLabel(t: ActivityType) {
-  const m: Record<ActivityType, string> = {
-    NOTE: "Nota",
-    CALL: "Ligação",
-    EMAIL: "Email",
-    MEETING: "Reunião",
-    TASK: "Tarefa",
-    WHATSAPP: "WhatsApp",
-  };
-  return m[t] ?? t;
-}
-
-function startOfDayMs(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-function groupLabelForDate(iso: string) {
-  const d = new Date(iso);
-  const today = startOfDayMs(new Date());
-  const day = startOfDayMs(d);
-  const diff = Math.round((today - day) / 86400000);
-  if (diff === 0) return "HOJE";
-  if (diff === 1) return "ONTEM";
-  return `${diff} DIAS ATRÁS`;
-}
-
-const TAB_TYPES: { id: string; type: ActivityType; label: string }[] = [
-  { id: "note", type: ActivityType.NOTE, label: "Nota" },
-  { id: "call", type: ActivityType.CALL, label: "Ligação" },
-  { id: "email", type: ActivityType.EMAIL, label: "Email" },
-  { id: "meeting", type: ActivityType.MEETING, label: "Reunião" },
-  { id: "task", type: ActivityType.TASK, label: "Tarefa" },
-];
-
 function tagStyle(hex: string | null | undefined) {
   if (!hex || !/^#[0-9A-Fa-f]{6}$/.test(hex)) {
     return "border-border/60 bg-muted/50 text-foreground";
@@ -136,33 +306,40 @@ function tagStyle(hex: string | null | undefined) {
   return "border-transparent text-foreground";
 }
 
+function assigneePickLabel(user: TenantMemberOption | DealRow["assignedTo"]) {
+  if (!user) return "";
+  const n = user.name?.trim();
+  if (n) return n;
+  return user.email?.trim() ?? "";
+}
+
 export function PipelineDealDetailDialog({
   deal: initial,
   open,
   onOpenChange,
   pipelineName,
-  contactCustomFieldDefs,
+  stages,
   dealCustomFieldDefs,
+  tenantMembers = [],
 }: {
   deal: DealRow | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   pipelineName: string;
-  contactCustomFieldDefs: CustomField[];
+  stages: Stage[];
   dealCustomFieldDefs: CustomField[];
+  tenantMembers?: TenantMemberOption[];
 }) {
   const router = useRouter();
   const [remote, setRemote] = useState<DealDetailPayload | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activityType, setActivityType] = useState<ActivityType>(
-    ActivityType.NOTE,
-  );
-  const [noteBody, setNoteBody] = useState("");
-  const [saving, setSaving] = useState(false);
   const [lostOpen, setLostOpen] = useState(false);
   const [lostReason, setLostReason] = useState("");
   const [outcomePending, setOutcomePending] = useState(false);
+  const [headerBusy, setHeaderBusy] = useState(false);
+  const [noteBody, setNoteBody] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
   const reload = useCallback(async () => {
     if (!initial?.id) return;
     setLoading(true);
@@ -183,26 +360,114 @@ export function PipelineDealDetailDialog({
       setLoadErr(null);
       setLostOpen(false);
       setLostReason("");
+      setNoteBody("");
       return;
     }
     void reload();
   }, [open, initial?.id, reload]);
 
-  const d = remote?.deal ?? initial;
-  const activities = remote?.activities ?? [];
+  const onReorderSelectOptions = useCallback(
+    async (fieldId: string, options: string[]) => {
+      await updateCustomField({ id: fieldId, options });
+      await reload();
+      router.refresh();
+    },
+    [reload, router],
+  );
 
-  const groupedActivities = useMemo(() => {
-    const map = new Map<string, ActivityRow[]>();
+  const onAppendSelectOption = useCallback(
+    async (fieldId: string, label: string) => {
+      const def = dealCustomFieldDefs.find((x) => x.id === fieldId);
+      const cur = Array.isArray(def?.options)
+        ? (def!.options as unknown[]).map(String)
+        : [];
+      const t = label.trim();
+      if (!t) return;
+      await updateCustomField({ id: fieldId, options: [...cur, t] });
+      await reload();
+      router.refresh();
+    },
+    [dealCustomFieldDefs, reload, router],
+  );
+
+  const onCustomFieldCreated = useCallback(() => {
+    void reload();
+    router.refresh();
+  }, [reload, router]);
+
+  const d = remote?.deal ?? initial;
+
+  const activities = useMemo((): DealActivityRow[] => {
+    const raw = remote?.activities;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((a): a is DealActivityRow => {
+      if (!a || typeof a !== "object") return false;
+      const o = a as Record<string, unknown>;
+      const u = o.user;
+      return (
+        typeof o.id === "string" &&
+        typeof o.title === "string" &&
+        typeof o.createdAt === "string" &&
+        typeof u === "object" &&
+        u !== null
+      );
+    });
+  }, [remote?.activities]);
+
+  const activityTimeline = useMemo(() => {
+    const now = new Date();
+    const rows: {
+      key: string;
+      showHeader: boolean;
+      header: string;
+      activity: DealActivityRow;
+    }[] = [];
+    let prevHeader = "";
     for (const a of activities) {
-      const g = groupLabelForDate(a.createdAt);
-      if (!map.has(g)) map.set(g, []);
-      map.get(g)!.push(a);
+      const header = groupLabelForDay(now, new Date(a.createdAt));
+      rows.push({
+        key: a.id,
+        showHeader: header !== prevHeader,
+        header,
+        activity: a,
+      });
+      prevHeader = header;
     }
-    return map;
+    return rows;
   }, [activities]);
 
   const custom = d ? readCustom(d.contact) : {};
-  const prob = d ? probLabel(d.probability) : null;
+
+  const stageList = useMemo(() => {
+    const fromApi = remote?.deal?.pipeline?.stages;
+    if (fromApi?.length) return fromApi;
+    return [...stages].sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [remote?.deal?.pipeline?.stages, stages]);
+
+  async function onStagePick(stageId: string) {
+    if (!d || d.status !== "OPEN" || stageId === d.stageId) return;
+    setHeaderBusy(true);
+    try {
+      await moveDealStage(d.id, stageId);
+      await reload();
+      router.refresh();
+    } finally {
+      setHeaderBusy(false);
+    }
+  }
+
+  async function onAssigneePick(userId: string | null) {
+    if (!d) return;
+    if (userId === d.assignedTo?.id || (!userId && !d.assignedTo)) return;
+    setHeaderBusy(true);
+    try {
+      await patchDeal(d.id, { assignedToId: userId });
+      await reload();
+      router.refresh();
+    } finally {
+      setHeaderBusy(false);
+    }
+  }
 
   async function onWon() {
     if (!d) return;
@@ -233,36 +498,26 @@ export function PipelineDealDetailDialog({
     }
   }
 
-  async function onSaveActivity() {
+  async function onSaveNote() {
     if (!d) return;
     const text = noteBody.trim();
     if (text.length < 1) return;
-    setSaving(true);
+    setNoteSaving(true);
     try {
       await createDealActivity({
         dealId: d.id,
         contactId: d.contactId,
-        type: activityType,
+        type: ActivityType.NOTE,
         title: text.slice(0, 500),
         description: text.length > 500 ? text.slice(500) : undefined,
       });
       setNoteBody("");
       await reload();
+      router.refresh();
     } finally {
-      setSaving(false);
+      setNoteSaving(false);
     }
   }
-
-  const placeholder =
-    activityType === ActivityType.NOTE
-      ? "Escreva uma nota…"
-      : activityType === ActivityType.CALL
-        ? "Resumo da ligação…"
-        : activityType === ActivityType.EMAIL
-          ? "Assunto ou resumo do email…"
-          : activityType === ActivityType.MEETING
-            ? "Notas da reunião…"
-            : "Descreva a tarefa…";
 
   const allTags = useMemo(() => {
     if (!d) return [];
@@ -298,7 +553,7 @@ export function PipelineDealDetailDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className={cn(
-            "flex max-h-[min(90vh,880px)] w-[min(100vw-1.5rem,56rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl",
+            "flex max-h-[min(94vh,920px)] w-[min(100vw-1rem,80rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl",
           )}
         >
         <DialogHeader className="space-y-3 border-b border-border/60 px-6 pb-4 pt-6 text-left">
@@ -311,22 +566,70 @@ export function PipelineDealDetailDialog({
                 <Badge variant="secondary" className="font-normal">
                   {pipelineName}
                 </Badge>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs font-medium">
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{
-                      backgroundColor: d.stage.color ?? "hsl(262 83% 58%)",
-                    }}
-                  />
-                  {d.stage.name}
-                </span>
-                {prob ? (
-                  <span
-                    className={cn("text-xs font-medium", prob.className)}
-                  >
-                    {prob.text}
+                {d.status === "OPEN" && stageList.length > 0 ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={headerBusy}
+                        className="h-7 gap-1.5 rounded-full border-border/60 px-2.5 text-xs font-medium shadow-none"
+                      >
+                        <span
+                          className="size-2 shrink-0 rounded-full"
+                          style={{
+                            backgroundColor:
+                              d.stage.color && /^#[0-9A-Fa-f]{6}$/.test(d.stage.color)
+                                ? d.stage.color
+                                : "hsl(262 83% 58%)",
+                          }}
+                        />
+                        <span className="max-w-[10rem] truncate">
+                          {d.stage.name}
+                        </span>
+                        <ChevronDown className="size-3.5 shrink-0 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                      {stageList.map((s) => (
+                        <DropdownMenuItem
+                          key={s.id}
+                          disabled={s.id === d.stageId || headerBusy}
+                          onClick={() => void onStagePick(s.id)}
+                        >
+                          <span
+                            className="mr-2 size-2 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor:
+                                s.color && /^#[0-9A-Fa-f]{6}$/.test(s.color)
+                                  ? s.color
+                                  : "hsl(262 83% 58%)",
+                            }}
+                          />
+                          {s.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs font-medium">
+                    <span
+                      className="size-2 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor:
+                          d.stage.color && /^#[0-9A-Fa-f]{6}$/.test(d.stage.color)
+                            ? d.stage.color
+                            : "hsl(262 83% 58%)",
+                      }}
+                    />
+                    {d.status === "OPEN"
+                      ? d.stage.name
+                      : d.status === "WON"
+                        ? "Ganho"
+                        : "Perdido"}
                   </span>
-                ) : null}
+                )}
               </div>
             </div>
             <Button
@@ -367,8 +670,7 @@ export function PipelineDealDetailDialog({
           </div>
         ) : null}
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-border/60 lg:grid-cols-[minmax(0,280px)_1fr] lg:divide-x lg:divide-y-0">
-          <div className="max-h-[40vh] overflow-y-auto px-6 py-5 lg:max-h-none">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10 sm:pb-8">
             {loadErr ? (
               <p className="text-sm text-destructive">{loadErr}</p>
             ) : null}
@@ -376,6 +678,9 @@ export function PipelineDealDetailDialog({
               <p className="text-sm text-muted-foreground">Carregando…</p>
             ) : null}
 
+            <div className="grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start lg:gap-x-8">
+            <div className="min-w-0 space-y-8 lg:pr-1">
+            <div className="grid gap-8 border-b border-border/50 pb-8 lg:grid-cols-2 lg:gap-12 lg:border-b-0 lg:pb-0">
             <section className="space-y-3">
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Contato
@@ -408,18 +713,63 @@ export function PipelineDealDetailDialog({
               </ul>
             </section>
 
-            <section className="mt-6 space-y-3">
+            <section className="space-y-3">
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Informações
               </h4>
               <ul className="space-y-2.5 text-sm">
                 <li className="flex items-start gap-2.5">
                   <User className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span>
-                    {d.assignedTo?.name?.trim() ||
-                      d.assignedTo?.email ||
-                      "—"}
-                  </span>
+                  {d.status === "OPEN" && tenantMembers.length > 0 ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={headerBusy}
+                          className="h-auto min-h-0 justify-start px-0 py-0 text-left text-sm font-normal hover:bg-transparent"
+                        >
+                          <span className="text-foreground">
+                            {assigneePickLabel(d.assignedTo) || (
+                              <span className="text-muted-foreground">
+                                Escolher responsável…
+                              </span>
+                            )}
+                          </span>
+                          <ChevronDown className="ml-1 size-3.5 shrink-0 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                        {d.assignedTo ? (
+                          <>
+                            <DropdownMenuItem
+                              disabled={headerBusy}
+                              onClick={() => void onAssigneePick(null)}
+                            >
+                              Remover responsável
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                          </>
+                        ) : null}
+                        {tenantMembers.map((m) => (
+                          <DropdownMenuItem
+                            key={m.id}
+                            disabled={headerBusy || m.id === d.assignedTo?.id}
+                            onClick={() => void onAssigneePick(m.id)}
+                          >
+                            {assigneePickLabel(m) || m.email}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : (
+                    <span>
+                      {assigneePickLabel(d.assignedTo) || (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </span>
+                  )}
                 </li>
                 <li className="flex items-start gap-2.5">
                   <DollarSign className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -448,13 +798,16 @@ export function PipelineDealDetailDialog({
                 </li>
                 <li className="flex items-start gap-2.5">
                   <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="text-muted-foreground">Criado: {created}</span>
+                  <span className="text-muted-foreground">
+                    Criado em {created}
+                  </span>
                 </li>
               </ul>
             </section>
+            </div>
 
             {allTags.length > 0 ? (
-              <section className="mt-6 space-y-2">
+              <section className="space-y-2">
                 <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Tags
                 </h4>
@@ -479,189 +832,139 @@ export function PipelineDealDetailDialog({
               </section>
             ) : null}
 
-            {contactCustomFieldDefs.length > 0 ||
-            dealCustomFieldDefs.length > 0 ? (
-              <>
-                {contactCustomFieldDefs.length > 0 ? (
-                  <section className="mt-6 space-y-2">
-                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Campos extras · contato
-                    </h4>
-                    <p className="text-[12px] leading-snug text-muted-foreground">
-                      Definidos em Configurações. Valores vinculados ao contato.
-                    </p>
-                    <CustomFieldsForm
-                      fields={contactCustomFieldDefs}
-                      customData={d.contact.customData}
-                      idPrefix={`pd-c-${d.contactId}`}
-                      onSave={async (values) => {
-                        await updateContactCustomData({
-                          contactId: d.contactId,
-                          values,
-                        });
-                        await reload();
-                        router.refresh();
-                      }}
-                    />
-                  </section>
-                ) : null}
-                {dealCustomFieldDefs.length > 0 ? (
-                  <section className="mt-6 space-y-2">
-                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Campos extras · oportunidade
-                    </h4>
-                    <p className="text-[12px] leading-snug text-muted-foreground">
-                      Específicos deste deal. Definidos em Configurações.
-                    </p>
-                    <CustomFieldsForm
+            <section className="space-y-4 lg:min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Campos
+                </h4>
+                <CreateCustomFieldTrigger
+                  defaultEntity={CUSTOM_FIELD_ENTITY.DEAL}
+                  idPrefix={`pd-new-${d.id}`}
+                  onCreated={onCustomFieldCreated}
+                />
+              </div>
+              <p className="text-[12px] leading-snug text-muted-foreground">
+                Passe o mouse e edite na linha — listas e pessoas salvam ao
+                selecionar; demais tipos ao sair do campo (Enter também salva).
+              </p>
+
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+                <div className="border-b border-border/50 bg-muted/25 px-3 py-2 sm:px-4">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Oportunidade
+                  </span>
+                </div>
+                <div className="min-h-0">
+                  {dealCustomFieldDefs.length > 0 ? (
+                    <CustomFieldsInlineTable
+                      embedded
+                      variant="board"
                       fields={dealCustomFieldDefs}
                       customData={d.customData}
                       idPrefix={`pd-d-${d.id}`}
-                      onSave={async (values) => {
+                      members={tenantMembers}
+                      onSaveField={async (key, value) => {
                         await updateDealCustomData({
                           dealId: d.id,
-                          values,
+                          values: { [key]: value },
                         });
                         await reload();
                         router.refresh();
                       }}
+                      onReorderSelectOptions={onReorderSelectOptions}
+                      onAppendSelectOption={onAppendSelectOption}
                     />
-                  </section>
-                ) : null}
-              </>
-            ) : (
-              <section className="mt-6 space-y-2">
-                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Campos extras
-                </h4>
-                <p className="text-[12px] leading-snug text-muted-foreground">
-                  Nenhum campo configurado para este tenant. Em{" "}
-                  <Link
-                    href="/settings"
-                    className="font-medium text-foreground underline underline-offset-2"
-                  >
-                    Configurações → Geral
-                  </Link>
-                  , crie campos de contato e/ou de oportunidade; em seguida
-                  atualize a página do pipeline (F5) para carregar as definições.
-                </p>
-              </section>
-            )}
+                  ) : (
+                    <p className="px-3 py-4 text-[12px] text-muted-foreground sm:px-4">
+                      Nenhum campo de oportunidade. Use «Criar campo» ou
+                      Configurações.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
 
             {d.title ? (
-              <p className="mt-4 text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">Oportunidade:</span>{" "}
                 {d.title}
               </p>
             ) : null}
-          </div>
-
-          <div className="flex min-h-0 flex-col bg-muted/15">
-            <div className="border-b border-border/60 px-4 py-3">
-              <Tabs
-                value={TAB_TYPES.find((t) => t.type === activityType)?.id ?? "note"}
-                onValueChange={(id) => {
-                  const f = TAB_TYPES.find((t) => t.id === id);
-                  if (f) setActivityType(f.type);
-                }}
-              >
-                <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-transparent p-0">
-                  {TAB_TYPES.map((t) => (
-                    <TabsTrigger
-                      key={t.id}
-                      value={t.id}
-                      className="rounded-lg border border-transparent px-3 py-1.5 text-xs data-[state=active]:border-border data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=inactive]:bg-transparent data-[state=inactive]:text-muted-foreground"
-                    >
-                      {t.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
             </div>
 
-            <div className="border-b border-border/60 p-4">
-              <textarea
-                value={noteBody}
-                onChange={(e) => setNoteBody(e.target.value)}
-                placeholder={placeholder}
-                rows={4}
-                className="w-full resize-none rounded-xl border border-border/60 bg-background px-3 py-2.5 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              <div className="mt-2 flex justify-end">
+            <div className="min-w-0 space-y-8 max-lg:mt-8 max-lg:border-t max-lg:border-border/50 max-lg:pt-8 lg:border-l lg:border-border/60 lg:pl-8">
+            <section className="space-y-3">
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Notas
+              </h4>
+              <p className="text-[12px] leading-snug text-muted-foreground">
+                Escreva observações livres; elas entram no histórico abaixo.
+              </p>
+              <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
                 <Button
                   type="button"
                   size="sm"
-                  className="gap-1.5"
-                  disabled={saving || noteBody.trim().length < 1}
-                  onClick={() => void onSaveActivity()}
+                  variant="secondary"
+                  className="absolute right-4 top-4 z-10 gap-1.5 shadow-sm"
+                  disabled={noteSaving || noteBody.trim().length < 1}
+                  onClick={() => void onSaveNote()}
                 >
                   <Send className="size-3.5" />
-                  {saving ? "Salvando…" : "Salvar"}
+                  {noteSaving ? "Salvando…" : "Salvar"}
                 </Button>
+                <Label htmlFor={`pd-note-${d.id}`} className="sr-only">
+                  Nova nota
+                </Label>
+                <textarea
+                  id={`pd-note-${d.id}`}
+                  value={noteBody}
+                  onChange={(e) => setNoteBody(e.target.value)}
+                  placeholder="Escreva uma nota..."
+                  rows={5}
+                  className="min-h-[120px] w-full resize-none border-0 bg-transparent px-4 pb-4 pr-28 pt-14 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-0"
+                />
               </div>
-            </div>
+            </section>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <section className="space-y-4">
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Histórico
+              </h4>
+              <p className="text-[12px] leading-snug text-muted-foreground">
+                Etapas, responsável, campos da oportunidade, ganho/perda, criação
+                e notas — tudo registrado aqui, do mais recente ao mais antigo.
+              </p>
+
               {activities.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhuma atividade registrada neste deal.
+                  Nenhum registro ainda. Altere a oportunidade ou adicione uma
+                  nota para ver o histórico.
                 </p>
               ) : (
-                <div className="space-y-6">
-                  {[...groupedActivities.entries()].map(([label, rows]) => (
-                    <div key={label}>
-                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {label}
-                      </p>
-                      <ul className="space-y-4">
-                        {rows.map((a) => (
-                          <li
-                            key={a.id}
-                            className="flex gap-3 text-sm"
-                          >
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                              {(a.user.name ?? a.user.email ?? "?")
-                                .slice(0, 1)
-                                .toUpperCase()}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                <span className="font-medium">
-                                  {a.user.name ?? a.user.email ?? "Usuário"}
-                                </span>
-                                <span className="text-[11px] text-muted-foreground">
-                                  {new Date(a.createdAt).toLocaleString(
-                                    "pt-BR",
-                                    {
-                                      day: "2-digit",
-                                      month: "2-digit",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    },
-                                  )}
-                                </span>
-                              </div>
-                              <Badge variant="outline" className="mt-1 text-[10px]">
-                                {activityTypeLabel(a.type)}
-                              </Badge>
-                              <p className="mt-1 whitespace-pre-wrap text-foreground/90">
-                                {a.title}
-                              </p>
-                              {a.description ? (
-                                <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
-                                  {a.description}
-                                </p>
-                              ) : null}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
+                <div className="rounded-xl border border-border/40 bg-muted/10 px-4 py-6 sm:px-6">
+                  {activityTimeline.map((row, idx) => (
+                    <div key={row.key}>
+                      {row.showHeader ? (
+                        <p
+                          className={cn(
+                            "mb-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground",
+                            idx > 0 ? "mt-8 border-t border-border/40 pt-8" : "",
+                          )}
+                        >
+                          {row.header}
+                        </p>
+                      ) : null}
+                      <DealHistoryRow
+                        a={row.activity}
+                        isLast={idx === activityTimeline.length - 1}
+                      />
                     </div>
                   ))}
                 </div>
               )}
+            </section>
             </div>
-          </div>
+            </div>
         </div>
         </DialogContent>
       </Dialog>
