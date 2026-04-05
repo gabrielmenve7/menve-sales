@@ -926,8 +926,17 @@ export function PipelineDealDetailDialog({
               </div>
             </section>
 
-            <section className="space-y-1">
-              <h4 className={sectionLabelClass}>Informações</h4>
+            <section
+              className="space-y-1 lg:min-w-0"
+              aria-label="Campos da oportunidade e do lead"
+            >
+              <div className="flex justify-end pb-1">
+                <CreateCustomFieldTrigger
+                  defaultEntity={CUSTOM_FIELD_ENTITY.DEAL}
+                  idPrefix={`pd-new-${d.id}`}
+                  onCreated={onCustomFieldCreated}
+                />
+              </div>
               <div className="flex items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/35">
                 <User className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <div className="min-w-0 flex-1">
@@ -1161,17 +1170,7 @@ export function PipelineDealDetailDialog({
                   <span className="text-foreground">{created}</span>
                 </span>
               </div>
-            </section>
 
-            <section className="space-y-3 lg:min-w-0">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className={sectionLabelClass}>Oportunidade</h4>
-                <CreateCustomFieldTrigger
-                  defaultEntity={CUSTOM_FIELD_ENTITY.DEAL}
-                  idPrefix={`pd-new-${d.id}`}
-                  onCreated={onCustomFieldCreated}
-                />
-              </div>
               {dealCustomFieldDefs.length > 0 ? (
                 <CustomFieldsInlineTable
                   embedded
@@ -1192,8 +1191,9 @@ export function PipelineDealDetailDialog({
                   onAppendSelectOption={onAppendSelectOption}
                 />
               ) : (
-                <p className="text-[12px] text-muted-foreground">
-                  Nenhum campo extra. Use «Criar campo» ou Configurações.
+                <p className="py-2 text-[12px] text-muted-foreground">
+                  Nenhum campo extra nesta oportunidade. Use «Criar campo» acima
+                  ou Configurações.
                 </p>
               )}
             </section>
