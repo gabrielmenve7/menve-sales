@@ -57,6 +57,7 @@ export async function createDeal(input: z.infer<typeof dealSchema>) {
     json: data,
   });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
   revalidatePath("/contacts", "layout");
 }
 
