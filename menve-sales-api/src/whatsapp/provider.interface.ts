@@ -10,6 +10,11 @@ export type NormalizedInbound = {
   /** Data URL ou URL pública quando o webhook inclui base64. */
   mediaUrl?: string | null;
   mediaType?: string | null;
+  /**
+   * Evolution: `key.fromMe` — mensagem enviada pelo número conectado (app web ou celular).
+   * Quando true, gravamos como OUTBOUND; dedupe por `externalId` evita duplicar envio pelo Inbox.
+   */
+  fromMe?: boolean;
   debug?: {
     remoteJid?: string;
     participant?: string;

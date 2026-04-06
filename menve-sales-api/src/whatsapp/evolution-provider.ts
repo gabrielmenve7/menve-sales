@@ -519,7 +519,7 @@ function extractTextFromMessage(
   return "";
 }
 
-/** Áudio recebido: monta data URL se o webhook trouxer base64 (Evolution com base64 habilitado). */
+/** Mídia no webhook (áudio, imagem, PDF) quando a Evolution envia base64 no payload. */
 function extractWebhookMediaPayload(
   data: Record<string, unknown>,
   message: Record<string, unknown> | undefined,
@@ -530,11 +530,21 @@ function extractWebhookMediaPayload(
   const aud = (root.audioMessage ?? root.pttMessage) as
     | Record<string, unknown>
     | undefined;
-  if (!aud) return { mediaUrl: null, mediaType: null };
+  const img = root.imageMessage as Record<string, unknown> | undefined;
+  const doc = root.documentMessage as Record<string, unknown> | undefined;
+
+  const node = aud ?? img ?? doc;
+  if (!node) return { mediaUrl: null, mediaType: null };
 
   const mimeRaw =
-    typeof aud.mimetype === "string" ? aud.mimetype : "audio/ogg; codecs=opus";
-  const mime = mimeRaw.split(";")[0]?.trim() || "audio/ogg";
+    typeof node.mimetype === "string"
+      ? node.mimetype
+      : aud
+        ? "audio/ogg; codecs=opus"
+        : img
+          ? "image/jpeg"
+          : "application/pdf";
+  const mime = mimeRaw.split(";")[0]?.trim() || "application/octet-stream";
 
   const msgRec = message as Record<string, unknown> | undefined;
   const b64Raw =
@@ -565,6 +575,7 @@ function parseOneEvolutionMessage(data: Record<string, unknown>): {
   profilePhotoUrl?: string;
   mediaUrl?: string | null;
   mediaType?: string | null;
+  fromMe: boolean;
   debug?: {
     remoteJid?: string;
     participant?: string;
@@ -611,10 +622,7 @@ function parseOneEvolutionMessage(data: Record<string, unknown>): {
   if (!text) return null;
 
   const id = String(key.id ?? "");
-  if (key.fromMe === true) {
-    // Outbound já tratado pelo app ou eco; ignorar evita duplicar no inbox.
-    return null;
-  }
+  const fromMe = key.fromMe === true;
 
   const media = extractWebhookMediaPayload(data, message);
   const tsRaw =
@@ -630,6 +638,7 @@ function parseOneEvolutionMessage(data: Record<string, unknown>): {
     profilePhotoUrl: extractProfilePhotoUrl(data),
     mediaUrl: media.mediaUrl,
     mediaType: media.mediaType,
+    fromMe,
     debug: {
       remoteJid,
       participant: participant || undefined,

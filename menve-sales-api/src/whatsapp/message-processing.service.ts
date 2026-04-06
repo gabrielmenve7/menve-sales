@@ -133,13 +133,17 @@ export class MessageProcessingService {
       },
     });
 
+    const outboundFromDevice = args.inbound.fromMe === true;
+
     if (!conversation) {
       conversation = await this.prisma.conversation.create({
         data: {
           tenantId: args.tenantId,
           contactId: contact.id,
           whatsappConnectionId: conn.id,
-          status: ConversationStatus.WAITING,
+          status: outboundFromDevice
+            ? ConversationStatus.IN_PROGRESS
+            : ConversationStatus.WAITING,
           lastMessageAt: args.inbound.timestamp,
         },
       });
@@ -196,34 +200,50 @@ export class MessageProcessingService {
       }
     }
 
+    const direction = outboundFromDevice
+      ? MessageDirection.OUTBOUND
+      : MessageDirection.INBOUND;
+
+    const outboundAck =
+      outboundFromDevice && conn.provider === WhatsAppProvider.EVOLUTION
+        ? MessageAckStatus.SENT
+        : outboundFromDevice
+          ? MessageAckStatus.DELIVERED
+          : null;
+
     await this.prisma.message.create({
       data: {
         tenantId: args.tenantId,
         whatsappConnectionId: conn.id,
         conversationId: conversation.id,
         contactId: contact.id,
-        direction: MessageDirection.INBOUND,
+        userId: null,
+        direction,
         body: args.inbound.body,
         externalId: args.inbound.externalId,
         mediaUrl,
         mediaType,
+        ackStatus: outboundAck,
         createdAt: args.inbound.timestamp,
       },
     });
 
-    await this.prisma.message.updateMany({
-      where: {
-        conversationId: conversation.id,
-        direction: MessageDirection.OUTBOUND,
-        createdAt: { lt: args.inbound.timestamp },
-        OR: [
-          { ackStatus: MessageAckStatus.SENT },
-          { ackStatus: MessageAckStatus.DELIVERED },
-          { ackStatus: null },
-        ],
-      },
-      data: { ackStatus: MessageAckStatus.READ },
-    });
+    // Só quando o cliente envia mensagem: marcar mensagens nossas anteriores como lidas por ele.
+    if (!outboundFromDevice) {
+      await this.prisma.message.updateMany({
+        where: {
+          conversationId: conversation.id,
+          direction: MessageDirection.OUTBOUND,
+          createdAt: { lt: args.inbound.timestamp },
+          OR: [
+            { ackStatus: MessageAckStatus.SENT },
+            { ackStatus: MessageAckStatus.DELIVERED },
+            { ackStatus: null },
+          ],
+        },
+        data: { ackStatus: MessageAckStatus.READ },
+      });
+    }
 
     return { ok: true as const };
   }
