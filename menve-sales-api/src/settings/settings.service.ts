@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { assertValidProfileImage } from "../common/profile-image.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { findContactCustomFieldDefinitions } from "../custom-fields/custom-fields-load.util";
 
@@ -62,27 +63,34 @@ export class SettingsService {
 
   async updateTenant(
     tenantId: string,
-    body: { name?: string; researchEnabled?: boolean },
+    body: { name?: string; researchEnabled?: boolean; image?: string | null },
   ) {
     const hasName = body.name !== undefined;
     const hasResearch = body.researchEnabled !== undefined;
-    if (!hasName && !hasResearch) {
+    const hasImage = body.image !== undefined;
+    if (!hasName && !hasResearch && !hasImage) {
       throw new BadRequestException("Nenhum campo para atualizar");
     }
     if (hasName && !body.name?.trim()) {
       throw new BadRequestException("Nome é obrigatório");
     }
-    if (
-      hasResearch &&
-      typeof body.researchEnabled !== "boolean"
-    ) {
+    if (hasResearch && typeof body.researchEnabled !== "boolean") {
       throw new BadRequestException("researchEnabled deve ser boolean");
+    }
+    let imageValue: string | null | undefined;
+    if (hasImage) {
+      if (body.image === null || body.image === "") {
+        imageValue = null;
+      } else {
+        imageValue = assertValidProfileImage(body.image as string);
+      }
     }
     return this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
         ...(hasName ? { name: body.name!.trim() } : {}),
         ...(hasResearch ? { researchEnabled: body.researchEnabled! } : {}),
+        ...(hasImage ? { image: imageValue } : {}),
       },
     });
   }

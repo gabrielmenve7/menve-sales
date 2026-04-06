@@ -13,14 +13,16 @@ export class TenantsController {
       where: { slug },
     });
     if (!t) return null;
+    const row = t as typeof t & { image?: string | null };
     return {
-      id: t.id,
-      name: t.name,
-      slug: t.slug,
-      plan: t.plan,
-      researchEnabled: t.researchEnabled,
-      createdAt: t.createdAt,
-      updatedAt: t.updatedAt,
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      plan: row.plan,
+      image: row.image ?? null,
+      researchEnabled: row.researchEnabled,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
   }
 }

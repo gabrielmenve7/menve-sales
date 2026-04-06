@@ -80,6 +80,8 @@ model Tenant {
   name      String
   slug      String   @unique
   plan      String   @default("free")
+  /// Logo do workspace (URL https ou data URL).
+  image     String?  @db.Text
   /// Quando false, Pesquisa (/prospecting) fica desativada para o workspace.
   researchEnabled Boolean @default(true)
   createdAt DateTime @default(now())

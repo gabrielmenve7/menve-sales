@@ -21,7 +21,7 @@ export class SettingsController {
   @Patch("tenant")
   updateTenant(
     @ReqUser() u: RequestUser,
-    @Body() body: { name?: string; researchEnabled?: boolean },
+    @Body() body: { name?: string; researchEnabled?: boolean; image?: string | null },
   ) {
     assertCanManageWorkspaceFeatures(u.role);
     return this.settings.updateTenant(u.tenantId, body);

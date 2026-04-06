@@ -23,6 +23,7 @@ export default async function DashboardLayout({
     name: string;
     slug: string;
     plan: string;
+    image?: string | null;
   };
 
   return (

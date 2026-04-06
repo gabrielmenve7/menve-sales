@@ -23,3 +23,13 @@ export async function updateTenantResearchEnabled(researchEnabled: boolean) {
   revalidatePath("/dashboard");
   revalidatePath("/pesquisa");
 }
+
+export async function updateTenantWorkspaceImage(image: string | null) {
+  await assertCanManageWorkspaceFeatures();
+  await apiServer("/settings/tenant", {
+    method: "PATCH",
+    json: { image },
+  });
+  revalidatePath("/settings");
+  revalidatePath("/", "layout");
+}
