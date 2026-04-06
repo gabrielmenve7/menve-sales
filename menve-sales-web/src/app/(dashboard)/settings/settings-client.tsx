@@ -8,8 +8,16 @@ import type {
   Tag,
   WhatsAppConnection,
 } from "@prisma/client";
-import { Settings2, Radio, Users, Tag as TagIcon, Bell } from "lucide-react";
+import {
+  Settings2,
+  Radio,
+  Users,
+  Tag as TagIcon,
+  Bell,
+  ClipboardList,
+} from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SettingsCampos } from "./settings-campos";
 import { SettingsGeneral } from "./settings-general";
 import { SettingsChannels } from "./settings-channels";
 import { SettingsMembers } from "./settings-members";
@@ -25,9 +33,21 @@ type TenantInfo = {
 };
 type Member = { id: string; name: string | null; email: string; role: string };
 
+const SETTINGS_TABS = [
+  "general",
+  "campos",
+  "channels",
+  "members",
+  "tags",
+  "notifications",
+] as const;
+
+export type SettingsTabId = (typeof SETTINGS_TABS)[number];
+
 export function SettingsClient({
   tenant,
   canManageWorkspace,
+  defaultTab = "general",
   connections,
   quickReplies,
   webhookBaseUrl,
@@ -39,6 +59,7 @@ export function SettingsClient({
 }: {
   tenant: TenantInfo;
   canManageWorkspace: boolean;
+  defaultTab?: SettingsTabId;
   connections: WhatsAppConnection[];
   quickReplies: QuickReply[];
   webhookBaseUrl: string;
@@ -48,11 +69,19 @@ export function SettingsClient({
   dealCustomFields: CustomField[];
   members: Member[];
 }) {
+  const tab: SettingsTabId =
+    defaultTab && (SETTINGS_TABS as readonly string[]).includes(defaultTab)
+      ? defaultTab
+      : "general";
+
   return (
-    <Tabs defaultValue="general">
+    <Tabs defaultValue={tab}>
       <TabsList>
         <TabsTrigger value="general">
           <Settings2 className="size-3.5" /> Geral
+        </TabsTrigger>
+        <TabsTrigger value="campos">
+          <ClipboardList className="size-3.5" /> Campos
         </TabsTrigger>
         <TabsTrigger value="channels">
           <Radio className="size-3.5" /> Canais
@@ -73,6 +102,11 @@ export function SettingsClient({
           tenant={tenant}
           canManageWorkspace={canManageWorkspace}
           pipelines={pipelines}
+        />
+      </TabsContent>
+
+      <TabsContent value="campos">
+        <SettingsCampos
           contactCustomFields={contactCustomFields}
           dealCustomFields={dealCustomFields}
         />

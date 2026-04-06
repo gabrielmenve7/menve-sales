@@ -19,7 +19,25 @@ type SettingsBundle = {
   members: unknown[];
 };
 
-export default async function SettingsPage() {
+const SETTINGS_TABS = [
+  "general",
+  "campos",
+  "channels",
+  "members",
+  "tags",
+  "notifications",
+] as const;
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab: tabParam } = await searchParams;
+  const defaultTab = SETTINGS_TABS.includes(tabParam as (typeof SETTINGS_TABS)[number])
+    ? (tabParam as (typeof SETTINGS_TABS)[number])
+    : "general";
+
   const [data, dealCustomFieldsRaw, canManageWorkspace] = await Promise.all([
     apiServer<SettingsBundle>("/settings"),
     apiServer<unknown>("/custom-fields?entity=DEAL")
@@ -45,6 +63,7 @@ export default async function SettingsPage() {
       <SettingsClient
         tenant={data.tenant as never}
         canManageWorkspace={canManageWorkspace}
+        defaultTab={defaultTab}
         connections={data.whatsAppConnections as never}
         quickReplies={data.quickReplies as never}
         webhookBaseUrl={webhookBaseUrl}

@@ -14,7 +14,6 @@ import {
 import { cn } from "@/lib/utils";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 const allNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -40,13 +39,7 @@ export function Sidebar({
     : allNavItems.filter((i) => i.href !== "/pesquisa");
 
   return (
-    <aside className="flex h-full min-h-0 w-[13.5rem] shrink-0 flex-col border-0 bg-sidebar ring-0">
-      <div className="flex h-14 items-center justify-between gap-2 px-4">
-        <span className="text-[13px] font-medium tracking-tight text-foreground">
-          Menve
-        </span>
-        <ThemeToggle />
-      </div>
+    <aside className="flex h-full min-h-0 flex-1 flex-col border-0 bg-sidebar ring-0">
       <nav className="flex flex-1 flex-col gap-0.5 px-2 py-2">
         {items.map(({ href, label, icon: Icon }) => (
           <Link
