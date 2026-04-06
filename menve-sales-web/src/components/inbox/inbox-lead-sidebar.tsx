@@ -324,12 +324,12 @@ export function InboxLeadSidebar({
 
 export function InboxLeadSidebarEmpty() {
   return (
-    <aside className="flex h-full w-full flex-col border-l border-border/20 bg-muted/5 dark:border-border/30">
+    <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden border-l border-border/20 bg-muted/5 dark:border-border/30">
       <div className="flex shrink-0 items-center gap-2 border-b border-border/20 px-4 py-3 dark:border-border/30">
         <Kanban className="size-4 text-muted-foreground" aria-hidden />
         <h2 className="text-sm font-semibold text-foreground">Oportunidade</h2>
       </div>
-      <div className="flex flex-1 items-center justify-center p-4">
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4">
         <p className="text-center text-sm text-muted-foreground">
           Selecione uma conversa para ver ou criar a oportunidade no pipeline.
         </p>

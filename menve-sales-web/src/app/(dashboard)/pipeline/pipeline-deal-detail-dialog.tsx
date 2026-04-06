@@ -1296,7 +1296,7 @@ export function PipelineDealDetailDialog({
 
   if (isEmbedded) {
     return (
-      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden border-l border-border/20 bg-background dark:border-border/30">
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
         <div
           className={cn(
             "shrink-0 space-y-3 border-b border-border/60 pb-4 pt-5 text-left",

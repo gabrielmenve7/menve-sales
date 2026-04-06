@@ -60,9 +60,9 @@ export function InboxClient({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Conversation list */}
-      <div className="w-[280px] shrink-0 lg:w-[320px]">
+      <div className="flex h-full min-h-0 w-[280px] shrink-0 flex-col overflow-hidden lg:w-[320px]">
         <ConversationList
           conversations={conversations}
           selectedId={selectedId}
@@ -71,7 +71,7 @@ export function InboxClient({
       </div>
 
       {/* Chat panel */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {selected ? (
           <ChatPanel
             conversation={selected}
@@ -84,7 +84,7 @@ export function InboxClient({
       </div>
 
       {/* Oportunidade / pipeline (desktop) — mesmo painel editável do funil */}
-      <div className="hidden min-h-0 w-[min(100%,28rem)] min-w-[260px] max-w-[28rem] shrink-0 lg:flex">
+      <div className="hidden h-full min-h-0 w-[min(100%,28rem)] min-w-[260px] max-w-[28rem] shrink-0 flex-col overflow-hidden lg:flex">
         {selected ? (
           <InboxLeadSidebar
             contact={selected.contact}

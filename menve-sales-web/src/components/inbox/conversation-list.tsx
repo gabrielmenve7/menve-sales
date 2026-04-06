@@ -47,8 +47,8 @@ export function ConversationList({
   }, []);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border/20 p-3 dark:border-border/30">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-border/20 p-3 dark:border-border/30">
         <div className="flex gap-2">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -69,7 +69,7 @@ export function ConversationList({
           onSelectedIdsChange={setStatusFilters}
         />
       </div>
-      <div className="flex-1 divide-y divide-border/15 overflow-y-auto dark:divide-border/25">
+      <div className="min-h-0 flex-1 divide-y divide-border/15 overflow-y-auto dark:divide-border/25">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
             <span className="flex size-10 items-center justify-center rounded-full bg-muted">

@@ -28,13 +28,15 @@ export default async function InboxPage() {
   const { whatsAppConnections, quickReplies, conversations } = inboxBundle;
 
   return (
-    <InboxClient
-      connections={whatsAppConnections as never}
-      quickReplies={quickReplies as never}
-      initialConversations={conversations as never}
-      dealCustomFieldDefs={dealCustomFieldDefs}
-      tenantMembers={tenantMembers}
-      canManageConnections={canManageConnections}
-    />
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <InboxClient
+        connections={whatsAppConnections as never}
+        quickReplies={quickReplies as never}
+        initialConversations={conversations as never}
+        dealCustomFieldDefs={dealCustomFieldDefs}
+        tenantMembers={tenantMembers}
+        canManageConnections={canManageConnections}
+      />
+    </div>
   );
 }
