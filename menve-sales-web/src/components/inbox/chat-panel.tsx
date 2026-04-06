@@ -68,7 +68,7 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-border/20 px-4 py-3 dark:border-border/30">
         <div className="flex items-center gap-3">
@@ -146,7 +146,7 @@ export function ChatPanel({
           {/* Messages */}
           <div
             ref={scrollRef}
-            className="min-h-0 flex flex-1 flex-col overflow-y-auto p-4"
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4"
           >
             {conversation.messages.map((m, i) => {
               const prev = conversation.messages[i - 1];
@@ -177,8 +177,8 @@ export function ChatPanel({
             })}
           </div>
 
-          {/* Quick replies + composer: fixos na base; só as mensagens rolam */}
-          <div className="shrink-0 border-t border-border/20 dark:border-border/30">
+          {/* Quick replies + composer: fixos na base; só as mensagens rolam acima */}
+          <div className="shrink-0 border-t border-border/20 bg-card dark:border-border/30">
             {quickReplies.length > 0 ? (
               <div className="px-3 py-2">
                 <div className="flex flex-wrap gap-1">

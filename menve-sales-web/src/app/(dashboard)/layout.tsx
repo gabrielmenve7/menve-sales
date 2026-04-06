@@ -13,7 +13,7 @@ export default async function DashboardLayout({
   const isSuperAdmin = session.user.role === "SUPER_ADMIN";
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden bg-background">
       <Sidebar
         isSuperAdmin={isSuperAdmin}
         userName={session.user.name ?? session.user.email}

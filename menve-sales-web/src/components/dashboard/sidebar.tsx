@@ -6,11 +6,10 @@ import {
   LayoutDashboard,
   Users,
   Kanban,
-  MessageCircle,
-  ListTodo,
-  BarChart3,
+  MessageSquare,
   Settings,
   Shield,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "next-auth/react";
@@ -18,12 +17,11 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const items = [
-  { href: "/dashboard", label: "Início", icon: LayoutDashboard },
-  { href: "/contacts", label: "Contatos", icon: Users },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/inbox", label: "Inbox", icon: MessageSquare },
+  { href: "/pesquisa", label: "Pesquisa", icon: Search },
   { href: "/pipeline", label: "Pipeline", icon: Kanban },
-  { href: "/inbox", label: "WhatsApp", icon: MessageCircle },
-  { href: "/activities", label: "Atividades", icon: ListTodo },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/contacts", label: "Contatos", icon: Users },
   { href: "/settings", label: "Configurações", icon: Settings },
 ];
 
@@ -37,7 +35,7 @@ export function Sidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-[13.5rem] shrink-0 flex-col border-r border-border/50 bg-sidebar">
+    <aside className="flex h-full min-h-0 w-[13.5rem] shrink-0 flex-col border-0 bg-sidebar ring-0">
       <div className="flex h-14 items-center justify-between gap-2 px-4">
         <span className="text-[13px] font-medium tracking-tight text-foreground">
           Menve
@@ -75,18 +73,24 @@ export function Sidebar({
           </Link>
         ) : null}
       </nav>
-      <div className="border-t border-border/50 p-3">
-        <p className="mb-2.5 truncate px-0.5 text-[11px] text-muted-foreground">
-          {userName ?? "Usuário"}
-        </p>
-        <Button
-          variant="ghost"
-          className="h-8 w-full text-[13px] text-muted-foreground hover:text-foreground"
-          type="button"
-          onClick={() => signOut({ callbackUrl: "/login" })}
-        >
-          Sair
-        </Button>
+      <div className="shrink-0">
+        <div
+          className="mx-3 h-px shrink-0 bg-foreground/[0.08] dark:bg-white/[0.12]"
+          aria-hidden
+        />
+        <div className="p-3">
+          <p className="mb-2.5 truncate px-0.5 text-[11px] text-muted-foreground">
+            {userName ?? "Usuário"}
+          </p>
+          <Button
+            variant="ghost"
+            className="h-8 w-full text-[13px] text-muted-foreground hover:text-foreground"
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/login" })}
+          >
+            Sair
+          </Button>
+        </div>
       </div>
     </aside>
   );
