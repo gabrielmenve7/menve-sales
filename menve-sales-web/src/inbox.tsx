@@ -1,6 +1,6 @@
 "use client";
 
-import type { QuickReply, WhatsAppConnection } from "@prisma/client";
+import type { CustomField, QuickReply, WhatsAppConnection } from "@prisma/client";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { fetchInboxBundle } from "@/actions/inbox-fetch";
@@ -12,6 +12,7 @@ import {
   InboxLeadSidebarEmpty,
 } from "@/components/inbox/inbox-lead-sidebar";
 import type { InboxConversation } from "@/components/inbox/inbox-types";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 
 export type { InboxConversation } from "@/components/inbox/inbox-types";
 
@@ -24,10 +25,14 @@ export function InboxClient({
   connections,
   quickReplies,
   initialConversations,
+  dealCustomFieldDefs,
+  tenantMembers,
 }: {
   connections: WhatsAppConnection[];
   quickReplies: QuickReply[];
   initialConversations: InboxConversation[];
+  dealCustomFieldDefs: CustomField[];
+  tenantMembers: TenantMemberOption[];
   canManageConnections?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -78,14 +83,15 @@ export function InboxClient({
         )}
       </div>
 
-      {/* Lead / pipeline (desktop) */}
-      <div className="hidden w-[280px] shrink-0 lg:flex lg:w-[300px] xl:w-[320px]">
+      {/* Oportunidade / pipeline (desktop) — mesmo painel editável do funil */}
+      <div className="hidden min-h-0 w-[min(100%,28rem)] min-w-[260px] max-w-[28rem] shrink-0 lg:flex">
         {selected ? (
           <InboxLeadSidebar
-            contactId={selected.contact.id}
-            contactName={selected.contact.name}
+            contact={selected.contact}
             deals={selected.contact.deals ?? []}
-            onLeadCreated={() => void refetch()}
+            dealCustomFieldDefs={dealCustomFieldDefs}
+            tenantMembers={tenantMembers}
+            onLeadChanged={() => void refetch()}
           />
         ) : (
           <InboxLeadSidebarEmpty />

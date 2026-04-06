@@ -1,9 +1,11 @@
 "use client";
 
+import type { CustomField } from "@prisma/client";
 import { useQuery } from "@tanstack/react-query";
 import { Kanban, Plus } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { PipelineDealDetailDialog } from "@/app/(dashboard)/pipeline/pipeline-deal-detail-dialog";
 import { createDeal } from "@/actions/deals";
 import {
   fetchPipelinesListForInbox,
@@ -21,67 +23,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { InboxOpenDeal } from "./inbox-types";
-
-function formatBrl(value: unknown): string | null {
-  if (value == null || value === "") return null;
-  const n =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value.replace(",", "."))
-        : Number(value);
-  if (!Number.isFinite(n)) return null;
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(n);
-}
-
-function DealSummaryCard({ deal }: { deal: InboxOpenDeal }) {
-  const money = formatBrl(deal.value);
-  const pipelineHref = `/pipeline?pipelineId=${encodeURIComponent(deal.pipeline.id)}`;
-
-  return (
-    <div className="rounded-xl border border-border/60 bg-muted/20 p-3 dark:border-border/40">
-      <p className="text-sm font-medium leading-snug text-foreground">
-        {deal.title}
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{deal.pipeline.name}</span>
-        <span aria-hidden>·</span>
-        <span
-          className={cn(
-            "inline-flex max-w-full items-center rounded-md px-2 py-0.5 font-medium text-foreground/90",
-            deal.stage.color
-              ? "text-white"
-              : "bg-muted text-muted-foreground dark:bg-muted/80",
-          )}
-          style={
-            deal.stage.color
-              ? { backgroundColor: deal.stage.color }
-              : undefined
-          }
-        >
-          {deal.stage.name}
-        </span>
-      </div>
-      {money ? (
-        <p className="mt-2 text-sm font-semibold tabular-nums text-foreground">
-          {money}
-        </p>
-      ) : null}
-      <Button
-        variant="outline"
-        size="sm"
-        className="mt-3 h-8 w-full text-xs font-medium"
-        asChild
-      >
-        <Link href={pipelineHref}>Ver no pipeline</Link>
-      </Button>
-    </div>
-  );
-}
+import type { TenantMemberOption } from "@/lib/custom-field-types";
+import { inboxOpenDealToDealRow } from "./inbox-deal-stub";
+import type { InboxContact, InboxOpenDeal } from "./inbox-types";
 
 function CreateLeadDialog({
   open,
@@ -257,63 +201,112 @@ function CreateLeadDialog({
 }
 
 export function InboxLeadSidebar({
-  contactId,
-  contactName,
+  contact,
   deals,
-  onLeadCreated,
+  dealCustomFieldDefs,
+  tenantMembers,
+  onLeadChanged,
 }: {
-  contactId: string;
-  contactName: string;
+  contact: InboxContact;
   deals: InboxOpenDeal[];
-  onLeadCreated: () => void;
+  dealCustomFieldDefs: CustomField[];
+  tenantMembers: TenantMemberOption[];
+  onLeadChanged: () => void;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
+  const [activeDealId, setActiveDealId] = useState<string | null>(null);
+
   const openDeals = deals ?? [];
+
+  const dealIdsKey = openDeals.map((d) => d.id).join(",");
+
+  useEffect(() => {
+    setActiveDealId((prev) => {
+      if (openDeals.length === 0) return null;
+      if (prev && openDeals.some((d) => d.id === prev)) return prev;
+      return openDeals[0]!.id;
+    });
+  }, [contact.id, dealIdsKey]);
+
+  const activeDeal = useMemo(
+    () => openDeals.find((d) => d.id === activeDealId) ?? openDeals[0] ?? null,
+    [openDeals, activeDealId],
+  );
+
+  const onRefresh = useCallback(() => {
+    onLeadChanged();
+  }, [onLeadChanged]);
 
   return (
     <aside className="flex h-full min-h-0 w-full flex-col border-l border-border/20 bg-background dark:border-border/30">
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/20 px-4 py-3 dark:border-border/30">
-        <Kanban className="size-4 text-muted-foreground" aria-hidden />
-        <h2 className="text-sm font-semibold text-foreground">Pipeline</h2>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/20 px-3 py-2.5 dark:border-border/30">
+        <div className="flex min-w-0 items-center gap-2">
+          <Kanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <h2 className="truncate text-sm font-semibold text-foreground">
+            Oportunidade
+          </h2>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 shrink-0 px-2 text-xs"
+          asChild
+        >
+          <Link href="/pipeline" title="Ver funil completo">
+            Funil
+          </Link>
+        </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {openDeals.length > 0 ? (
-          <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {openDeals.length === 1
-                ? "Lead no funil"
-                : "Leads abertos neste contato"}
-            </p>
-            <div className="flex flex-col gap-3">
-              {openDeals.map((d) => (
-                <DealSummaryCard key={d.id} deal={d} />
-              ))}
-            </div>
+      {openDeals.length > 1 ? (
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/15 px-2 py-2 dark:border-border/25">
+          {openDeals.map((d) => (
             <Button
+              key={d.id}
               type="button"
-              variant="outline"
               size="sm"
-              className="h-9 w-full text-xs font-medium"
-              onClick={() => setCreateOpen(true)}
+              variant={d.id === activeDeal?.id ? "secondary" : "ghost"}
+              className={cn(
+                "h-8 max-w-[9rem] shrink-0 truncate text-xs",
+                d.id === activeDeal?.id && "font-medium",
+              )}
+              onClick={() => setActiveDealId(d.id)}
             >
-              <Plus className="mr-2 size-3.5" aria-hidden />
-              Adicionar outro lead
+              {d.title}
             </Button>
-          </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {openDeals.length > 0 && activeDeal ? (
+          <PipelineDealDetailDialog
+            variant="embedded"
+            deal={inboxOpenDealToDealRow(contact, activeDeal)}
+            open
+            onOpenChange={() => {}}
+            pipelineName={activeDeal.pipeline.name}
+            stages={[]}
+            dealCustomFieldDefs={dealCustomFieldDefs}
+            tenantMembers={tenantMembers}
+            onInvalidate={onRefresh}
+          />
         ) : (
-          <div className="flex flex-col gap-4 rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 dark:border-border/50">
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Este contato ainda não tem oportunidade aberta no pipeline.
-            </p>
-            <Button
-              type="button"
-              className="w-full font-medium"
-              onClick={() => setCreateOpen(true)}
-            >
-              <Plus className="mr-2 size-4" aria-hidden />
-              Criar lead no pipeline
-            </Button>
+          <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+            <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 dark:border-border/50">
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Este contato ainda não tem oportunidade aberta no pipeline.
+              </p>
+              <Button
+                type="button"
+                className="w-full font-medium"
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus className="mr-2 size-4" aria-hidden />
+                Criar lead no pipeline
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -321,9 +314,9 @@ export function InboxLeadSidebar({
       <CreateLeadDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        contactId={contactId}
-        contactName={contactName}
-        onCreated={onLeadCreated}
+        contactId={contact.id}
+        contactName={contact.name}
+        onCreated={onRefresh}
       />
     </aside>
   );
@@ -334,11 +327,11 @@ export function InboxLeadSidebarEmpty() {
     <aside className="flex h-full w-full flex-col border-l border-border/20 bg-muted/5 dark:border-border/30">
       <div className="flex shrink-0 items-center gap-2 border-b border-border/20 px-4 py-3 dark:border-border/30">
         <Kanban className="size-4 text-muted-foreground" aria-hidden />
-        <h2 className="text-sm font-semibold text-foreground">Pipeline</h2>
+        <h2 className="text-sm font-semibold text-foreground">Oportunidade</h2>
       </div>
       <div className="flex flex-1 items-center justify-center p-4">
         <p className="text-center text-sm text-muted-foreground">
-          Selecione uma conversa para ver ou criar o lead no pipeline.
+          Selecione uma conversa para ver ou criar a oportunidade no pipeline.
         </p>
       </div>
     </aside>

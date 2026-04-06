@@ -74,4 +74,5 @@ export async function patchContact(
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${contactId}`);
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
 }

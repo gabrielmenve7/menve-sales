@@ -30,6 +30,7 @@ export async function createTag(input: z.infer<typeof tagNameSchema>) {
   revalidatePath("/contacts");
   revalidatePath("/settings");
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
 }
 
 /** Criação de tag a partir de Configurações (apenas OWNER/ADMIN/MANAGER/SUPER_ADMIN). */
@@ -76,6 +77,7 @@ export async function addTagToContact(contactId: string, tagId: string) {
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${contactId}`);
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
 }
 
 export async function removeTagFromContact(contactId: string, tagId: string) {
@@ -83,4 +85,5 @@ export async function removeTagFromContact(contactId: string, tagId: string) {
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${contactId}`);
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
 }

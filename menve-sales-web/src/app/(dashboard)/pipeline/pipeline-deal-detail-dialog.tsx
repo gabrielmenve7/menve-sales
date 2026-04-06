@@ -341,6 +341,9 @@ export function PipelineDealDetailDialog({
   stages,
   dealCustomFieldDefs,
   tenantMembers = [],
+  variant = "modal",
+  onRequestClose,
+  onInvalidate,
 }: {
   deal: DealRow | null;
   open: boolean;
@@ -349,8 +352,18 @@ export function PipelineDealDetailDialog({
   stages: Stage[];
   dealCustomFieldDefs: CustomField[];
   tenantMembers?: TenantMemberOption[];
+  /** `embedded`: painel fixo (ex.: coluna do inbox), sem overlay de modal. */
+  variant?: "modal" | "embedded";
+  /** Só em `embedded`: botão fechar chama aqui (ex.: voltar à lista de deals). */
+  onRequestClose?: () => void;
+  /** Ex.: invalidar cache do inbox após mutação. */
+  onInvalidate?: () => void;
 }) {
   const router = useRouter();
+  const afterRemoteChange = useCallback(() => {
+    router.refresh();
+    onInvalidate?.();
+  }, [router, onInvalidate]);
   const [remote, setRemote] = useState<DealDetailPayload | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -369,6 +382,13 @@ export function PipelineDealDetailDialog({
   const [dealCardLayout, setDealCardLayout] =
     useState<DealDetailLayoutMode>("central");
 
+  const isEmbedded = variant === "embedded";
+  const effectiveOpen = isEmbedded || open;
+
+  useEffect(() => {
+    if (isEmbedded) setDealCardLayout("lateral");
+  }, [isEmbedded]);
+
   const reload = useCallback(async () => {
     if (!initial?.id) return;
     setLoading(true);
@@ -384,7 +404,7 @@ export function PipelineDealDetailDialog({
   }, [initial?.id]);
 
   useEffect(() => {
-    if (!open || !initial?.id) {
+    if (!effectiveOpen || !initial?.id) {
       setRemote(null);
       setLoadErr(null);
       setNoteBody("");
@@ -393,15 +413,15 @@ export function PipelineDealDetailDialog({
       return;
     }
     void reload();
-  }, [open, initial?.id, reload]);
+  }, [effectiveOpen, initial?.id, reload]);
 
   const onReorderSelectOptions = useCallback(
     async (fieldId: string, options: string[]) => {
       await updateCustomField({ id: fieldId, options });
       await reload();
-      router.refresh();
+      afterRemoteChange();
     },
-    [reload, router],
+    [reload, afterRemoteChange],
   );
 
   const onAppendSelectOption = useCallback(
@@ -414,15 +434,15 @@ export function PipelineDealDetailDialog({
       if (!t) return;
       await updateCustomField({ id: fieldId, options: [...cur, t] });
       await reload();
-      router.refresh();
+      afterRemoteChange();
     },
-    [dealCustomFieldDefs, reload, router],
+    [dealCustomFieldDefs, reload, afterRemoteChange],
   );
 
   const onCustomFieldCreated = useCallback(() => {
     void reload();
-    router.refresh();
-  }, [reload, router]);
+    afterRemoteChange();
+  }, [reload, afterRemoteChange]);
 
   const d = remote?.deal ?? initial;
 
@@ -514,7 +534,7 @@ export function PipelineDealDetailDialog({
     try {
       await moveDealStage(d.id, stageId);
       await reload();
-      router.refresh();
+      afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -527,7 +547,7 @@ export function PipelineDealDetailDialog({
     try {
       await patchDeal(d.id, { assignedToId: userId });
       await reload();
-      router.refresh();
+      afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -548,7 +568,7 @@ export function PipelineDealDetailDialog({
       });
       setNoteBody("");
       await reload();
-      router.refresh();
+      afterRemoteChange();
     } finally {
       setNoteSaving(false);
     }
@@ -590,7 +610,7 @@ export function PipelineDealDetailDialog({
     try {
       await patchContact({ contactId: d.contactId, ...patch });
       await reload();
-      router.refresh();
+      afterRemoteChange();
     } finally {
       setContactFieldBusy(false);
     }
@@ -606,7 +626,7 @@ export function PipelineDealDetailDialog({
       try {
         await patchDeal(d.id, { value: null });
         await reload();
-        router.refresh();
+        afterRemoteChange();
       } finally {
         setHeaderBusy(false);
       }
@@ -629,7 +649,7 @@ export function PipelineDealDetailDialog({
     try {
       await patchDeal(d.id, { value: n });
       await reload();
-      router.refresh();
+      afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -642,7 +662,7 @@ export function PipelineDealDetailDialog({
       await addTagToContact(d.contactId, tagId);
       setTagAddOpen(false);
       await reload();
-      router.refresh();
+      afterRemoteChange();
     } finally {
       setTagBusy(false);
     }
@@ -663,7 +683,7 @@ export function PipelineDealDetailDialog({
       setNewTagName("");
       setTagAddOpen(false);
       await reload();
-      router.refresh();
+      afterRemoteChange();
     } finally {
       setTagBusy(false);
     }
@@ -675,7 +695,7 @@ export function PipelineDealDetailDialog({
     try {
       await removeTagFromContact(d.contactId, tagId);
       await reload();
-      router.refresh();
+      afterRemoteChange();
     } finally {
       setTagBusy(false);
     }
@@ -690,184 +710,85 @@ export function PipelineDealDetailDialog({
   const tagFieldRowClass =
     "flex flex-wrap items-center gap-2 rounded-lg py-1 transition-colors hover:bg-muted/35";
 
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          hideClose
-          overlayClassName="bg-black/30 backdrop-blur-md"
-          className={cn(
-            "flex flex-col gap-0 overflow-hidden border-0 bg-background p-0 shadow-lg duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0",
-            dealCardLayout === "central" &&
-              "left-[50%] top-[50%] max-h-[min(94vh,920px)] w-[min(100vw-1rem,80rem)] max-w-none translate-x-[-50%] translate-y-[-50%] data-[state=open]:zoom-in-95 sm:rounded-lg",
-            dealCardLayout === "lateral" &&
-              "left-auto right-0 top-0 h-[100dvh] max-h-[100dvh] w-[min(100vw,28rem)] max-w-none translate-x-0 translate-y-0 rounded-none rounded-l-lg data-[state=open]:slide-in-from-right-4 data-[state=open]:zoom-in-95 sm:w-[min(100vw,40rem)]",
-            dealCardLayout === "fullscreen" &&
-              "left-0 top-0 h-[100dvh] max-h-[100dvh] w-full max-w-full translate-x-0 translate-y-0 rounded-none data-[state=open]:zoom-in-95 sm:rounded-none",
-          )}
-        >
-        <DialogHeader className="space-y-3 border-b border-border/60 px-6 pb-4 pt-6 text-left">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-2">
-              <DialogTitle className="text-2xl font-semibold tracking-tight">
-                {d.contact.name}
-              </DialogTitle>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary" className="font-normal">
-                  {pipelineName}
-                </Badge>
-                {d.status === "OPEN" && stageList.length > 0 ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={headerBusy}
-                        className="h-7 gap-1.5 rounded-full border-border/60 px-2.5 text-xs font-medium shadow-none"
-                      >
-                        <span
-                          className="size-2 shrink-0 rounded-full"
-                          style={{
-                            backgroundColor:
-                              d.stage.color && /^#[0-9A-Fa-f]{6}$/.test(d.stage.color)
-                                ? d.stage.color
-                                : "hsl(262 83% 58%)",
-                          }}
-                        />
-                        <span className="max-w-[10rem] truncate">
-                          {d.stage.name}
-                        </span>
-                        <ChevronDown className="size-3.5 shrink-0 opacity-50" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-                      {stageList.map((s) => (
-                        <DropdownMenuItem
-                          key={s.id}
-                          disabled={s.id === d.stageId || headerBusy}
-                          onClick={() => void onStagePick(s.id)}
-                        >
-                          <span
-                            className="mr-2 size-2 shrink-0 rounded-full"
-                            style={{
-                              backgroundColor:
-                                s.color && /^#[0-9A-Fa-f]{6}$/.test(s.color)
-                                  ? s.color
-                                  : "hsl(262 83% 58%)",
-                            }}
-                          />
-                          {s.name}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs font-medium">
-                    <span
-                      className="size-2 shrink-0 rounded-full"
-                      style={{
-                        backgroundColor:
-                          d.stage.color && /^#[0-9A-Fa-f]{6}$/.test(d.stage.color)
-                            ? d.stage.color
-                            : "hsl(262 83% 58%)",
-                      }}
-                    />
-                    {d.status === "OPEN"
-                      ? d.stage.name
-                      : d.status === "WON"
-                        ? "Ganho"
-                        : d.status === "LOST"
-                          ? "Perdido"
-                          : "Arquivado"}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 rounded-md"
-                    aria-label="Visualização do painel"
-                  >
-                    <Settings2 className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[12rem]">
-                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                    Visualização
-                  </div>
-                  <DropdownMenuSeparator className="my-1" />
-                  <DropdownMenuItem
-                    className="gap-2"
-                    onClick={() => setDealCardLayout("lateral")}
-                  >
-                    <PanelRight className="size-4 shrink-0 opacity-70" />
-                    <span className="flex-1">Lateral</span>
-                    <Check
-                      className={cn(
-                        "size-4 shrink-0",
-                        dealCardLayout === "lateral"
-                          ? "text-foreground"
-                          : "text-transparent",
-                      )}
-                      aria-hidden
-                    />
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="gap-2"
-                    onClick={() => setDealCardLayout("central")}
-                  >
-                    <Square className="size-4 shrink-0 opacity-70" />
-                    <span className="flex-1">Central</span>
-                    <Check
-                      className={cn(
-                        "size-4 shrink-0",
-                        dealCardLayout === "central"
-                          ? "text-foreground"
-                          : "text-transparent",
-                      )}
-                      aria-hidden
-                    />
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="gap-2"
-                    onClick={() => setDealCardLayout("fullscreen")}
-                  >
-                    <Maximize2 className="size-4 shrink-0 opacity-70" />
-                    <span className="flex-1">Tela cheia</span>
-                    <Check
-                      className={cn(
-                        "size-4 shrink-0",
-                        dealCardLayout === "fullscreen"
-                          ? "text-foreground"
-                          : "text-transparent",
-                      )}
-                      aria-hidden
-                    />
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DialogClose asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 shrink-0 rounded-md"
-                >
-                  <X className="size-4" />
-                  <span className="sr-only">Fechar</span>
-                </Button>
-              </DialogClose>
-            </div>
-          </div>
-        </DialogHeader>
+  const headerPad = isEmbedded ? "px-4" : "px-6";
+  const scrollPad = isEmbedded
+    ? "px-4 py-4"
+    : "px-6 py-6 sm:px-10 sm:pb-8";
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10 sm:pb-8">
+  const badgesRow = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge variant="secondary" className="font-normal">
+        {pipelineName}
+      </Badge>
+      {d.status === "OPEN" && stageList.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={headerBusy}
+              className="h-7 gap-1.5 rounded-full border-0 bg-muted/70 px-2.5 text-xs font-medium shadow-none hover:bg-muted dark:bg-muted/50"
+            >
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{
+                  backgroundColor:
+                    d.stage.color && /^#[0-9A-Fa-f]{6}$/.test(d.stage.color)
+                      ? d.stage.color
+                      : "hsl(262 83% 58%)",
+                }}
+              />
+              <span className="max-w-[10rem] truncate">{d.stage.name}</span>
+              <ChevronDown className="size-3.5 shrink-0 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+            {stageList.map((s) => (
+              <DropdownMenuItem
+                key={s.id}
+                disabled={s.id === d.stageId || headerBusy}
+                onClick={() => void onStagePick(s.id)}
+              >
+                <span
+                  className="mr-2 size-2 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor:
+                      s.color && /^#[0-9A-Fa-f]{6}$/.test(s.color)
+                        ? s.color
+                        : "hsl(262 83% 58%)",
+                  }}
+                />
+                {s.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/30 px-2.5 py-0.5 text-xs font-medium dark:border-border/40">
+          <span
+            className="size-2 shrink-0 rounded-full"
+            style={{
+              backgroundColor:
+                d.stage.color && /^#[0-9A-Fa-f]{6}$/.test(d.stage.color)
+                  ? d.stage.color
+                  : "hsl(262 83% 58%)",
+            }}
+          />
+          {d.status === "OPEN"
+            ? d.stage.name
+            : d.status === "WON"
+              ? "Ganho"
+              : d.status === "LOST"
+                ? "Perdido"
+                : "Arquivado"}
+        </span>
+      )}
+    </div>
+  );
+
+  const panelScroll = (
+        <div className={cn("min-h-0 flex-1 overflow-y-auto", scrollPad)}>
             {loadErr ? (
               <p className="text-sm text-destructive">{loadErr}</p>
             ) : null}
@@ -1264,7 +1185,7 @@ export function PipelineDealDetailDialog({
                       values: { [key]: value },
                     });
                     await reload();
-                    router.refresh();
+                    afterRemoteChange();
                   }}
                   onReorderSelectOptions={onReorderSelectOptions}
                   onAppendSelectOption={onAppendSelectOption}
@@ -1371,6 +1292,150 @@ export function PipelineDealDetailDialog({
             </div>
             </div>
         </div>
+  );
+
+  if (isEmbedded) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden border-l border-border/20 bg-background dark:border-border/30">
+        <div
+          className={cn(
+            "shrink-0 space-y-3 border-b border-border/60 pb-4 pt-5 text-left",
+            headerPad,
+          )}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 space-y-2">
+              <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
+                {d.contact.name}
+              </h2>
+              {badgesRow}
+            </div>
+            {onRequestClose ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0 rounded-md"
+                onClick={onRequestClose}
+              >
+                <X className="size-4" />
+                <span className="sr-only">Fechar painel</span>
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        {panelScroll}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          hideClose
+          overlayClassName="bg-black/30 backdrop-blur-md"
+          className={cn(
+            "flex flex-col gap-0 overflow-hidden border-0 bg-background p-0 shadow-lg duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+            dealCardLayout === "central" &&
+              "left-[50%] top-[50%] max-h-[min(94vh,920px)] w-[min(100vw-1rem,80rem)] max-w-none translate-x-[-50%] translate-y-[-50%] data-[state=open]:zoom-in-95 sm:rounded-lg",
+            dealCardLayout === "lateral" &&
+              "left-auto right-0 top-0 h-[100dvh] max-h-[100dvh] w-[min(100vw,28rem)] max-w-none translate-x-0 translate-y-0 rounded-none rounded-l-lg data-[state=open]:slide-in-from-right-4 data-[state=open]:zoom-in-95 sm:w-[min(100vw,40rem)]",
+            dealCardLayout === "fullscreen" &&
+              "left-0 top-0 h-[100dvh] max-h-[100dvh] w-full max-w-full translate-x-0 translate-y-0 rounded-none data-[state=open]:zoom-in-95 sm:rounded-none",
+          )}
+        >
+          <DialogHeader className="space-y-3 border-b border-border/60 px-6 pb-4 pt-6 text-left">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-2">
+                <DialogTitle className="text-2xl font-semibold tracking-tight">
+                  {d.contact.name}
+                </DialogTitle>
+                {badgesRow}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 shrink-0 rounded-md"
+                      aria-label="Visualização do painel"
+                    >
+                      <Settings2 className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[12rem]">
+                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                      Visualização
+                    </div>
+                    <DropdownMenuSeparator className="my-1" />
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => setDealCardLayout("lateral")}
+                    >
+                      <PanelRight className="size-4 shrink-0 opacity-70" />
+                      <span className="flex-1">Lateral</span>
+                      <Check
+                        className={cn(
+                          "size-4 shrink-0",
+                          dealCardLayout === "lateral"
+                            ? "text-foreground"
+                            : "text-transparent",
+                        )}
+                        aria-hidden
+                      />
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => setDealCardLayout("central")}
+                    >
+                      <Square className="size-4 shrink-0 opacity-70" />
+                      <span className="flex-1">Central</span>
+                      <Check
+                        className={cn(
+                          "size-4 shrink-0",
+                          dealCardLayout === "central"
+                            ? "text-foreground"
+                            : "text-transparent",
+                        )}
+                        aria-hidden
+                      />
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => setDealCardLayout("fullscreen")}
+                    >
+                      <Maximize2 className="size-4 shrink-0 opacity-70" />
+                      <span className="flex-1">Tela cheia</span>
+                      <Check
+                        className={cn(
+                          "size-4 shrink-0",
+                          dealCardLayout === "fullscreen"
+                            ? "text-foreground"
+                            : "text-transparent",
+                        )}
+                        aria-hidden
+                      />
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DialogClose asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-md"
+                  >
+                    <X className="size-4" />
+                    <span className="sr-only">Fechar</span>
+                  </Button>
+                </DialogClose>
+              </div>
+            </div>
+          </DialogHeader>
+          {panelScroll}
         </DialogContent>
       </Dialog>
     </>

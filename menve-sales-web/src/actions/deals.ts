@@ -11,6 +11,7 @@ export async function moveDealStage(dealId: string, stageId: string) {
     json: { stageId },
   });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
   revalidatePath("/contacts", "layout");
 }
 
@@ -27,18 +28,21 @@ export async function patchDeal(
     json: patch,
   });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
   revalidatePath("/contacts", "layout");
 }
 
 export async function deleteDeal(dealId: string) {
   await apiServer(`/deals/${dealId}`, { method: "DELETE" });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
   revalidatePath("/contacts", "layout");
 }
 
 export async function archiveDeal(dealId: string) {
   await apiServer(`/deals/${dealId}/archive`, { method: "PATCH" });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
   revalidatePath("/contacts", "layout");
 }
 
@@ -64,6 +68,7 @@ export async function createDeal(input: z.infer<typeof dealSchema>) {
 export async function markDealWon(dealId: string) {
   await apiServer(`/deals/${dealId}/won`, { method: "PATCH" });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
   revalidatePath("/contacts", "layout");
 }
 
@@ -79,6 +84,7 @@ export async function markDealLost(dealId: string, lostReason: string) {
     json: { lostReason: parsed.lostReason.trim() },
   });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
   revalidatePath("/contacts", "layout");
 }
 
@@ -107,5 +113,6 @@ export async function createDealActivity(input: z.infer<typeof activitySchema>) 
     },
   });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
   revalidatePath("/contacts", "layout");
 }

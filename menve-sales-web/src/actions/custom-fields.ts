@@ -2,11 +2,10 @@
 
 import type { CustomField } from "@prisma/client";
 import { apiServer } from "@/lib/api-server";
+import { CUSTOM_FIELD_TYPE_ZOD_ENUM } from "@/lib/custom-field-types";
 import { assertCanConfigureTenant } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-
-const FIELD_TYPES = ["TEXT", "NUMBER", "DATE", "SELECT"] as const;
 
 export async function listCustomFieldsForEntity(
   entity: "CONTACT" | "DEAL",
@@ -23,12 +22,13 @@ export async function listCustomFieldsForEntity(
 
 const createSchema = z.object({
   name: z.string().min(1).max(128),
+  description: z.string().max(2000).optional(),
   key: z
     .string()
     .min(1)
     .max(64)
     .regex(/^[a-z0-9_]+$/i, "Use apenas letras, números e _"),
-  fieldType: z.enum(FIELD_TYPES),
+  fieldType: z.enum(CUSTOM_FIELD_TYPE_ZOD_ENUM),
   options: z.array(z.string()).optional(),
   entity: z.enum(["CONTACT", "DEAL"]),
   required: z.boolean().optional(),
@@ -49,6 +49,9 @@ export async function createCustomField(input: z.infer<typeof createSchema>) {
     method: "POST",
     json: {
       name: data.name.trim(),
+      ...(data.description?.trim()
+        ? { description: data.description.trim() }
+        : {}),
       key: data.key.trim().toLowerCase(),
       fieldType: data.fieldType,
       options: data.fieldType === "SELECT" ? (data.options ?? []) : undefined,
@@ -64,7 +67,8 @@ export async function createCustomField(input: z.infer<typeof createSchema>) {
 const updateSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(128).optional(),
-  fieldType: z.enum(FIELD_TYPES).optional(),
+  description: z.string().max(2000).nullable().optional(),
+  fieldType: z.enum(CUSTOM_FIELD_TYPE_ZOD_ENUM).optional(),
   options: z.array(z.string()).optional(),
   required: z.boolean().optional(),
 });
@@ -76,6 +80,16 @@ export async function updateCustomField(input: z.infer<typeof updateSchema>) {
     method: "PUT",
     json: {
       ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+      ...(data.description !== undefined
+        ? {
+            description:
+              data.description === null
+                ? null
+                : data.description.trim() === ""
+                  ? null
+                  : data.description.trim(),
+          }
+        : {}),
       ...(data.fieldType !== undefined ? { fieldType: data.fieldType } : {}),
       ...(data.options !== undefined ? { options: data.options } : {}),
       ...(data.required !== undefined ? { required: data.required } : {}),
@@ -143,4 +157,5 @@ export async function updateDealCustomData(
     json: { values },
   });
   revalidatePath("/pipeline");
+  revalidatePath("/inbox");
 }
