@@ -146,7 +146,7 @@ export function ChatPanel({
           {/* Messages */}
           <div
             ref={scrollRef}
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4"
+            className="inbox-chat-messages-pattern min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4"
           >
             {conversation.messages.map((m, i) => {
               const prev = conversation.messages[i - 1];

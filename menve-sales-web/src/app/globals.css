@@ -165,4 +165,17 @@ body {
   .dark .pipeline-board-scroll::-webkit-scrollbar-thumb:hover {
     background: rgb(255 255 255 / 0.31);
   }
+
+  /* Inbox: fundo branco com doodles quase invisíveis (estilo papel de parede de chat). */
+  .inbox-chat-messages-pattern {
+    background-color: #ffffff;
+    background-image: url("/inbox-chat-pattern-light.svg");
+    background-repeat: repeat;
+    background-size: 288px 288px;
+  }
+
+  .dark .inbox-chat-messages-pattern {
+    background-color: var(--card);
+    background-image: url("/inbox-chat-pattern-dark.svg");
+  }
 }
