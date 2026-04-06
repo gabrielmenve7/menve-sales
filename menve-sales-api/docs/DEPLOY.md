@@ -35,8 +35,12 @@ No painel da Vercel (valores padrão costumam bastar):
 ### Banco em produção
 
 1. Crie o banco Postgres (ex.: Neon) e copie a URL **com SSL** (`?sslmode=require` ou string fornecida pelo provedor).
-2. Na Vercel, com `DATABASE_URL` configurado, cada deploy executa **`prisma migrate deploy`** no build (via `vercel.json`).
-3. Rode seed em produção apenas de forma explícita e controlada (`npx prisma db seed`), não automaticamente no build.
+2. **Neon:** defina duas variáveis no painel da Vercel (e no `.env` local da API):
+   - `DATABASE_URL` — string com **pooler** (host costuma incluir `-pooler`), usada pelo runtime.
+   - `DIRECT_URL` — string **direta** (sem `-pooler` no host), usada pelo Prisma em `migrate deploy`. Sem isso, `migrate` pode falhar com **P1002** (timeout no `pg_advisory_lock`).
+   Em desenvolvimento local com Postgres único, use o **mesmo** valor em `DATABASE_URL` e `DIRECT_URL`.
+3. Na Vercel, com `DATABASE_URL` e `DIRECT_URL` configurados, cada deploy executa **`prisma migrate deploy`** no build (via `vercel.json`).
+4. Rode seed em produção apenas de forma explícita e controlada (`npx prisma db seed`), não automaticamente no build.
 
 **Não use `db push` em produção** — use apenas migrações versionadas em [`prisma/migrations`](../prisma/migrations).
 
@@ -46,7 +50,8 @@ Ver [`.env.example`](../.env.example). Mínimo na Vercel (Environment Variables 
 
 | Variável | Descrição |
 |----------|-----------|
-| `DATABASE_URL` | Postgres com TLS (URL do Neon/Supabase etc.) |
+| `DATABASE_URL` | Postgres com TLS (Neon: URL com **pooler**) |
+| `DIRECT_URL` | Postgres **direto** (Neon: URL sem pooler) — necessário para `prisma migrate`; local = igual a `DATABASE_URL` |
 | `NEXTAUTH_SECRET` | ≥ 32 caracteres aleatórios (não reutilizar o de desenvolvimento) |
 | `NEXTAUTH_URL` | URL canônica **https** do app (`https://<projeto>.vercel.app` ou domínio próprio) |
 | `NEXT_PUBLIC_APP_URL` | **Igual** a `NEXTAUTH_URL` (webhooks Evolution e links públicos) |

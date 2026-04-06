@@ -8,10 +8,15 @@ on:
 
 env:
   DATABASE_URL: postgresql://postgres:postgres@localhost:5432/menve_test
+  DIRECT_URL: postgresql://postgres:postgres@localhost:5432/menve_test
   NEXTAUTH_SECRET: ci-secret-at-least-32-characters-long!!
   NEXTAUTH_URL: http://localhost:3000
   NEXT_PUBLIC_APP_URL: http://localhost:3000
   PLAYWRIGHT_BASE_URL: http://localhost:3000
+  INTERNAL_API_URL: http://127.0.0.1:4000
+  INTERNAL_API_KEY: ci-internal-api-key
+  JWT_SECRET: ci-jwt-secret-at-least-32-characters-long!!
+  PUBLIC_APP_URL: http://127.0.0.1:4000
 
 jobs:
   ci:
@@ -42,8 +47,11 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Install API dependencies
+        run: npm ci --prefix menve-sales-api
+
       - name: Prisma migrate
-        run: npx prisma migrate deploy
+        run: npm run db:deploy
 
       - name: Lint
         run: npm run lint
@@ -51,7 +59,10 @@ jobs:
       - name: Unit tests
         run: npm run test -- --run
 
-      - name: Build
+      - name: Build API
+        run: npm run build --prefix menve-sales-api
+
+      - name: Build web
         run: npm run build
 
       - name: Install Playwright (Chromium)

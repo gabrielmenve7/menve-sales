@@ -3,8 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  /// Conexão sem pooler (Neon: host sem "-pooler"). Obrigatória para `migrate deploy` evitar P1002 no advisory lock.
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
