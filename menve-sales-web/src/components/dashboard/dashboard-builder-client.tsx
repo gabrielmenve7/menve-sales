@@ -427,14 +427,15 @@ export function DashboardBuilderClient({
                   >
                     {activeBoard.layout.widgets.map((w) => (
                       <div key={w.id} className="h-full">
-                        <div className="relative h-full">
-                          <div className="absolute right-1 top-1 z-10 flex gap-0.5">
+                        <div className="group relative h-full">
+                          <div className="absolute right-1 top-1 z-10 flex gap-0.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
                             <Button
                               type="button"
                               size="icon"
                               variant="ghost"
                               className="size-7 bg-background/80 shadow-sm"
                               onClick={() => setConfigWidget(w)}
+                              title="Editar cartão"
                             >
                               <Pencil className="size-3.5" />
                             </Button>
@@ -444,6 +445,7 @@ export function DashboardBuilderClient({
                               variant="ghost"
                               className="size-7 bg-background/80 text-destructive shadow-sm hover:text-destructive"
                               onClick={() => removeWidget(w.id)}
+                              title="Excluir cartão"
                             >
                               <Trash2 className="size-3.5" />
                             </Button>
