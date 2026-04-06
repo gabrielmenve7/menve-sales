@@ -1,9 +1,16 @@
 import type { CustomField } from "@prisma/client";
 import { apiServer } from "@/lib/api-server";
+import { canManageWorkspaceFeatures } from "@/lib/session";
 import { SettingsClient } from "./settings-client";
 
 type SettingsBundle = {
-  tenant: { id: string; name: string; slug: string; plan: string };
+  tenant: {
+    id: string;
+    name: string;
+    slug: string;
+    plan: string;
+    researchEnabled?: boolean;
+  };
   whatsAppConnections: unknown[];
   quickReplies: unknown[];
   pipelines: unknown[];
@@ -13,11 +20,12 @@ type SettingsBundle = {
 };
 
 export default async function SettingsPage() {
-  const [data, dealCustomFieldsRaw] = await Promise.all([
+  const [data, dealCustomFieldsRaw, canManageWorkspace] = await Promise.all([
     apiServer<SettingsBundle>("/settings"),
     apiServer<unknown>("/custom-fields?entity=DEAL")
       .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
       .catch(() => [] as CustomField[]),
+    canManageWorkspaceFeatures(),
   ]);
 
   const webhookBaseUrl =
@@ -36,6 +44,7 @@ export default async function SettingsPage() {
       </div>
       <SettingsClient
         tenant={data.tenant as never}
+        canManageWorkspace={canManageWorkspace}
         connections={data.whatsAppConnections as never}
         quickReplies={data.quickReplies as never}
         webhookBaseUrl={webhookBaseUrl}

@@ -1,0 +1,526 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import {
+  Prisma,
+  ProspectSource,
+  ProspectStatus,
+} from "@prisma/client";
+import { z } from "zod";
+import { PrismaService } from "../prisma/prisma.service";
+import { normalizeBrazilianPhone } from "./phone-utils";
+import {
+  filterBusinessWebResults,
+  sanitizeMapsResults,
+} from "./business-result-filter";
+import {
+  baseDomain,
+  normalizeAndDeduplicate,
+  searchMaps,
+  searchWeb,
+  SERPER_WEB_RESULTS_PER_REQUEST,
+} from "./serper";
+import { scrapeWebsite } from "./website-scraper";
+
+const searchBody = z.object({
+  query: z.string().min(3).max(200),
+});
+
+const patchResultSchema = z.object({
+  status: z.nativeEnum(ProspectStatus).optional(),
+  notes: z.string().max(5000).optional(),
+});
+
+const convertBodySchema = z.object({
+  pipelineId: z.string(),
+  title: z.string().optional(),
+  value: z.number().optional(),
+});
+
+const bulkConvertSchema = z.object({
+  resultIds: z.array(z.string()).min(1).max(50),
+  pipelineId: z.string(),
+});
+
+@Injectable()
+export class ProspectingService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  private async ensureResearchEnabled(tenantId: string) {
+    const t = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { researchEnabled: true },
+    });
+    if (!t?.researchEnabled) {
+      throw new ForbiddenException(
+        "Pesquisa desativada para este workspace",
+      );
+    }
+  }
+
+  private serperKey(): string | null {
+    const k = process.env.SERPER_API_KEY?.trim();
+    return k || null;
+  }
+
+  async ensureProspectingSource(tenantId: string) {
+    let s = await this.prisma.campaignSource.findFirst({
+      where: { tenantId, code: "prospecting" },
+    });
+    if (!s) {
+      s = await this.prisma.campaignSource.create({
+        data: {
+          tenantId,
+          name: "Prospecção Ativa",
+          code: "prospecting",
+        },
+      });
+    }
+    return s;
+  }
+
+  async search(tenantId: string, userId: string, raw: unknown) {
+    await this.ensureResearchEnabled(tenantId);
+    const { query } = searchBody.parse(raw);
+    const key = this.serperKey();
+    if (!key) {
+      throw new BadRequestException(
+        "SERPER_API_KEY não configurada na API",
+      );
+    }
+
+    const [webRaw, mapsRaw] = await Promise.all([
+      searchWeb(query, key, {
+        page: 1,
+        num: SERPER_WEB_RESULTS_PER_REQUEST,
+      }),
+      searchMaps(query, key),
+    ]);
+    const web = filterBusinessWebResults(webRaw);
+    const maps = sanitizeMapsResults(mapsRaw);
+    const { prospects, webCount, mapsCount } = normalizeAndDeduplicate(
+      web,
+      maps,
+    );
+
+    const searchRow = await this.prisma.prospectSearch.create({
+      data: {
+        tenantId,
+        userId,
+        query,
+        webCount,
+        mapsCount,
+        totalCount: prospects.length,
+        lastWebPageFetched: 1,
+        webExhausted: false,
+      },
+    });
+
+    if (prospects.length > 0) {
+      await this.prisma.prospectResult.createMany({
+        data: prospects.map((p) => ({
+          tenantId,
+          searchId: searchRow.id,
+          source: p.source,
+          position: p.position,
+          name: p.name,
+          website: p.website,
+          hasWebsite: p.hasWebsite,
+          phone: p.phone,
+          address: p.address,
+          snippet: p.snippet,
+          rating: p.rating,
+          reviewCount: p.reviewCount,
+          googleMapsUrl: p.googleMapsUrl,
+          enrichmentData: p.foundInBothSources
+            ? ({ foundInBothSources: true } as Prisma.InputJsonValue)
+            : undefined,
+        })),
+      });
+    }
+
+    const results = await this.prisma.prospectResult.findMany({
+      where: { searchId: searchRow.id },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return { search: searchRow, results };
+  }
+
+  /**
+   * Próxima página da busca orgânica (Serper `page`), deduplicada contra resultados já salvos.
+   * Maps não é refeito (evita duplicar créditos e a 1ª leva já cobre a região).
+   */
+  async loadMoreWeb(
+    tenantId: string,
+    searchId: string,
+  ): Promise<{ added: number; exhausted: boolean; totalCount: number }> {
+    await this.ensureResearchEnabled(tenantId);
+    const search = await this.prisma.prospectSearch.findFirst({
+      where: { id: searchId, tenantId },
+    });
+    if (!search) throw new NotFoundException();
+    if (search.webExhausted) {
+      throw new BadRequestException(
+        "Não há mais páginas de resultado web para esta busca.",
+      );
+    }
+
+    const key = this.serperKey();
+    if (!key) {
+      throw new BadRequestException(
+        "SERPER_API_KEY não configurada na API",
+      );
+    }
+
+    const nextPage = search.lastWebPageFetched + 1;
+    const webRaw = await searchWeb(search.query, key, {
+      page: nextPage,
+      num: SERPER_WEB_RESULTS_PER_REQUEST,
+    });
+
+    await this.prisma.prospectSearch.update({
+      where: { id: searchId },
+      data: { lastWebPageFetched: nextPage },
+    });
+
+    if (webRaw.length === 0) {
+      await this.prisma.prospectSearch.update({
+        where: { id: searchId },
+        data: { webExhausted: true },
+      });
+      const totalCount = await this.prisma.prospectResult.count({
+        where: { searchId },
+      });
+      await this.prisma.prospectSearch.update({
+        where: { id: searchId },
+        data: { totalCount },
+      });
+      return { added: 0, exhausted: true, totalCount };
+    }
+
+    const web = filterBusinessWebResults(webRaw);
+    const { prospects } = normalizeAndDeduplicate(web, []);
+
+    const existing = await this.prisma.prospectResult.findMany({
+      where: { searchId, tenantId },
+      select: { website: true, googleMapsUrl: true, phone: true },
+    });
+
+    const seenDomains = new Set<string>();
+    const seenPhones = new Set<string>();
+    for (const r of existing) {
+      const d = baseDomain(r.website);
+      if (d) seenDomains.add(d);
+      if (r.phone) seenPhones.add(r.phone);
+    }
+
+    const fresh: (typeof prospects)[number][] = [];
+    for (const p of prospects) {
+      const d = baseDomain(p.website);
+      if (d && seenDomains.has(d)) continue;
+      if (d) seenDomains.add(d);
+      if (p.phone && seenPhones.has(p.phone)) continue;
+      if (p.phone) seenPhones.add(p.phone);
+      fresh.push(p);
+    }
+
+    if (fresh.length > 0) {
+      await this.prisma.prospectResult.createMany({
+        data: fresh.map((p) => ({
+          tenantId,
+          searchId,
+          source: p.source,
+          position: p.position,
+          name: p.name,
+          website: p.website,
+          hasWebsite: p.hasWebsite,
+          phone: p.phone,
+          address: p.address,
+          snippet: p.snippet,
+          rating: p.rating,
+          reviewCount: p.reviewCount,
+          googleMapsUrl: p.googleMapsUrl,
+          enrichmentData: p.foundInBothSources
+            ? ({ foundInBothSources: true } as Prisma.InputJsonValue)
+            : undefined,
+        })),
+      });
+    }
+
+    const totalCount = await this.prisma.prospectResult.count({
+      where: { searchId },
+    });
+    await this.prisma.prospectSearch.update({
+      where: { id: searchId },
+      data: { totalCount },
+    });
+
+    return {
+      added: fresh.length,
+      exhausted: false,
+      totalCount,
+    };
+  }
+
+  async processEnrichmentChunk(
+    tenantId: string,
+    searchId: string,
+    batchSize = 5,
+  ) {
+    const batch = await this.prisma.prospectResult.findMany({
+      where: {
+        tenantId,
+        searchId,
+        hasWebsite: true,
+        website: { not: null },
+        enrichedAt: null,
+      },
+      take: batchSize,
+    });
+
+    for (const r of batch) {
+      const url = r.website!;
+      const prev =
+        (r.enrichmentData as Record<string, unknown> | null) ?? {};
+      try {
+        const scraped = await scrapeWebsite(url);
+        const enrichmentData: Prisma.InputJsonValue = {
+          ...prev,
+          phones: scraped.phones,
+          emails: scraped.emails,
+          social: scraped.social,
+          metaDescription: scraped.metaDescription,
+          hasContactForm: scraped.hasContactForm,
+          scrapeOk: true,
+        };
+        await this.prisma.prospectResult.update({
+          where: { id: r.id },
+          data: {
+            enrichedAt: new Date(),
+            whatsapp: scraped.whatsapp,
+            email: scraped.emails[0] ?? undefined,
+            enrichmentData,
+          },
+        });
+      } catch {
+        await this.prisma.prospectResult.update({
+          where: { id: r.id },
+          data: {
+            enrichedAt: new Date(),
+            enrichmentData: {
+              ...prev,
+              scrapeError: true,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+    }
+  }
+
+  async listSearches(tenantId: string) {
+    await this.ensureResearchEnabled(tenantId);
+    return this.prisma.prospectSearch.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      include: {
+        user: { select: { name: true, email: true } },
+      },
+    });
+  }
+
+  async getSearchStatus(tenantId: string, searchId: string) {
+    await this.ensureResearchEnabled(tenantId);
+    const search = await this.prisma.prospectSearch.findFirst({
+      where: { id: searchId, tenantId },
+    });
+    if (!search) throw new NotFoundException();
+
+    await this.processEnrichmentChunk(tenantId, searchId, 5);
+
+    const results = await this.prisma.prospectResult.findMany({
+      where: { searchId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const totalWithSite = results.filter(
+      (r) => r.hasWebsite && r.website,
+    ).length;
+    const enrichedCount = results.filter((r) => r.enrichedAt != null).length;
+    const isComplete =
+      totalWithSite === 0 || enrichedCount >= totalWithSite;
+
+    return {
+      search,
+      results,
+      totalWithSite,
+      enrichedCount,
+      isComplete,
+    };
+  }
+
+  async patchResult(tenantId: string, resultId: string, raw: unknown) {
+    await this.ensureResearchEnabled(tenantId);
+    const data = patchResultSchema.parse(raw);
+    const r = await this.prisma.prospectResult.findFirst({
+      where: { id: resultId, tenantId },
+    });
+    if (!r) throw new NotFoundException();
+    return this.prisma.prospectResult.update({
+      where: { id: resultId },
+      data: {
+        ...(data.status != null ? { status: data.status } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      },
+    });
+  }
+
+  async deleteSearch(tenantId: string, searchId: string) {
+    await this.ensureResearchEnabled(tenantId);
+    const s = await this.prisma.prospectSearch.findFirst({
+      where: { id: searchId, tenantId },
+    });
+    if (!s) throw new NotFoundException();
+    await this.prisma.prospectSearch.delete({ where: { id: searchId } });
+    return { ok: true };
+  }
+
+  async convertResult(
+    tenantId: string,
+    resultId: string,
+    raw: unknown,
+  ): Promise<
+    | { ok: true; contactId: string }
+    | {
+        ok: false;
+        duplicate: true;
+        contactId: string;
+        message: string;
+      }
+  > {
+    await this.ensureResearchEnabled(tenantId);
+    const data = convertBodySchema.parse(raw);
+    const result = await this.prisma.prospectResult.findFirst({
+      where: { id: resultId, tenantId },
+    });
+    if (!result) throw new NotFoundException();
+    if (result.status === ProspectStatus.CONVERTED) {
+      throw new BadRequestException("Resultado já convertido");
+    }
+
+    const pipeline = await this.prisma.pipeline.findFirst({
+      where: { id: data.pipelineId, tenantId },
+      include: { stages: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (!pipeline?.stages.length) {
+      throw new BadRequestException("Pipeline inválido");
+    }
+
+    const stage0 = pipeline.stages[0]!;
+
+    let phone: string | null = null;
+    if (result.whatsapp) {
+      phone = normalizeBrazilianPhone(result.whatsapp) ?? result.whatsapp;
+    }
+    if (!phone && result.phone) {
+      phone = normalizeBrazilianPhone(result.phone) ?? result.phone;
+    }
+
+    if (phone) {
+      const dup = await this.prisma.contact.findFirst({
+        where: { tenantId, phone },
+      });
+      if (dup) {
+        return {
+          ok: false,
+          duplicate: true,
+          contactId: dup.id,
+          message: "Já existe contato com este telefone",
+        };
+      }
+    }
+
+    const campaign = await this.ensureProspectingSource(tenantId);
+    const utmMedium =
+      result.source === ProspectSource.GOOGLE_MAPS
+        ? "google_maps"
+        : "google_search";
+
+    const customData: Prisma.InputJsonValue = {
+      website: result.website,
+      googleRating: result.rating,
+      reviewCount: result.reviewCount,
+      address: result.address,
+      googleMapsUrl: result.googleMapsUrl,
+      snippet: result.snippet,
+    };
+
+    const contact = await this.prisma.contact.create({
+      data: {
+        tenantId,
+        name: result.name,
+        phone,
+        email: result.email?.trim() || null,
+        company: result.name,
+        utmSource: "prospecting",
+        utmMedium,
+        campaignSourceId: campaign.id,
+        customData,
+      },
+    });
+
+    const title =
+      data.title?.trim() && data.title.trim().length > 0
+        ? data.title.trim()
+        : `Prospecção: ${result.name}`;
+
+    await this.prisma.deal.create({
+      data: {
+        tenantId,
+        contactId: contact.id,
+        pipelineId: pipeline.id,
+        stageId: stage0.id,
+        title,
+        value: data.value,
+      },
+    });
+
+    await this.prisma.prospectResult.update({
+      where: { id: resultId },
+      data: {
+        status: ProspectStatus.CONVERTED,
+        contactId: contact.id,
+      },
+    });
+
+    return { ok: true, contactId: contact.id };
+  }
+
+  async convertBulk(tenantId: string, raw: unknown) {
+    await this.ensureResearchEnabled(tenantId);
+    const data = bulkConvertSchema.parse(raw);
+    let converted = 0;
+    let skippedDuplicate = 0;
+    const errors: string[] = [];
+
+    for (const id of data.resultIds) {
+      try {
+        const r = await this.convertResult(tenantId, id, {
+          pipelineId: data.pipelineId,
+        });
+        if (r.ok) converted++;
+        else if ("duplicate" in r && r.duplicate) skippedDuplicate++;
+      } catch (e) {
+        errors.push(
+          id + ": " + (e instanceof Error ? e.message : "erro"),
+        );
+      }
+    }
+
+    return { converted, skippedDuplicate, errors };
+  }
+}

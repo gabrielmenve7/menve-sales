@@ -16,11 +16,18 @@ import { SettingsMembers } from "./settings-members";
 import { SettingsTagsCatalog } from "./settings-tags-catalog";
 import { SettingsNotifications } from "./settings-notifications";
 
-type TenantInfo = { id: string; name: string; slug: string; plan: string };
+type TenantInfo = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  researchEnabled?: boolean;
+};
 type Member = { id: string; name: string | null; email: string; role: string };
 
 export function SettingsClient({
   tenant,
+  canManageWorkspace,
   connections,
   quickReplies,
   webhookBaseUrl,
@@ -31,6 +38,7 @@ export function SettingsClient({
   members,
 }: {
   tenant: TenantInfo;
+  canManageWorkspace: boolean;
   connections: WhatsAppConnection[];
   quickReplies: QuickReply[];
   webhookBaseUrl: string;
@@ -63,6 +71,7 @@ export function SettingsClient({
       <TabsContent value="general">
         <SettingsGeneral
           tenant={tenant}
+          canManageWorkspace={canManageWorkspace}
           pipelines={pipelines}
           contactCustomFields={contactCustomFields}
           dealCustomFields={dealCustomFields}

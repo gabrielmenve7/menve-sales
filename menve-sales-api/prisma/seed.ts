@@ -36,11 +36,36 @@ async function main() {
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: "demo" },
-    update: {},
+    update: { researchEnabled: true },
     create: {
       name: "Cliente Demo",
       slug: "demo",
       plan: "pro",
+      researchEnabled: true,
+    },
+  });
+
+  /** Workspace interno Menve (dev): use com DEFAULT_TENANT_SLUG=menve-digital */
+  const menveDigital = await prisma.tenant.upsert({
+    where: { slug: "menve-digital" },
+    update: { researchEnabled: true },
+    create: {
+      name: "Menve Digital",
+      slug: "menve-digital",
+      plan: "pro",
+      researchEnabled: true,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "owner@menvedigital.local" },
+    update: { tenantId: menveDigital.id, role: UserRole.OWNER },
+    create: {
+      email: "owner@menvedigital.local",
+      name: "Owner Menve Digital",
+      passwordHash: password,
+      role: UserRole.OWNER,
+      tenantId: menveDigital.id,
     },
   });
 

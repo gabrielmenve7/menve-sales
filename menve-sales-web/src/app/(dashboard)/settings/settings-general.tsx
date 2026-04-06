@@ -3,7 +3,10 @@
 import type { CustomField, Pipeline, Stage } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { updateTenantName } from "@/actions/tenant";
+import {
+  updateTenantName,
+  updateTenantResearchEnabled,
+} from "@/actions/tenant";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,15 +21,23 @@ import { CUSTOM_FIELD_ENTITY } from "@/lib/custom-field-entity";
 import { SettingsPipelineStages } from "./settings-pipeline-stages";
 import { SettingsCustomFields } from "./settings-custom-fields";
 
-type TenantInfo = { id: string; name: string; slug: string; plan: string };
+type TenantInfo = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  researchEnabled?: boolean;
+};
 
 export function SettingsGeneral({
   tenant,
+  canManageWorkspace,
   pipelines,
   contactCustomFields,
   dealCustomFields,
 }: {
   tenant: TenantInfo;
+  canManageWorkspace: boolean;
   pipelines: (Pipeline & { stages: Stage[] })[];
   contactCustomFields: CustomField[];
   dealCustomFields: CustomField[];
@@ -34,6 +45,9 @@ export function SettingsGeneral({
   const router = useRouter();
   const [name, setName] = useState(tenant.name);
   const [saving, setSaving] = useState(false);
+  const [savingResearch, setSavingResearch] = useState(false);
+
+  const researchOn = tenant.researchEnabled !== false;
 
   async function onSaveTenant(e: React.FormEvent) {
     e.preventDefault();
@@ -47,12 +61,22 @@ export function SettingsGeneral({
     }
   }
 
+  async function onToggleResearch() {
+    setSavingResearch(true);
+    try {
+      await updateTenantResearchEnabled(!researchOn);
+      router.refresh();
+    } finally {
+      setSavingResearch(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Organização</CardTitle>
-          <CardDescription>Informações do seu workspace</CardDescription>
+          <CardTitle>Workspace</CardTitle>
+          <CardDescription>Nome e identificação do workspace</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSaveTenant} className="space-y-4">
@@ -63,6 +87,7 @@ export function SettingsGeneral({
                   id="tenant-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  disabled={!canManageWorkspace}
                 />
               </div>
               <div className="grid gap-2">
@@ -70,15 +95,60 @@ export function SettingsGeneral({
                 <Input value={tenant.slug} disabled className="text-muted-foreground" />
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Button type="submit" disabled={saving || !name.trim()}>
-                {saving ? "Salvando…" : "Salvar"}
-              </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              {canManageWorkspace ? (
+                <Button type="submit" disabled={saving || !name.trim()}>
+                  {saving ? "Salvando…" : "Salvar"}
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Apenas proprietário ou administrador pode alterar o nome do workspace.
+                </p>
+              )}
               <span className="rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground">
                 Plano: {tenant.plan}
               </span>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Funcionalidades</CardTitle>
+          <CardDescription>
+            Ative ou desative módulos do workspace. Demais áreas permanecem disponíveis.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-col gap-3 rounded-lg border border-border/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Pesquisa (prospecção ativa)</p>
+              <p className="text-xs text-muted-foreground">
+                Busca em rede e Maps para gerar oportunidades. Desative se o workspace não
+                faz prospecção ativa.
+              </p>
+            </div>
+            {canManageWorkspace ? (
+              <Button
+                type="button"
+                variant={researchOn ? "outline" : "default"}
+                disabled={savingResearch}
+                onClick={() => void onToggleResearch()}
+                className="shrink-0"
+              >
+                {savingResearch
+                  ? "Salvando…"
+                  : researchOn
+                    ? "Desativar Pesquisa"
+                    : "Ativar Pesquisa"}
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {researchOn ? "Ativada" : "Desativada"} (somente Owner/Admin altera)
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

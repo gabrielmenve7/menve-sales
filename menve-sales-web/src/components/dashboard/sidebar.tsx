@@ -16,7 +16,7 @@ import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const items = [
+const allNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inbox", label: "Inbox", icon: MessageSquare },
   { href: "/pesquisa", label: "Pesquisa", icon: Search },
@@ -28,11 +28,16 @@ const items = [
 export function Sidebar({
   isSuperAdmin,
   userName,
+  researchEnabled = true,
 }: {
   isSuperAdmin: boolean;
   userName?: string | null;
+  researchEnabled?: boolean;
 }) {
   const pathname = usePathname();
+  const items = researchEnabled
+    ? allNavItems
+    : allNavItems.filter((i) => i.href !== "/pesquisa");
 
   return (
     <aside className="flex h-full min-h-0 w-[13.5rem] shrink-0 flex-col border-0 bg-sidebar ring-0">

@@ -108,3 +108,32 @@ export async function canConfigureTenant() {
     role === "MANAGER"
   );
 }
+
+export async function canManageWorkspaceFeatures() {
+  const session = await auth();
+  if (!session?.user?.id) return false;
+  const { role } = await resolveRoleAndTenantId({
+    user: {
+      id: session.user.id,
+      role: session.user.role,
+      tenantId: session.user.tenantId,
+    },
+  });
+  return (
+    role === "SUPER_ADMIN" ||
+    role === "OWNER" ||
+    role === "ADMIN"
+  );
+}
+
+export async function assertCanManageWorkspaceFeatures() {
+  const session = await requireSession();
+  const { role } = await resolveRoleAndTenantId(session);
+  const ok =
+    role === "SUPER_ADMIN" ||
+    role === "OWNER" ||
+    role === "ADMIN";
+  if (!ok) {
+    throw new Error("Sem permissão para alterar configurações do workspace");
+  }
+}
