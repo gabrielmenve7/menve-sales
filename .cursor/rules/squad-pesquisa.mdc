@@ -1,0 +1,433 @@
+---
+description: Squad PESQUISA - time de engenharia dedicado a aba Pesquisa (prospecao ativa) do Menve Sales
+globs:
+  - menve-sales-web/src/app/(dashboard)/pesquisa/**
+  - menve-sales-web/src/components/pesquisa/**
+  - menve-sales-web/src/lib/pesquisa/**
+  - menve-sales-web/src/actions/pesquisa.ts
+  - menve-sales-api/src/prospecting/**
+alwaysApply: false
+---
+
+# Squad PESQUISA
+
+## Identidade
+
+- **Squad**: squad-pesquisa
+- **Dominio**: Pesquisa (prospecao ativa) -- busca web e Maps via integracoes externas, historico de buscas, gestao de resultados (status, notas), enriquecimento e conversao em contato/deal com origem de campanha `prospecting`.
+- **Missao**: construir, evoluir e manter a experiencia da aba Pesquisa e a API `/prospecting`, com dados confiaveis, performance aceitavel e integracao limpa com pipeline e contatos.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/pesquisa/` -- pagina SSR e client (`page.tsx`, `pesquisa-client.tsx`)
+- `menve-sales-web/src/components/pesquisa/` -- componentes decompostos da Pesquisa (quando existirem; hoje a UI pode estar concentrada no client da rota)
+- `menve-sales-web/src/lib/pesquisa/` -- utilitarios e helpers do dominio Pesquisa (quando existirem)
+- `menve-sales-web/src/actions/pesquisa.ts` -- server actions que chamam a API Nest (`/prospecting/*`)
+- `menve-sales-web/src/app/api/pesquisa/` -- route handlers Next (se forem introduzidos no futuro)
+- `menve-sales-api/src/prospecting/` -- modulo Nest (controller, service, Serper, scraper, filtros, utils)
+- Schemas Prisma relacionados a `ProspectSearch`, `ProspectResult`, enums `ProspectSource` / `ProspectStatus`, e uso de `CampaignSource` com `code: "prospecting"` no fluxo de conversao
+- Testes unitarios, de integracao e E2E do dominio Pesquisa
+
+### Fora de escopo
+
+- Configuracoes globais de auth, tenant, sessao (`src/auth.ts`, `src/lib/tenant.ts`, `apiServer` compartilhado como infra de chamada)
+- Componentes UI genericos em `src/components/ui/` (solicitar ao time de design system)
+- Settings de tenant (`src/app/(dashboard)/settings/`) -- squad de configuracoes
+- Logica geral de pipeline, deals e estagios fora do que a conversao da Pesquisa consome (coordenar com squad-pipeline)
+- CRUD e modelo amplo de contatos fora do necessario para conversao e dedupe (coordenar com squad-contatos)
+- Dashboard e widgets agregados de metricas de prospecao -- consumo pode existir em `dashboard.service.ts`; ownership de layout/metricas globais e squad-dashboard
+- Infraestrutura de deploy, CI/CD
+
+---
+
+## Organograma
+
+```
+squad-pesquisa (15 pessoas)
+|
+|-- LIDERANCA (3)
+|   |-- Andre Vieira ............ Squad Lead / Tech Lead
+|   |-- Beatriz Nogueira ........ Engineering Manager
+|   |-- Caio Mendonca ........... UX Lead / Product Designer
+|
+|-- TIME BUSCA & FONTES (3)
+|   |-- Daniela Prado ........... Senior Frontend Dev
+|   |-- Eduardo Ramos ........... Senior Backend Dev
+|   |-- Fabiana Torres .......... Fullstack Dev
+|
+|-- TIME UI & GESTAO DE RESULTADOS (3)
+|   |-- Gustavo Pires ........... Frontend Dev
+|   |-- Helena Drummond ......... Backend Dev
+|   |-- Igor Campos ............. Fullstack Dev
+|
+|-- TIME CONVERSAO & DADOS (3)
+|   |-- Julia Fontes ............ Frontend Dev
+|   |-- Kleber Santos ........... Backend Dev
+|   |-- Larissa Mota ............ Fullstack Dev
+|
+|-- TIME QUALIDADE & CONFIABILIDADE (3)
+|   |-- Marcelo Dias ............ Backend Dev (resiliencia de integracoes)
+|   |-- Natalia Farias .......... SRE / Observabilidade
+|   |-- Otavio Lemos ............ QA Engineer
+```
+
+---
+
+## Lideranca (3 pessoas)
+
+### Andre Vieira -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura tecnica da Pesquisa e responsavel final por qualidade de codigo.
+- **Responsabilidades**:
+  - Definir e manter a arquitetura de referencia (API `/prospecting`, integracao Serper/Maps, persistencia Prisma).
+  - Tomar decisoes de stack e aprovar RFCs de mudancas estruturais.
+  - Fazer code review final em PRs de alto impacto.
+  - Padronizar convencoes de codigo e garantir aderencia ao design system na aba Pesquisa.
+  - Ser interface tecnica com outros squads quando houver dependencia cruzada (pipeline, contatos, dashboard).
+  - Mentorar seniors dos times para evolucao tecnica.
+- **Entradas**: requisitos priorizados por Beatriz, specs de UX por Caio, alertas de Natalia.
+- **Saidas**: ADRs, pareceres tecnicos em PRs, diretrizes de implementacao.
+- **Handoff**: recebe priorizacao de Beatriz -> distribui para o senior do time correto.
+
+### Beatriz Nogueira -- Engineering Manager
+
+- **Funcao**: garantir delivery, remover blockers e cuidar da saude do time.
+- **Responsabilidades**:
+  - Planejar e facilitar sprints, dailies e cerimonias ageis.
+  - Priorizar backlog junto a produto e comunicar decisoes ao squad.
+  - Remover impedimentos operacionais e organizacionais.
+  - Acompanhar metricas de delivery (cycle time, lead time, throughput).
+  - Comunicar progresso e riscos para stakeholders.
+  - Facilitar retrospectivas e garantir que action items sejam executados.
+  - Escalar para outros squads quando o problema esta fora do escopo Pesquisa.
+- **Entradas**: roadmap de produto, feedback de stakeholders, metricas de Natalia.
+- **Saidas**: backlog priorizado, status reports, decisoes de priorizacao documentadas.
+- **Handoff**: recebe demandas de produto -> prioriza -> passa para Andre definir arquitetura.
+
+### Caio Mendonca -- UX Lead / Product Designer
+
+- **Funcao**: dono da experiencia do usuario na aba Pesquisa.
+- **Responsabilidades**:
+  - Criar e manter patterns e estados (loading, empty, erro, sucesso) para busca, lista de resultados e conversao.
+  - Produzir prototipos de alta fidelidade para novas features.
+  - Conduzir testes de usabilidade e incorporar feedback.
+  - Garantir consistencia com o restante do produto e acessibilidade (WCAG AA minimo).
+- **Entradas**: requisitos de produto, feedback de usuarios.
+- **Saidas**: specs de UX, prototipos, criterios de aceitacao visual.
+- **Handoff**: recebe priorizacao de Beatriz -> produz spec -> entrega para o time de dev.
+
+---
+
+## Time Busca & Fontes (3 pessoas)
+
+**Dominio**: integracao com provedores de busca (Serper), fontes Google Search e Google Maps, paginacao e carga incremental (`load-more`), filtragem de resultados de negocio, enriquecimento (ex.: scraper de site).
+
+**Caminhos principais**:
+- `menve-sales-api/src/prospecting/serper.ts`
+- `menve-sales-api/src/prospecting/website-scraper.ts`
+- `menve-sales-api/src/prospecting/business-result-filter.ts`
+- `menve-sales-api/src/prospecting/phone-utils.ts`
+- `menve-sales-api/src/prospecting/prospecting.service.ts` (orquestracao de busca e persistencia)
+- `menve-sales-web/src/actions/pesquisa.ts` -- `prospectingSearch`, `prospectingLoadMoreWeb`
+
+### Daniela Prado -- Senior Frontend Dev
+
+- **Funcao**: lider tecnica de frontend para fluxos de busca na UI.
+- **Responsabilidades**:
+  - Garantir UX de busca, feedback de progresso e estados de carregamento incremental.
+  - Otimizar renderizacao de listas grandes de resultados (virtualizacao quando necessario).
+  - Alinhar com Caio em hierarquia visual de fontes (rede de pesquisa vs Maps).
+- **Entradas**: specs de UX de Caio, contrato de API de Eduardo.
+- **Saidas**: componentes performaticos na rota Pesquisa ou em `components/pesquisa/`.
+- **Criterios de qualidade**:
+  - Busca e load-more sem travar a UI principal.
+  - Tratamento claro de erro de rede e de limite de API.
+
+### Eduardo Ramos -- Senior Backend Dev
+
+- **Funcao**: lider tecnico de backend para motor de prospecao.
+- **Responsabilidades**:
+  - Manter contratos REST em `ProspectingController` e logica em `ProspectingService`.
+  - Garantir integracao robusta com Serper e politicas de paginacao (`lastWebPageFetched`, `webExhausted`).
+  - Definir indices e queries Prisma eficientes para `ProspectSearch` / `ProspectResult`.
+- **Entradas**: requisitos de produto, limites de provedores externos.
+- **Saidas**: endpoints documentados, migrations quando necessario, testes de servico.
+- **Criterios de qualidade**:
+  - Latencia p95 aceitavel para iniciar busca e para status de busca.
+  - Idempotencia e consistencia ao retomar ou estender buscas.
+
+### Fabiana Torres -- Fullstack Dev
+
+- **Funcao**: ponte entre orquestracao backend e experiencia de busca no client.
+- **Responsabilidades**:
+  - Manter alinhamento entre payloads da API e tipos usados no `pesquisa-client`.
+  - Implementar ajustes ponta a ponta em filtros de negocio e normalizacao de telefone.
+  - Apoiar Eduardo e Daniela em features que cruzam API e UI.
+- **Entradas**: contrato de API, componentes de Daniela.
+- **Saidas**: PRs end-to-end, testes de integracao.
+- **Criterios de qualidade**:
+  - Contratos tipados e validacao de entrada (Zod nas actions e DTOs na API).
+
+---
+
+## Time UI & Gestao de Resultados (3 pessoas)
+
+**Dominio**: tela principal da aba Pesquisa, historico de buscas, tabela ou lista de resultados, edicao de status e notas, exclusao de busca.
+
+**Estado atual**: UI concentrada em `pesquisa-client.tsx`; decomposicao em `components/pesquisa/` e recomendada conforme o componente crescer.
+
+**Caminhos principais**:
+- `menve-sales-web/src/app/(dashboard)/pesquisa/page.tsx`
+- `menve-sales-web/src/app/(dashboard)/pesquisa/pesquisa-client.tsx`
+- `menve-sales-web/src/actions/pesquisa.ts` -- `prospectingGetSearch`, `prospectingDeleteSearch`, `prospectingPatchResult`
+
+### Gustavo Pires -- Frontend Dev
+
+- **Funcao**: dono da composicao da interface da Pesquisa.
+- **Responsabilidades**:
+  - Evoluir layout, filtros de exibicao na UI e acessibilidade.
+  - Extrair subcomponentes reutilizaveis para `components/pesquisa/` quando fizer sentido.
+- **Entradas**: specs de Caio, endpoints de Helena.
+- **Saidas**: componentes testaveis, estados vazio/erro consistentes.
+
+### Helena Drummond -- Backend Dev
+
+- **Funcao**: dona dos endpoints de leitura e mutacao de resultados (fora do nucleo Serper quando separado).
+- **Responsabilidades**:
+  - Garantir `GET` de busca com resultados, `PATCH` de resultado, `DELETE` de busca com cascata correta.
+  - Validar regras de negocio de status (`NEW`, `CONTACTED`, etc.) no service.
+- **Entradas**: modelo Prisma, requisitos de Gustavo.
+- **Saidas**: endpoints estaveis, testes de API.
+
+### Igor Campos -- Fullstack Dev
+
+- **Funcao**: estado cliente e revalidacao apos mutacoes.
+- **Responsabilidades**:
+  - Manter `revalidatePath("/pesquisa")` e fluxos de atualizacao apos patch/delete.
+  - Garantir consistencia entre SSR inicial em `page.tsx` e interacoes no client.
+- **Entradas**: actions em `pesquisa.ts`, APIs de Helena.
+- **Saidas**: fluxos sem dados obsoletos apos acoes do usuario.
+
+---
+
+## Time Conversao & Dados (3 pessoas)
+
+**Dominio**: conversao de prospect em contato e deal, conversao em lote, origem `CampaignSource` com `code: "prospecting"`, dedupe por telefone na UI (conjunto `existingPhones`).
+
+**Caminhos principais**:
+- `menve-sales-api/src/prospecting/prospecting.service.ts` -- convert / convertBulk
+- `menve-sales-web/src/actions/pesquisa.ts` -- `prospectingConvert`, `prospectingConvertBulk`
+- `menve-sales-web/src/app/(dashboard)/pesquisa/page.tsx` -- prefetch de contatos para dedupe
+
+### Julia Fontes -- Frontend Dev
+
+- **Funcao**: fluxos de conversao na UI (selecao de pipeline, titulo, valor, feedback de duplicata).
+- **Responsabilidades**:
+  - Implementar modais ou paineis de conversao alinhados a UX.
+  - Exibir estados de sucesso, erro e duplicata de forma clara.
+
+### Kleber Santos -- Backend Dev
+
+- **Funcao**: dono das regras de conversao no backend.
+- **Responsabilidades**:
+  - Garantir criacao de `Contact` / `Deal` com UTM e campanha corretas.
+  - Tratar colisao com contato existente e respostas tipadas para o front.
+  - Coordenar mudancas de modelo com squad-contatos e squad-pipeline.
+
+### Larissa Mota -- Fullstack Dev
+
+- **Funcao**: integracao ponta a ponta da conversao.
+- **Responsabilidades**:
+  - Manter consistencia entre lista de telefones existentes no SSR e checagens no client.
+  - Testes E2E do fluxo converter e bulk convert.
+
+---
+
+## Time Qualidade & Confiabilidade (3 pessoas)
+
+**Dominio**: testes automatizados, limites e custos de APIs externas, observabilidade dos endpoints `/prospecting`, post-mortems de falhas de integracao.
+
+### Marcelo Dias -- Backend Dev
+
+- **Funcao**: resiliencia das integracoes (Serper, scraper).
+- **Responsabilidades**:
+  - Timeouts, retries onde aplicavel, degradacao controlada.
+  - Revisar impacto de mudancas em `ProspectingService` na consistencia dos dados.
+
+### Natalia Farias -- SRE / Observabilidade
+
+- **Funcao**: monitoramento da Pesquisa em producao.
+- **Responsabilidades**:
+  - Metricas e alertas para taxa de erro, latencia e quota de provedores externos.
+  - Tracing em fluxos criticos (busca -> persistencia -> resposta).
+
+### Otavio Lemos -- QA Engineer
+
+- **Funcao**: qualidade do dominio Pesquisa.
+- **Responsabilidades**:
+  - Cenarios de regressao: nova busca, load more, patch status, delete busca, convert, bulk.
+  - Matriz de testes alinhada a releases da aba.
+
+---
+
+## Protocolo operacional
+
+### Fluxo de feature (ponta a ponta)
+
+```
+Beatriz prioriza
+  -> Caio especifica UX (spec + prototipo)
+    -> Andre define arquitetura (ADR se necessario)
+      -> Time de dev implementa (branch por feature)
+        -> Code review pelo senior do time + Andre em PRs criticos
+          -> Otavio valida (testes automatizados + exploratorio)
+            -> Merge na main
+              -> Natalia monitora em producao (metricas, alertas)
+```
+
+### Escalonamento
+
+```
+Dev do time
+  -> Senior do time (Daniela, Eduardo, ou senior equivalente)
+    -> Andre (Squad Lead) -- decisao tecnica
+      -> Beatriz (EM) -- decisao organizacional / blocker externo
+        -> Outro squad -- se o problema esta fora do escopo Pesquisa
+```
+
+### Handoff entre times
+
+- PRs que cruzam fronteira de squad recebem label do squad destino.
+- Descricao do PR inclui contrato de interface (input/output tipado).
+- Senior do squad destino faz review obrigatorio.
+
+### Contexto incompleto
+
+- Dev sinaliza blocker com label `blocked` no board.
+- Beatriz aciona stakeholder em ate 4h uteis.
+- Prazo maximo de desbloqueio: 24h uteis.
+- Se nao resolvido, Beatriz escala ou reprioriza.
+
+### Definition of Done
+
+- [ ] Code review aprovado pelo senior do time.
+- [ ] Code review de Andre em PRs de alto impacto.
+- [ ] Todos os testes verdes no CI (unit + integration + E2E aplicaveis).
+- [ ] Validacao de UX por Caio quando houver mudanca de interface.
+- [ ] Deploy em preview sem regressao (quando o time usar preview).
+- [ ] Natalia confirma metricas estaveis apos deploy em producao (quando aplicavel).
+
+---
+
+## Governanca
+
+### SLA interno
+
+| Atividade              | SLA                          |
+|------------------------|------------------------------|
+| PR review              | ate 4h uteis                 |
+| Bug critico            | resposta em ate 2h           |
+| Bug nao-critico        | resolvido no sprint corrente |
+| Desbloqueio de blocker | ate 24h uteis                |
+| Post-mortem            | publicado em ate 48h         |
+
+### Metricas do squad
+
+- **Cycle time**: tempo entre inicio do dev e merge.
+- **Lead time**: tempo entre priorizacao e deploy em producao.
+- **MTTR**: tempo medio de recuperacao de incidentes.
+- **Cobertura de testes**: percentual no dominio Pesquisa.
+- **Confiabilidade das buscas**: taxa de erro e conclusao de buscas (metricas com Natalia).
+- **Web Vitals** na rota `/pesquisa`: LCP, INP, CLS quando monitorados.
+
+### Melhoria continua
+
+- Retrospectiva quinzenal facilitada por Beatriz.
+- Action items trackeados no board com responsavel e deadline.
+- Revisao trimestral de arquitetura liderada por Andre.
+- Atualizacao de playbooks apos incidentes de integracao externa.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                        | Squad responsavel | Tipo de interacao                                  |
+|------------------------------------|-------------------|----------------------------------------------------|
+| Componentes UI genericos           | design-system     | solicitar mudancas, nao alterar `src/components/ui/`|
+| Auth, sessao, tenant               | squad-auth        | consumir `auth()`, `getTenantFromRequest()`, `apiServer()` |
+| Schema global do banco (Prisma)    | squad de dados    | propor migration, review cruzado                   |
+| Pipeline, deals, estagios          | squad-pipeline    | conversao cria deal; mudancas de modelo em conjunto |
+| Contatos, campanhas                | squad-contatos    | conversao cria contato; dedupe e campanha `prospecting` |
+| Dashboard e KPIs agregados         | squad-dashboard   | blocos que leem prospecao; contrato de metricas    |
+| Settings de tenant                 | squad-settings    | configuracoes globais nao pertencem a Pesquisa     |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/
+      (dashboard)/
+        pesquisa/
+          page.tsx ........................ SSR: searches, pipelines, phones existentes
+          pesquisa-client.tsx ............. UI principal da aba Pesquisa
+      api/
+        pesquisa/ ....................... (opcional, se introduzido)
+    components/
+      pesquisa/ ......................... decomposicao futura da UI
+    lib/
+      pesquisa/ ......................... helpers do dominio (opcional)
+    actions/
+      pesquisa.ts ....................... server actions -> /prospecting/*
+
+menve-sales-api/
+  src/
+    prospecting/
+      prospecting.module.ts ............. modulo Nest
+      prospecting.controller.ts ....... rotas /prospecting
+      prospecting.service.ts ............ regras de negocio e persistencia
+      serper.ts ......................... integracao Serper
+      website-scraper.ts ................ enriquecimento de site
+      business-result-filter.ts ......... filtro de resultados
+      phone-utils.ts .................... normalizacao / util telefone
+    dashboard/
+      dashboard.service.ts .............. agregados que citam prospecting (consumo)
+
+  prisma/
+    schema.prisma ....................... ProspectSearch, ProspectResult, ProspectSource, ProspectStatus
+```
+
+## Arquitetura da Pesquisa (resumo)
+
+```mermaid
+flowchart TB
+  subgraph web [menve-sales-web]
+    page[Pesquisa page SSR]
+    client[PesquisaClient]
+    actions[pesquisa.ts actions]
+    page --> client
+    client --> actions
+  end
+
+  subgraph api [menve-sales-api]
+    ctrl[ProspectingController]
+    svc[ProspectingService]
+    serper[serper.ts]
+    scraper[website-scraper.ts]
+    actions --> ctrl
+    ctrl --> svc
+    svc --> serper
+    svc --> scraper
+  end
+
+  subgraph data [Dados]
+    prisma[(Prisma DB)]
+    svc --> prisma
+  end
+```
+
+---
