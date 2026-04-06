@@ -11,10 +11,12 @@ import {
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import type { CustomField, Pipeline, Stage } from "@prisma/client";
 import { MoreVertical, User } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { patchContact } from "@/actions/contacts";
 import { archiveDeal, deleteDeal, moveDealStage } from "@/actions/deals";
+import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { UserAvatar } from "@/components/user/user-avatar";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import { PipelineDealDetailDialog } from "./pipeline-deal-detail-dialog";
@@ -71,51 +74,39 @@ function relativeShort(iso: Date | string): string {
   return "agora";
 }
 
-function assigneeInitials(
-  user: { name: string | null; email?: string | null } | null,
-): string {
-  if (!user) return "";
-  const n = user.name?.trim();
-  if (n) {
-    const parts = n.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) {
-      const a = parts[0]![0];
-      const b = parts[parts.length - 1]![0];
-      return `${a}${b}`.toUpperCase();
-    }
-    return n.slice(0, 2).toUpperCase();
-  }
-  const e = user.email?.trim();
-  if (e) return e.slice(0, 2).toUpperCase();
-  return "";
-}
-
 function LeadAssigneeAvatar({
   assignedTo,
 }: {
   assignedTo: DealRow["assignedTo"];
 }) {
-  const label = assigneeInitials(assignedTo);
   const title =
     assignedTo?.name?.trim() ||
     assignedTo?.email?.trim() ||
     "Sem responsável";
 
-  return (
-    <span
-      title={title}
-      aria-label={assignedTo ? `Responsável: ${title}` : "Sem responsável"}
-      className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-[9px] font-semibold uppercase tracking-tight text-white dark:bg-violet-500"
-    >
-      {assignedTo ? (
-        label ? (
-          label
-        ) : (
-          <User className="size-3 text-white" strokeWidth={2} />
-        )
-      ) : (
+  if (!assignedTo) {
+    return (
+      <span
+        title="Sem responsável"
+        aria-label="Sem responsável"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-violet-600 dark:bg-violet-500"
+      >
         <User className="size-3 text-white/80" strokeWidth={2} />
-      )}
+      </span>
+    );
+  }
+
+  return (
+    <span title={title} aria-label={`Responsável: ${title}`}>
+      <UserAvatar
+        user={{
+          name: assignedTo.name,
+          email: assignedTo.email ?? "",
+          image: assignedTo.image,
+        }}
+        size="sm"
+        className="size-6 text-[9px] font-semibold uppercase tracking-tight"
+      />
     </span>
   );
 }
@@ -315,7 +306,7 @@ function DealCard({
       tabIndex={0}
       aria-label={`Lead ${deal.contact.name}. Arraste para mover de etapa ou clique para abrir.`}
       className={cn(
-        "group w-full touch-none overflow-hidden rounded-md border border-border/60 bg-card font-sans shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "group w-full shrink-0 touch-none overflow-hidden rounded-md border border-border/60 bg-card font-sans shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isDragging
           ? "cursor-grabbing z-10 shadow-md ring-1 ring-foreground/15"
           : "cursor-grab active:cursor-grabbing",
@@ -450,8 +441,18 @@ function DealCard({
         ) : null}
         <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-normal leading-none text-muted-foreground">
           <span className="min-w-0 truncate">{originLine ?? "—"}</span>
-          <span className="shrink-0 tabular-nums" title="Atualizado">
-            {relativeShort(deal.updatedAt)}
+          <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+            <Link
+              href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="flex size-6 items-center justify-center rounded-md text-emerald-600 outline-none transition-colors hover:bg-emerald-600/10 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-emerald-500 dark:hover:text-emerald-400"
+              title="Abrir conversa no Inbox"
+              aria-label={`WhatsApp: abrir conversa com ${deal.contact.name} no Inbox`}
+            >
+              <WhatsAppLogo className="size-3.5" />
+            </Link>
+            <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
           </span>
         </div>
       </div>
@@ -484,12 +485,12 @@ function StageColumn({
       ref={setNodeRef}
       style={columnSurfaceStyle(accent)}
       className={cn(
-        "flex w-[min(100vw-2rem,20rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/35",
+        "flex h-full min-h-0 w-[min(100vw-2rem,20rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/35",
         isOver &&
           "ring-2 ring-foreground/12 ring-offset-2 ring-offset-background",
       )}
     >
-      <div className="px-3 pb-2 pt-3">
+      <div className="shrink-0 px-3 pb-2 pt-3">
         <div className="flex items-center justify-between gap-2">
           <span
             className="inline-block max-w-[min(100%,11rem)] truncate rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide"
@@ -511,22 +512,31 @@ function StageColumn({
         </div>
       </div>
 
-      <div className="flex min-h-[min(420px,50vh)] flex-1 flex-col gap-2 px-3 pb-3 pt-0">
-        {deals.length === 0 ? (
-          <p className="py-6 text-center text-[13px] text-muted-foreground">
-            Arraste leads aqui
-          </p>
-        ) : (
-          deals.map((d) => (
-            <DealCard key={d.id} deal={d} onOpenDetail={onOpenDetail} />
-          ))
-        )}
-        <PipelineNewDeal
-          pipeline={pipeline}
-          contacts={contacts}
-          defaultStageId={stage.id}
-          variant="column"
-        />
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-0">
+        <div
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
+          aria-label={`Leads na etapa ${stage.name}`}
+        >
+          {deals.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-muted-foreground">
+              Arraste leads aqui
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2 pb-1">
+              {deals.map((d) => (
+                <DealCard key={d.id} deal={d} onOpenDetail={onOpenDetail} />
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 pt-2">
+          <PipelineNewDeal
+            pipeline={pipeline}
+            contacts={contacts}
+            defaultStageId={stage.id}
+            variant="column"
+          />
+        </div>
       </div>
     </div>
   );
