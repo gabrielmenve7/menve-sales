@@ -28,7 +28,7 @@ export default async function DashboardLayout({
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden bg-background">
       <div className="flex h-full w-[13.5rem] shrink-0 flex-col border-r border-border/40 bg-sidebar dark:border-border/30">
-        <div className="shrink-0 border-b border-border/40 px-2 pb-3 pt-3 dark:border-border/30">
+        <div className="shrink-0 border-b border-border/40 px-2 pb-3 pt-10 md:pt-11 dark:border-border/30">
           <WorkspaceSwitcher tenant={tenantForShell} className="w-full" />
         </div>
         <Sidebar

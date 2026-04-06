@@ -58,7 +58,7 @@ export function PipelineView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col space-y-6">
-      <header className="shrink-0 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+      <header className="shrink-0 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
         <div className="min-w-0 flex-1 space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <DropdownMenu>
