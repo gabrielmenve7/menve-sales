@@ -15,6 +15,7 @@ import {
   Tag as TagIcon,
   Bell,
   ClipboardList,
+  UserCircle,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SettingsCampos } from "./settings-campos";
@@ -23,6 +24,7 @@ import { SettingsChannels } from "./settings-channels";
 import { SettingsMembers } from "./settings-members";
 import { SettingsTagsCatalog } from "./settings-tags-catalog";
 import { SettingsNotifications } from "./settings-notifications";
+import { SettingsProfile } from "./settings-profile";
 
 type TenantInfo = {
   id: string;
@@ -35,6 +37,7 @@ type Member = { id: string; name: string | null; email: string; role: string };
 
 const SETTINGS_TABS = [
   "general",
+  "perfil",
   "campos",
   "channels",
   "members",
@@ -48,6 +51,7 @@ export function SettingsClient({
   tenant,
   canManageWorkspace,
   defaultTab = "general",
+  profile,
   connections,
   quickReplies,
   webhookBaseUrl,
@@ -60,6 +64,7 @@ export function SettingsClient({
   tenant: TenantInfo;
   canManageWorkspace: boolean;
   defaultTab?: SettingsTabId;
+  profile: { name: string | null; email: string; image: string | null };
   connections: WhatsAppConnection[];
   quickReplies: QuickReply[];
   webhookBaseUrl: string;
@@ -79,6 +84,9 @@ export function SettingsClient({
       <TabsList>
         <TabsTrigger value="general">
           <Settings2 className="size-3.5" /> Geral
+        </TabsTrigger>
+        <TabsTrigger value="perfil">
+          <UserCircle className="size-3.5" /> Perfil
         </TabsTrigger>
         <TabsTrigger value="campos">
           <ClipboardList className="size-3.5" /> Campos
@@ -102,6 +110,14 @@ export function SettingsClient({
           tenant={tenant}
           canManageWorkspace={canManageWorkspace}
           pipelines={pipelines}
+        />
+      </TabsContent>
+
+      <TabsContent value="perfil">
+        <SettingsProfile
+          initialName={profile.name}
+          initialEmail={profile.email}
+          initialImage={profile.image}
         />
       </TabsContent>
 

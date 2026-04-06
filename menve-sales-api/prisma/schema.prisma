@@ -119,6 +119,8 @@ model User {
   email        String   @unique
   passwordHash String?
   name         String?
+  /// Foto de perfil: URL https ou data URL (imagem).
+  image        String?  @db.Text
   role         UserRole @default(SELLER)
   tenantId     String?
   tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)

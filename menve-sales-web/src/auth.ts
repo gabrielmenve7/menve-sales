@@ -57,6 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             id: string;
             email: string;
             name: string | null;
+            image?: string | null;
             role: UserRole;
             tenantId: string | null;
           };
@@ -67,6 +68,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: data.user.id,
           email: data.user.email,
           name: data.user.name,
+          image: data.user.image ?? undefined,
           role: data.user.role,
           tenantId: data.user.tenantId,
           accessToken: data.accessToken,
@@ -75,11 +77,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.role = (user as { role: UserRole }).role;
         token.tenantId = (user as { tenantId: string | null }).tenantId;
         token.accessToken = (user as { accessToken?: string }).accessToken;
+        token.name = user.name ?? undefined;
+        token.email = user.email ?? undefined;
+        token.picture =
+          typeof (user as { image?: string | null }).image === "string"
+            ? ((user as { image?: string | null }).image ?? undefined)
+            : undefined;
+      }
+      if (trigger === "update") {
+        const s = session as
+          | { user?: { name?: string | null; image?: string | null } }
+          | undefined;
+        if (s?.user?.name !== undefined) {
+          token.name = s.user.name ?? undefined;
+        }
+        if (s?.user?.image !== undefined) {
+          token.picture = s.user.image ?? undefined;
+        }
       }
       if (token.sub && token.accessToken) {
         const roleMissing =
@@ -101,9 +120,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               const u = (await r.json()) as {
                 role: UserRole;
                 tenantId: string | null;
+                name?: string | null;
+                image?: string | null;
               };
               token.role = u.role;
               token.tenantId = u.tenantId;
+              if (u.name !== undefined) token.name = u.name ?? undefined;
+              if (u.image !== undefined) {
+                token.picture = u.image ?? undefined;
+              }
             }
           } catch {
             /* keep token as-is */
@@ -117,6 +142,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.sub!;
         session.user.role = token.role as UserRole;
         session.user.tenantId = token.tenantId as string | null;
+        if (token.name !== undefined) {
+          session.user.name = token.name as string | null;
+        }
+        session.user.image =
+          typeof token.picture === "string" && token.picture !== ""
+            ? token.picture
+            : null;
       }
       return session;
     },

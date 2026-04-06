@@ -1,5 +1,5 @@
 import { type DefaultSession } from "next-auth";
-import type { UserRole } from "@prisma/client";
+import type { UserRole } from "@/types/domain";
 
 declare module "next-auth" {
   interface Session {
@@ -13,6 +13,8 @@ declare module "next-auth" {
   interface User {
     role: UserRole;
     tenantId: string | null;
+    accessToken?: string;
+    image?: string | null;
   }
 }
 
@@ -20,5 +22,9 @@ declare module "next-auth/jwt" {
   interface JWT {
     role: UserRole;
     tenantId: string | null;
+    accessToken?: string;
+    name?: string | null;
+    email?: string | null;
+    picture?: string | null;
   }
 }

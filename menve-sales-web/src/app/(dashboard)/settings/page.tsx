@@ -1,4 +1,5 @@
 import type { CustomField } from "@prisma/client";
+import { auth } from "@/auth";
 import { apiServer } from "@/lib/api-server";
 import { canManageWorkspaceFeatures } from "@/lib/session";
 import { SettingsClient } from "./settings-client";
@@ -21,6 +22,7 @@ type SettingsBundle = {
 
 const SETTINGS_TABS = [
   "general",
+  "perfil",
   "campos",
   "channels",
   "members",
@@ -38,13 +40,15 @@ export default async function SettingsPage({
     ? (tabParam as (typeof SETTINGS_TABS)[number])
     : "general";
 
-  const [data, dealCustomFieldsRaw, canManageWorkspace] = await Promise.all([
-    apiServer<SettingsBundle>("/settings"),
-    apiServer<unknown>("/custom-fields?entity=DEAL")
-      .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
-      .catch(() => [] as CustomField[]),
-    canManageWorkspaceFeatures(),
-  ]);
+  const [data, dealCustomFieldsRaw, canManageWorkspace, session] =
+    await Promise.all([
+      apiServer<SettingsBundle>("/settings"),
+      apiServer<unknown>("/custom-fields?entity=DEAL")
+        .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
+        .catch(() => [] as CustomField[]),
+      canManageWorkspaceFeatures(),
+      auth(),
+    ]);
 
   const webhookBaseUrl =
     process.env.WEBHOOK_PUBLIC_URL?.replace(/\/$/, "") ||
@@ -64,6 +68,11 @@ export default async function SettingsPage({
         tenant={data.tenant as never}
         canManageWorkspace={canManageWorkspace}
         defaultTab={defaultTab}
+        profile={{
+          name: session?.user?.name ?? null,
+          email: session?.user?.email ?? "",
+          image: session?.user?.image ?? null,
+        }}
         connections={data.whatsAppConnections as never}
         quickReplies={data.quickReplies as never}
         webhookBaseUrl={webhookBaseUrl}
