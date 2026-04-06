@@ -48,6 +48,13 @@ enum MessageDirection {
   OUTBOUND
 }
 
+/// Confirmações de envio (estilo WhatsApp): enviada → entregue → lida.
+enum MessageAckStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
 enum CustomFieldEntity {
   CONTACT
   DEAL
@@ -88,6 +95,7 @@ model Tenant {
   quickReplies        QuickReply[]
   prospectSearches    ProspectSearch[]
   prospectResults     ProspectResult[]
+  dashboardBoards     DashboardBoard[]
 }
 
 model QuickReply {
@@ -119,6 +127,21 @@ model User {
   conversations    Conversation[] @relation("AssignedConversations")
   internalNotes    InternalNote[]
   prospectSearches ProspectSearch[] @relation("ProspectSearches")
+  dashboardBoards  DashboardBoard[]
+}
+
+model DashboardBoard {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  layoutJson Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId, userId])
 }
 
 model Contact {
@@ -401,6 +424,8 @@ model Message {
   mediaUrl             String?
   mediaType            String?
   externalId           String?
+  /// Somente OUTBOUND; inbound permanece null.
+  ackStatus            MessageAckStatus?
   createdAt            DateTime           @default(now())
 
   @@index([tenantId, contactId, createdAt])

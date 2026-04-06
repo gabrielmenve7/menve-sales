@@ -1,0 +1,229 @@
+---
+description: Squad DASHBOARD - time de engenharia dedicado a pagina inicial do Menve Sales
+globs:
+  - menve-sales-web/src/app/(dashboard)/dashboard/**
+  - menve-sales-web/src/components/dashboard/**
+  - menve-sales-web/src/actions/dashboard-boards.ts
+  - menve-sales-web/src/actions/dashboard-widgets.ts
+  - menve-sales-web/src/lib/chart-colors.ts
+  - menve-sales-web/src/lib/dashboard-builder-types.ts
+  - menve-sales-api/src/dashboard/**
+alwaysApply: false
+---
+
+# Squad DASHBOARD
+
+## Identidade
+
+- **Squad**: squad-dashboard
+- **Dominio**: Dashboard (pagina inicial com KPIs, graficos e visao geral do CRM)
+- **Missao**: construir, evoluir e manter a experiencia de dashboard do Menve Sales -- KPIs em tempo real, graficos de evolucao, metricas de pipeline, contatos e atividades -- garantindo carregamento rapido, dados precisos e experiencia visual agradavel.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/dashboard/` -- pagina SSR do dashboard (painéis personalizados)
+- `menve-sales-web/src/components/dashboard/dashboard-builder-client.tsx` -- construtor de painéis (grade + cartões)
+- `menve-sales-web/src/components/dashboard/dashboard-widget-*.tsx` -- render e config de cartões
+- `menve-sales-web/src/components/dashboard/dashboard-kpi-card.tsx` -- card de KPI (legado / reuso)
+- `menve-sales-web/src/components/dashboard/dashboard-home-charts.tsx` -- graficos Recharts (legado / reuso)
+- `menve-sales-web/src/actions/dashboard-boards.ts` / `dashboard-widgets.ts` -- server actions para API interna
+- `menve-sales-web/src/lib/chart-colors.ts` -- tokens de cor para graficos
+- `menve-sales-web/src/lib/dashboard-builder-types.ts` -- tipos do layout JSON (alinhado à API)
+- `menve-sales-api/src/dashboard/` -- stats, painéis (`DashboardBoard`), consultas de widgets (`DashboardQueryService`)
+
+### Fora de escopo
+
+- Sidebar (`components/dashboard/sidebar.tsx`) -- compartilhado entre todos os squads, pertence ao design-system
+- Logica de pipeline, deals, contatos -- apenas consome agregacoes via API
+- Auth, sessao, tenant -- consumir helpers, nao alterar
+- Layout compartilhado (`(dashboard)/layout.tsx`, `loading.tsx`, `error.tsx`)
+
+---
+
+## Organograma
+
+```
+squad-dashboard (6 pessoas)
+|
+|-- LIDERANCA (2)
+|   |-- Felipe Andrade ............ Squad Lead / Tech Lead
+|   |-- Beatriz Lopes ............. Product Designer
+|
+|-- TIME CORE (4)
+|   |-- Renato Silva .............. Senior Frontend Dev
+|   |-- Patricia Gomes ............ Backend Dev
+|   |-- Henrique Tavares .......... Fullstack Dev
+|   |-- Larissa Mendonca .......... QA Engineer
+```
+
+---
+
+## Lideranca (2 pessoas)
+
+### Felipe Andrade -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura tecnica do dashboard e qualidade de codigo.
+- **Responsabilidades**:
+  - Definir arquitetura de data fetching (SSR via apiServer, cache strategy).
+  - Aprovar RFCs e fazer code review final em PRs de alto impacto.
+  - Garantir performance de carregamento (LCP <2s).
+  - Ser interface com squads que fornecem dados (pipeline, contatos).
+- **Entradas**: requisitos priorizados, specs de UX de Beatriz, metricas de performance.
+- **Saidas**: ADRs, diretrizes de implementacao, pareceres em PRs.
+
+### Beatriz Lopes -- Product Designer
+
+- **Funcao**: dona da experiencia visual do dashboard.
+- **Responsabilidades**:
+  - Projetar layouts de KPI cards e graficos.
+  - Definir paleta de cores para graficos (`chart-colors.ts`).
+  - Especificar estados (loading, empty, error) para cada componente.
+  - Conduzir testes de usabilidade e incorporar feedback.
+- **Entradas**: requisitos de produto, dados de analytics.
+- **Saidas**: prototipos, design tokens, criterios de aceitacao visual.
+
+---
+
+## Time Core (4 pessoas)
+
+### Renato Silva -- Senior Frontend Dev
+
+- **Funcao**: lider de frontend do dashboard.
+- **Responsabilidades**:
+  - Manter e evoluir `dashboard-home-charts.tsx` (Recharts: line, bar, pie).
+  - Otimizar `dashboard-kpi-card.tsx` para responsividade e acessibilidade.
+  - Implementar skeleton loading e transicoes suaves.
+  - Garantir graficos responsivos em mobile e desktop.
+- **Criterios de qualidade**:
+  - Graficos renderizam sem jank (<16ms por frame).
+  - Acessibilidade WCAG AA nos KPI cards.
+
+### Patricia Gomes -- Backend Dev
+
+- **Funcao**: dona do endpoint de stats do dashboard.
+- **Responsabilidades**:
+  - Manter `DashboardService.stats()` -- agregacoes Prisma paralelas.
+  - Otimizar queries (indices, agrupamentos) para performance em escala.
+  - Expandir stats com novas metricas conforme demanda de produto.
+  - Manter `DashboardController` e modulo NestJS.
+- **Criterios de qualidade**:
+  - Latencia p95 do endpoint `GET /dashboard/stats` <300ms.
+  - Queries paralelas com `Promise.all` para minimizar tempo total.
+
+### Henrique Tavares -- Fullstack Dev
+
+- **Funcao**: integracao SSR e revalidacao de dados.
+- **Responsabilidades**:
+  - Manter `dashboard/page.tsx` (server component, fetch via apiServer).
+  - Garantir revalidacao correta via `revalidatePath("/dashboard")` nos server actions.
+  - Implementar cache strategy para dados do dashboard.
+  - Criar novos KPI cards conforme necessidade.
+- **Criterios de qualidade**:
+  - Dados sempre frescos apos mutacoes em atividades, deals ou contatos.
+  - Zero erro de hidratacao entre SSR e client.
+
+### Larissa Mendonca -- QA Engineer
+
+- **Funcao**: qualidade de software do dashboard.
+- **Responsabilidades**:
+  - Testes E2E para carregamento do dashboard.
+  - Validar graficos com datasets variados (vazio, poucos dados, muitos dados).
+  - Testes cross-browser e mobile.
+- **Criterios de qualidade**:
+  - Dashboard carrega sem erro em todos os cenarios.
+  - Graficos exibem corretamente com 0, 1 e 10k+ registros.
+
+---
+
+## Protocolo operacional
+
+### Fluxo de feature
+
+```
+Produto prioriza
+  -> Beatriz especifica UX (layout + cores)
+    -> Felipe define arquitetura
+      -> Time implementa (branch por feature)
+        -> Code review por Felipe
+          -> Larissa valida
+            -> Merge na main
+```
+
+### Definition of Done
+
+- [ ] Code review aprovado por Felipe.
+- [ ] Testes verdes no CI.
+- [ ] Validacao de UX por Beatriz.
+- [ ] Performance: LCP <2s, endpoint <300ms.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                          |
+|-----------------------------|-------------------|--------------------------------------------|
+| Dados de pipeline/deals     | squad-pipeline    | consumir via `GET /dashboard/stats`        |
+| Dados de contatos           | squad-contatos    | consumir via agregacao Prisma              |
+| Auth, sessao, tenant        | squad-auth        | consumir `auth()`, `apiServer()`           |
+| Componentes UI genericos    | design-system     | solicitar mudancas em `src/components/ui/`  |
+| Revalidacao apos mutacoes   | todos os squads   | `revalidatePath("/dashboard")` nas actions |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/(dashboard)/
+      dashboard/
+        page.tsx ........................ SSR: GET /dashboard/boards + /pipelines
+    actions/
+      dashboard-boards.ts ............. CRUD painéis (server actions)
+      dashboard-widgets.ts ............ query / query-bulk de cartões
+    components/
+      dashboard/
+        sidebar.tsx ..................... navegacao compartilhada (fora do escopo)
+        dashboard-builder-client.tsx .. painéis em abas + grade (react-grid-layout/legacy)
+        dashboard-widget-renderer.tsx . metric / bar / pie / donut
+        dashboard-widget-config-dialog.tsx
+        dashboard-kpi-card.tsx .......... legado
+        dashboard-home-charts.tsx ....... legado
+    lib/
+      chart-colors.ts ................... paleta CHART e CHART_BAR_SEQUENCE
+      dashboard-builder-types.ts ........ tipos layout JSON + WidgetQuerySpec
+
+menve-sales-api/
+  prisma/
+    schema.prisma ..................... model DashboardBoard (layoutJson)
+  src/
+    dashboard/
+      dashboard.controller.ts ......... stats + boards + widgets/query
+      dashboard.service.ts ............ DashboardService.stats (legado agregado)
+      dashboard-boards.service.ts ..... CRUD painéis por tenant + user
+      dashboard-query.service.ts ...... agregações parametrizadas (whitelist)
+      dashboard-layout.zod.ts / dashboard-widget-spec.zod.ts
+      dashboard.module.ts
+```
+
+## Arquitetura do Dashboard (resumo)
+
+```
+[Browser]
+  |
+  |-- dashboard/page.tsx (SSR)
+  |     |-- apiServer("/dashboard/boards") + apiServer("/pipelines")
+  |     |-- DashboardBuilderClient (client)
+  |           |-- react-grid-layout/legacy (posição e tamanho dos cartões)
+  |           |-- server actions: update board layoutJson, widgets/query-bulk
+  |
+  |-- NestJS API
+        |-- GET /dashboard/stats .......... visão agregada legada (ainda disponível)
+        |-- GET/POST/PATCH/DELETE /dashboard/boards...
+        |-- POST /dashboard/widgets/query e .../query-bulk
+        |-- Prisma: Deal count / sum / groupBy conforme WidgetQuerySpec validado
+```
+
+---
