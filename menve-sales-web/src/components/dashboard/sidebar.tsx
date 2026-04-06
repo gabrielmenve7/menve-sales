@@ -14,6 +14,18 @@ import {
 import { cn } from "@/lib/utils";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+function userInitial(
+  name: string | null | undefined,
+  email: string | null | undefined,
+) {
+  const n = (name ?? "").trim();
+  if (n) return n.slice(0, 1).toUpperCase();
+  const e = (email ?? "").trim();
+  if (e) return e.slice(0, 1).toUpperCase();
+  return "?";
+}
 
 const allNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -27,13 +39,22 @@ const allNavItems = [
 export function Sidebar({
   isSuperAdmin,
   userName,
+  userEmail,
+  userImage,
   researchEnabled = true,
 }: {
   isSuperAdmin: boolean;
   userName?: string | null;
+  userEmail?: string | null;
+  userImage?: string | null;
   researchEnabled?: boolean;
 }) {
   const pathname = usePathname();
+  const nameTrim = (userName ?? "").trim();
+  const emailTrim = (userEmail ?? "").trim();
+  const displayName = nameTrim || emailTrim || "Usuário";
+  const subEmail = nameTrim && emailTrim ? emailTrim : null;
+
   const items = researchEnabled
     ? allNavItems
     : allNavItems.filter((i) => i.href !== "/pesquisa");
@@ -71,15 +92,48 @@ export function Sidebar({
           </Link>
         ) : null}
       </nav>
-      <div className="shrink-0">
-        <div
-          className="mx-3 h-px shrink-0 bg-foreground/[0.08] dark:bg-white/[0.12]"
-          aria-hidden
-        />
-        <div className="p-3">
-          <p className="mb-2.5 truncate px-0.5 text-[11px] text-muted-foreground">
-            {userName ?? "Usuário"}
-          </p>
+      <div className="shrink-0 border-t border-border/40 dark:border-border/30">
+        <div className="space-y-3 p-3">
+          <div className="flex gap-2.5">
+            <div
+              className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/60 bg-muted/50 text-[14px] font-semibold text-foreground dark:border-border/50"
+              aria-hidden={!!userImage}
+            >
+              {userImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={userImage}
+                  alt={displayName}
+                  className="size-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span aria-hidden>
+                  {userInitial(userName, userEmail)}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="truncate text-[13px] font-medium leading-tight text-foreground">
+                {displayName}
+              </p>
+              {subEmail ? (
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {subEmail}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="px-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Aparência
+            </p>
+            <div className="flex justify-center">
+              <ThemeToggle />
+            </div>
+          </div>
+
           <Button
             variant="ghost"
             className="h-8 w-full text-[13px] text-muted-foreground hover:text-foreground"
