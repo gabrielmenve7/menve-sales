@@ -35,7 +35,7 @@ export default async function PipelinePage({
 
   if (pipelines.length === 0) {
     return (
-      <div className="p-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
         <p className="text-sm text-muted-foreground">
           Nenhum pipeline configurado. Crie um funil em Configurações.
         </p>
@@ -59,7 +59,7 @@ export default async function PipelinePage({
   ]);
 
   return (
-    <div className="flex min-h-[calc(100dvh-3rem)] flex-col p-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
       <PipelineView
         pipelines={pipelines as never}
         activePipeline={activePipeline as never}

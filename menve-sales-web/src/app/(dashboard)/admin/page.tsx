@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { apiServer } from "@/lib/api-server";
 import { canAccessAdmin } from "@/lib/session";
 import { redirect } from "next/navigation";
 import {
@@ -9,40 +9,27 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+type TenantStat = { openDeals: number; wonDeals: number; lostDeals: number };
+
+type AdminPayload = {
+  tenants: {
+    id: string;
+    name: string;
+    slug: string;
+    plan: string;
+    _count: { contacts: number; deals: number; users: number };
+  }[];
+  statMap: Record<string, TenantStat>;
+};
+
 export default async function AdminPage() {
   const ok = await canAccessAdmin();
   if (!ok) redirect("/dashboard");
 
-  const tenants = await prisma.tenant.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      _count: {
-        select: { contacts: true, deals: true, users: true },
-      },
-    },
-  });
-
-  const tenantStats = await Promise.all(
-    tenants.map(async (t) => {
-      const [openDeals, wonDeals, lostDeals] = await Promise.all([
-        prisma.deal.count({
-          where: { tenantId: t.id, status: "OPEN" },
-        }),
-        prisma.deal.count({
-          where: { tenantId: t.id, status: "WON" },
-        }),
-        prisma.deal.count({
-          where: { tenantId: t.id, status: "LOST" },
-        }),
-      ]);
-      return { tenantId: t.id, openDeals, wonDeals, lostDeals };
-    }),
-  );
-
-  const statMap = new Map(tenantStats.map((s) => [s.tenantId, s]));
+  const { tenants, statMap } = await apiServer<AdminPayload>("/admin/tenants");
 
   return (
-    <div className="p-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Admin Menve</h1>
         <p className="text-muted-foreground">
@@ -51,7 +38,7 @@ export default async function AdminPage() {
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {tenants.map((t) => {
-          const s = statMap.get(t.id);
+          const s = statMap[t.id];
           return (
             <Card key={t.id}>
               <CardHeader>

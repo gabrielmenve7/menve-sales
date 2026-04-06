@@ -60,7 +60,7 @@ export function InboxClient({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
+    <div className="flex h-full min-h-0 flex-1 overflow-hidden">
       {/* Conversation list */}
       <div className="flex h-full min-h-0 w-[280px] shrink-0 flex-col overflow-hidden lg:w-[320px]">
         <ConversationList

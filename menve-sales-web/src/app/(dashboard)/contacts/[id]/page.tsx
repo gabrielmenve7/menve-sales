@@ -1,4 +1,5 @@
 import { apiServer } from "@/lib/api-server";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -40,8 +41,14 @@ export default async function ContactDetailPage({
   const { id } = await params;
 
   let bundle: ContactBundle;
+  let tenantMembers: TenantMemberOption[] = [];
   try {
-    bundle = await apiServer<ContactBundle>(`/contacts/${id}`);
+    [bundle, tenantMembers] = await Promise.all([
+      apiServer<ContactBundle>(`/contacts/${id}`),
+      apiServer<TenantMemberOption[]>("/settings/members").catch(
+        () => [] as TenantMemberOption[],
+      ),
+    ]);
   } catch {
     notFound();
   }
@@ -50,7 +57,7 @@ export default async function ContactDetailPage({
   const photoUrl = getContactPhotoUrl(contact.customData);
 
   return (
-    <div className="p-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <Button variant="ghost" className="mb-2 h-8 px-0" asChild>
@@ -84,6 +91,7 @@ export default async function ContactDetailPage({
         messages={messages as never}
         allTags={allTags as never}
         customFields={customFields as never}
+        tenantMembers={tenantMembers}
       />
     </div>
   );
