@@ -1,16 +1,39 @@
 "use client";
 
 import type { QuickReply } from "@prisma/client";
-import { FileText, Send } from "lucide-react";
-import { useRef, useEffect, useState } from "react";
+import { FileText, Loader2, Mic, Paperclip, Send } from "lucide-react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { addConversationNote } from "@/actions/conversation-notes";
-import { sendWhatsAppMessage } from "@/actions/messages";
+import {
+  sendWhatsAppMediaMessage,
+  sendWhatsAppMessage,
+} from "@/actions/messages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { InboxConversation } from "./inbox-types";
 import { getContactPhotoUrl, initials } from "./inbox-utils";
 import { MessageBubble } from "./message-bubble";
+
+function readFileAsDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("Leitura do arquivo falhou"));
+    r.readAsDataURL(file);
+  });
+}
+
+function attachmentKind(file: File): "image" | "document" | null {
+  if (file.type.startsWith("image/")) return "image";
+  if (
+    file.type === "application/pdf" ||
+    file.name.toLowerCase().endsWith(".pdf")
+  ) {
+    return "document";
+  }
+  return null;
+}
 
 export function ChatPanel({
   conversation,
@@ -26,6 +49,12 @@ export function ChatPanel({
   const [noteLoading, setNoteLoading] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -35,11 +64,122 @@ export function ChatPanel({
 
   const photo = getContactPhotoUrl(conversation.contact);
   const conn = conversation.whatsappConnection;
+  const phone = conversation.contact.phone;
+
+  const sendMedia = useCallback(
+    async (args: {
+      mediaKind: "audio" | "image" | "document";
+      mediaDataUrl: string;
+      fileName?: string;
+      caption?: string;
+    }) => {
+      if (!conn?.isActive || !phone) return;
+      setMediaError(null);
+      setMediaBusy(true);
+      try {
+        await sendWhatsAppMediaMessage({
+          conversationId: conversation.id,
+          connectionId: conn.id,
+          toPhone: phone,
+          ...args,
+        });
+        onRefetch();
+      } catch (e) {
+        setMediaError(
+          e instanceof Error ? e.message : "Falha ao enviar mídia",
+        );
+      } finally {
+        setMediaBusy(false);
+      }
+    },
+    [conn, phone, conversation.id, onRefetch],
+  );
+
+  useEffect(() => {
+    return () => {
+      try {
+        recorderRef.current?.stop();
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
+
+  async function onAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !phone) return;
+    const kind = attachmentKind(file);
+    if (!kind) {
+      setMediaError("Envie uma imagem ou um PDF.");
+      return;
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    await sendMedia({
+      mediaKind: kind,
+      mediaDataUrl: dataUrl,
+      fileName: file.name,
+    });
+  }
+
+  async function toggleRecording() {
+    if (!conn?.isActive || !phone || mediaBusy) return;
+    if (isRecording) {
+      recorderRef.current?.stop();
+      return;
+    }
+    setMediaError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      const mime =
+        typeof MediaRecorder !== "undefined" &&
+        MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : MediaRecorder.isTypeSupported("audio/webm")
+            ? "audio/webm"
+            : "";
+      const mr = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (ev) => {
+        if (ev.data.size) chunksRef.current.push(ev.data);
+      };
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setIsRecording(false);
+        void (async () => {
+          const blob = new Blob(chunksRef.current, {
+            type: mr.mimeType || "audio/webm",
+          });
+          chunksRef.current = [];
+          if (blob.size < 256) {
+            setMediaError("Áudio muito curto.");
+            return;
+          }
+          const dataUrl = await readFileAsDataUrl(
+            new File([blob], "gravacao.webm", { type: blob.type }),
+          );
+          await sendMedia({
+            mediaKind: "audio",
+            mediaDataUrl: dataUrl,
+            fileName: "gravacao.webm",
+          });
+        })();
+      };
+      recorderRef.current = mr;
+      mr.start(250);
+      setIsRecording(true);
+    } catch {
+      setMediaError("Microfone negado ou indisponível.");
+    }
+  }
 
   async function onSend(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim() || !conn) return;
-    const phone = conversation.contact.phone;
     if (!phone) return;
     await sendWhatsAppMessage({
       conversationId: conversation.id,
@@ -199,14 +339,54 @@ export function ChatPanel({
                 </div>
               </div>
             ) : null}
+            {mediaError ? (
+              <p className="px-3 pb-0 text-xs text-destructive">{mediaError}</p>
+            ) : null}
             <form
               onSubmit={onSend}
               className={cn(
-                "flex items-center gap-2 p-3",
+                "flex items-center gap-1.5 p-3",
                 quickReplies.length > 0 &&
                   "border-t border-border/15 dark:border-border/25",
               )}
             >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf,application/pdf"
+                className="hidden"
+                tabIndex={-1}
+                onChange={(e) => void onAttachmentChange(e)}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9 shrink-0"
+                disabled={!conn?.isActive || mediaBusy}
+                title="Anexar imagem ou PDF"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={isRecording ? "destructive" : "ghost"}
+                size="icon"
+                className="size-9 shrink-0"
+                disabled={!conn?.isActive || mediaBusy}
+                title={
+                  isRecording ? "Parar e enviar áudio" : "Gravar áudio"
+                }
+                aria-pressed={isRecording}
+                onClick={() => void toggleRecording()}
+              >
+                {mediaBusy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Mic className="size-4" />
+                )}
+              </Button>
               <Input
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -215,14 +395,14 @@ export function ChatPanel({
                     ? "Digite uma mensagem…"
                     : "Conecte o canal para enviar"
                 }
-                disabled={!conn?.isActive}
-                className="h-9 text-sm"
+                disabled={!conn?.isActive || mediaBusy}
+                className="h-9 min-w-0 flex-1 text-sm"
               />
               <Button
                 type="submit"
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || !text.trim()}
+                disabled={!conn?.isActive || !text.trim() || mediaBusy}
               >
                 <Send className="size-4" />
               </Button>
