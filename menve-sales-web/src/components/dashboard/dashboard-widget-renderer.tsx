@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -14,9 +15,12 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CHART_BAR_SEQUENCE } from "@/lib/chart-colors";
-import type {
-  LayoutWidget,
-  WidgetDataResult,
+import {
+  customFieldByKey,
+  formatDashboardScalar,
+  type DealCustomFieldDef,
+  type LayoutWidget,
+  type WidgetDataResult,
 } from "@/lib/dashboard-builder-types";
 
 function formatDayLabel(iso: string) {
@@ -29,12 +33,18 @@ export function DashboardWidgetRenderer({
   data,
   loading,
   error,
+  dealCustomFields,
 }: {
   widget: LayoutWidget;
   data: WidgetDataResult | null;
   loading: boolean;
   error: string | null;
+  dealCustomFields: DealCustomFieldDef[];
 }) {
+  const cfMap = useMemo(
+    () => customFieldByKey(dealCustomFields),
+    [dealCustomFields],
+  );
   const title =
     widget.title ||
     (widget.type === "METRIC"
@@ -98,13 +108,13 @@ export function DashboardWidgetRenderer({
         </CardHeader>
         <CardContent className="flex flex-1 flex-col items-center justify-center pb-4 pt-1">
           <p className="text-3xl font-semibold tabular-nums tracking-tight">
-            {widget.querySpec.measure === "SUM_VALUE"
-              ? data.value.toLocaleString("pt-BR", {
-                  style: "currency",
-                  currency: "BRL",
-                  maximumFractionDigits: 0,
-                })
-              : data.value.toLocaleString("pt-BR")}
+            {formatDashboardScalar(
+              widget.querySpec,
+              data.value,
+              widget.querySpec.customFieldKey
+                ? cfMap.get(widget.querySpec.customFieldKey) ?? null
+                : null,
+            )}
           </p>
         </CardContent>
       </Card>

@@ -43,9 +43,11 @@ import { DashboardWidgetConfigDialog, widgetTypeLabel } from "@/components/dashb
 import { DashboardWidgetRenderer } from "@/components/dashboard/dashboard-widget-renderer";
 import type {
   DashboardBoardDto,
+  DealCustomFieldDef,
   LayoutJson,
   LayoutWidget,
   PipelineListItem,
+  TagListItem,
   WidgetDataResult,
   WidgetType,
 } from "@/lib/dashboard-builder-types";
@@ -81,9 +83,13 @@ function nextGrid(widgets: LayoutWidget[], type: WidgetType) {
 export function DashboardBuilderClient({
   initialBoards,
   initialPipelines,
+  initialTags,
+  initialDealCustomFields,
 }: {
   initialBoards: DashboardBoardDto[];
   initialPipelines: PipelineListItem[];
+  initialTags: TagListItem[];
+  initialDealCustomFields: DealCustomFieldDef[];
 }) {
   const [boards, setBoards] = useState<BoardVm[]>(() =>
     initialBoards.map(toVm),
@@ -93,6 +99,8 @@ export function DashboardBuilderClient({
     return initialBoards[0]?.id ?? null;
   });
   const [pipelines] = useState(initialPipelines);
+  const [tags] = useState(initialTags);
+  const [dealCustomFields] = useState(initialDealCustomFields);
   const [dataByWidget, setDataByWidget] = useState<
     Record<string, WidgetDataResult | null>
   >({});
@@ -445,6 +453,7 @@ export function DashboardBuilderClient({
                             data={loadErr ? null : (dataByWidget[w.id] ?? null)}
                             loading={loadingData && !loadErr}
                             error={null}
+                            dealCustomFields={dealCustomFields}
                           />
                         </div>
                       </div>
@@ -464,6 +473,8 @@ export function DashboardBuilderClient({
         }}
         widget={configWidget}
         pipelines={pipelines}
+        tags={tags}
+        dealCustomFields={dealCustomFields}
         onSave={saveWidgetConfig}
       />
 

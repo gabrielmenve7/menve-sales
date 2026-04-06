@@ -1,11 +1,25 @@
+export type DealStatusCode = "OPEN" | "WON" | "LOST" | "ARCHIVED";
+
+export type DataMeasure = "QUANTITY" | "MONEY" | "CUSTOM_NUMBER";
+export type Aggregation = "SUM" | "AVG";
+
 export type WidgetQuerySpec = {
   source: "DEALS";
-  measure: "COUNT" | "SUM_VALUE";
-  dimension?: "BY_STAGE" | "BY_STATUS" | "BY_DAY" | null;
   pipelineId: string;
+  dimension?: "BY_STAGE" | "BY_STATUS" | "BY_DAY" | null;
+  days?: number;
+  /** Legado — ainda aceito pela API */
+  measure?: "COUNT" | "SUM_VALUE";
   includeClosed?: boolean;
   includeArchived?: boolean;
-  days?: number;
+  dataMeasure?: DataMeasure;
+  aggregation?: Aggregation;
+  customFieldKey?: string;
+  filterStatuses?: DealStatusCode[];
+  filterTagIds?: string[];
+  filterCreatedFrom?: string;
+  filterCreatedTo?: string;
+  filterCustomFields?: { key: string; value: string | number | boolean }[];
 };
 
 export type WidgetType = "METRIC" | "BAR" | "PIE" | "DONUT";
@@ -37,6 +51,15 @@ export type PipelineListItem = {
   isDefault: boolean;
 };
 
+export type TagListItem = { id: string; name: string };
+
+export type DealCustomFieldDef = {
+  id: string;
+  key: string;
+  name: string;
+  fieldType: string;
+};
+
 export type WidgetDataScalar = { kind: "scalar"; value: number };
 export type WidgetDataSeries = {
   kind: "series";
@@ -63,10 +86,10 @@ export function defaultQuerySpec(
 ): WidgetQuerySpec {
   const base: WidgetQuerySpec = {
     source: "DEALS",
-    measure: "COUNT",
     pipelineId,
-    includeClosed: false,
-    includeArchived: false,
+    dataMeasure: "QUANTITY",
+    aggregation: "SUM",
+    filterStatuses: ["OPEN"],
   };
   if (widgetType === "METRIC") {
     return { ...base, dimension: null };
@@ -82,4 +105,44 @@ export function defaultQuerySpec(
 
 export function newWidgetId() {
   return `w_${Math.random().toString(36).slice(2, 12)}_${Date.now().toString(36)}`;
+}
+
+/** Formata valor do cartão métrica conforme medida / campo custom. */
+export function formatDashboardScalar(
+  spec: WidgetQuerySpec,
+  value: number,
+  customFieldMeta?: DealCustomFieldDef | null,
+): string {
+  const dm =
+    spec.dataMeasure ??
+    (spec.measure === "SUM_VALUE"
+      ? "MONEY"
+      : spec.measure === "COUNT"
+        ? "QUANTITY"
+        : "QUANTITY");
+
+  if (dm === "MONEY") {
+    return value.toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0,
+    });
+  }
+  if (dm === "CUSTOM_NUMBER") {
+    if (customFieldMeta?.fieldType === "MONEY_BRL") {
+      return value.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        maximumFractionDigits: 2,
+      });
+    }
+    return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+  }
+  return Math.round(value).toLocaleString("pt-BR");
+}
+
+export function customFieldByKey(
+  defs: DealCustomFieldDef[],
+): Map<string, DealCustomFieldDef> {
+  return new Map(defs.map((d) => [d.key, d]));
 }
