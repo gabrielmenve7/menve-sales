@@ -57,7 +57,7 @@ export default async function ContactDetailPage({
   const photoUrl = getContactPhotoUrl(contact.customData);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <Button variant="ghost" className="mb-2 h-8 px-0" asChild>

@@ -34,7 +34,7 @@ export default async function PesquisaPage() {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
       <PesquisaClient
         initialSearches={searches}
         pipelines={pipelines}

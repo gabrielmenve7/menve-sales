@@ -53,7 +53,7 @@ export default async function SettingsPage({
     "http://localhost:4000";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Configurações</h1>
         <p className="text-sm text-muted-foreground">
