@@ -833,12 +833,26 @@ export function DashboardWidgetConfigDialog({
             <X className="size-4" />
           </DialogClose>
         </DialogHeader>
-        <Tabs defaultValue="config" className="flex min-h-0 flex-1 flex-col">
+        <Tabs
+          value={dialogTab}
+          onValueChange={setDialogTab}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           <TabsList
             className={`mx-6 mt-3 w-auto shrink-0 justify-start bg-transparent ${panel.tabsList}`}
           >
             <TabsTrigger value="config">Configurações</TabsTrigger>
-            <TabsTrigger value="filters">Filtros</TabsTrigger>
+            <TabsTrigger value="filters" className="relative">
+              {isBar ? "Dados" : "Filtros"}
+              {isBar && dataTabBadgeCount > 0 ? (
+                <Badge
+                  variant="secondary"
+                  className="ml-1.5 min-w-5 px-1 py-0 text-[10px] leading-none"
+                >
+                  {dataTabBadgeCount}
+                </Badge>
+              ) : null}
+            </TabsTrigger>
           </TabsList>
           <TabsContent
             value="config"
@@ -857,168 +871,449 @@ export function DashboardWidgetConfigDialog({
                   className={panel.control}
                 />
               </div>
-              <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
-                <Label htmlFor="dw-pipeline" className="text-foreground">
-                  Fonte de dados
-                </Label>
-                <select
-                  id="dw-pipeline"
-                  className={panel.control}
-                  value={pipelineId}
-                  onChange={(e) => setPipelineId(e.target.value)}
-                >
-                  {pipelines.map((p) => (
-                    <option
-                      key={p.id}
-                      value={p.id}
-                      className="bg-popover text-popover-foreground"
-                    >
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
-                <Label htmlFor="dw-data-measure" className="text-foreground">
-                  Dados
-                </Label>
-                <select
-                  id="dw-data-measure"
-                  className={panel.control}
-                  value={dataMeasure}
-                  onChange={(e) =>
-                    setDataMeasure(e.target.value as DataMeasure)
-                  }
-                >
-                  <option
-                    value="QUANTITY"
-                    className="bg-popover text-popover-foreground"
-                  >
-                    Números de deals
-                  </option>
-                  <option
-                    value="MONEY"
-                    className="bg-popover text-popover-foreground"
-                  >
-                    Dinheiro
-                  </option>
-                  <option
-                    value="CUSTOM_NUMBER"
-                    className="bg-popover text-popover-foreground"
-                  >
-                    Campo customizado
-                  </option>
-                </select>
-              </div>
-              {dataMeasure !== "QUANTITY" ? (
-                <div className="grid gap-1.5">
-                  <Label htmlFor="dw-calc" className="text-foreground">
-                    Cálculo
-                  </Label>
-                  <select
-                    id="dw-calc"
-                    className={panel.control}
-                    value={aggregation}
-                    onChange={(e) =>
-                      setAggregation(e.target.value as Aggregation)
-                    }
-                  >
-                    <option
-                      value="SUM"
-                      className="bg-popover text-popover-foreground"
-                    >
-                      Somatória
-                    </option>
-                    <option
-                      value="AVG"
-                      className="bg-popover text-popover-foreground"
-                    >
-                      Média
-                    </option>
-                  </select>
-                </div>
-              ) : null}
-              {dataMeasure === "CUSTOM_NUMBER" ? (
-                <div className="grid gap-1.5">
-                  <Label htmlFor="dw-cf-key" className="text-foreground">
-                    Campo
-                  </Label>
-                  <select
-                    id="dw-cf-key"
-                    className={panel.control}
-                    value={customFieldKey}
-                    onChange={(e) => setCustomFieldKey(e.target.value)}
-                  >
-                    <option
-                      value=""
-                      className="bg-popover text-popover-foreground"
-                    >
-                      Selecione…
-                    </option>
-                    {numericCustomFields.map((f) => (
-                      <option
-                        key={f.id}
-                        value={f.key}
-                        className="bg-popover text-popover-foreground"
-                      >
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                  {numericCustomFields.length === 0 ? (
-                    <p className={panel.muted}>
-                      Nenhum campo numérico em Deals.
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-              {!isMetric ? (
+              {isBar ? (
                 <>
-                  <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
-                    <Label htmlFor="dw-dim" className="text-foreground">
-                      Agrupar por
+                  <div className={`grid gap-2 border-t pt-5 ${panel.divider}`}>
+                    <Label htmlFor="dw-pipeline" className="text-foreground">
+                      Fonte de dados
                     </Label>
-                    <select
-                      id="dw-dim"
-                      className={panel.control}
-                      value={dimension || "BY_STAGE"}
-                      onChange={(e) =>
-                        setDimension(
-                          e.target.value as NonNullable<
-                            WidgetQuerySpec["dimension"]
-                          >,
-                        )
-                      }
-                    >
-                      {DIMENSION_OPTIONS.map((o) => (
+                    <div className="flex flex-wrap items-stretch gap-2">
+                      <select
+                        id="dw-pipeline"
+                        className={cn(panel.control, "min-w-0 flex-1")}
+                        value={pipelineId}
+                        onChange={(e) => setPipelineId(e.target.value)}
+                      >
+                        {pipelines.map((p) => (
+                          <option
+                            key={p.id}
+                            value={p.id}
+                            className="bg-popover text-popover-foreground"
+                          >
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="relative h-9 w-9 shrink-0"
+                        onClick={() => setDialogTab("filters")}
+                        aria-label="Abrir dados e filtros"
+                      >
+                        <Filter className="size-4" strokeWidth={2} />
+                        {dataTabBadgeCount > 0 ? (
+                          <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                            {dataTabBadgeCount}
+                          </span>
+                        ) : null}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className={`grid gap-1 border-t pt-5 ${panel.divider}`}>
+                    <p className="text-sm font-medium text-foreground">Tela</p>
+                    <BarConfigToggle
+                      id="dw-bar-avg"
+                      label="Mostrar linha média"
+                      checked={barShowAverage}
+                      onCheckedChange={setBarShowAverage}
+                    />
+                    <BarConfigToggle
+                      id="dw-bar-labels"
+                      label="Mostrar rótulos de dados"
+                      checked={barShowLabels}
+                      onCheckedChange={setBarShowLabels}
+                    />
+                    <BarConfigToggle
+                      id="dw-bar-legend"
+                      label="Mostrar legenda"
+                      checked={barShowLegend}
+                      onCheckedChange={setBarShowLegend}
+                    />
+                  </div>
+                  <div className={`grid gap-3 border-t pt-5 ${panel.divider}`}>
+                    <p className="text-sm font-medium text-foreground">Eixo X</p>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="dw-bar-x-measure" className="text-foreground">
+                        Medida
+                      </Label>
+                      <select
+                        id="dw-bar-x-measure"
+                        className={panel.control}
+                        value={dimension || "BY_STAGE"}
+                        onChange={(e) =>
+                          setDimension(
+                            e.target.value as NonNullable<
+                              WidgetQuerySpec["dimension"]
+                            >,
+                          )
+                        }
+                      >
+                        {BAR_X_DIMENSION_OPTIONS.map((o) => (
+                          <option
+                            key={o.value}
+                            value={o.value}
+                            className="bg-popover text-popover-foreground"
+                          >
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {(dimension || "BY_STAGE") === "BY_DAY" ? (
+                      <>
+                        <div className="grid gap-1.5">
+                          <Label htmlFor="dw-bar-time" className="text-foreground">
+                            Período de tempo
+                          </Label>
+                          <select
+                            id="dw-bar-time"
+                            className={panel.control}
+                            value={barTimePreset}
+                            onChange={(e) =>
+                              setBarTimePreset(e.target.value as BarTimePreset)
+                            }
+                          >
+                            {BAR_TIME_PRESET_OPTIONS.map((o) => (
+                              <option
+                                key={o.value}
+                                value={o.value}
+                                className="bg-popover text-popover-foreground"
+                              >
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {barTimePreset === "CUSTOM" ? (
+                          <div className="grid gap-1.5">
+                            <Label
+                              htmlFor="dw-bar-custom-days"
+                              className="text-foreground"
+                            >
+                              Dias na janela
+                            </Label>
+                            <Input
+                              id="dw-bar-custom-days"
+                              type="number"
+                              min={1}
+                              max={366}
+                              value={barCustomDays}
+                              onChange={(e) =>
+                                setBarCustomDays(Number(e.target.value) || 30)
+                              }
+                              className={panel.control}
+                            />
+                          </div>
+                        ) : null}
+                        <div className="grid gap-1.5">
+                          <Label htmlFor="dw-bar-x-group" className="text-foreground">
+                            Agrupar por
+                          </Label>
+                          <select
+                            id="dw-bar-x-group"
+                            className={panel.control}
+                            value={barXGroupBy}
+                            onChange={(e) =>
+                              setBarXGroupBy(e.target.value as BarXGroupBy)
+                            }
+                          >
+                            {BAR_X_GROUP_OPTIONS.map((o) => (
+                              <option
+                                key={o.value}
+                                value={o.value}
+                                className="bg-popover text-popover-foreground"
+                              >
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                  <div className={`grid gap-3 border-t pt-5 ${panel.divider}`}>
+                    <p className="text-sm font-medium text-foreground">Eixo Y</p>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="dw-bar-y-measure" className="text-foreground">
+                        Medida
+                      </Label>
+                      <select
+                        id="dw-bar-y-measure"
+                        className={panel.control}
+                        value={dataMeasure}
+                        onChange={(e) =>
+                          setDataMeasure(e.target.value as DataMeasure)
+                        }
+                      >
                         <option
-                          key={o.value}
-                          value={o.value}
+                          value="QUANTITY"
                           className="bg-popover text-popover-foreground"
                         >
-                          {o.label}
+                          Número de deals
+                        </option>
+                        <option
+                          value="MONEY"
+                          className="bg-popover text-popover-foreground"
+                        >
+                          Valor (R$)
+                        </option>
+                        <option
+                          value="CUSTOM_NUMBER"
+                          className="bg-popover text-popover-foreground"
+                        >
+                          Campo customizado
+                        </option>
+                      </select>
+                    </div>
+                    {dataMeasure !== "QUANTITY" ? (
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="dw-bar-y-calc" className="text-foreground">
+                          Cálculo
+                        </Label>
+                        <select
+                          id="dw-bar-y-calc"
+                          className={panel.control}
+                          value={aggregation}
+                          onChange={(e) =>
+                            setAggregation(e.target.value as Aggregation)
+                          }
+                        >
+                          <option
+                            value="SUM"
+                            className="bg-popover text-popover-foreground"
+                          >
+                            Somatória
+                          </option>
+                          <option
+                            value="AVG"
+                            className="bg-popover text-popover-foreground"
+                          >
+                            Média
+                          </option>
+                        </select>
+                      </div>
+                    ) : null}
+                    {dataMeasure === "CUSTOM_NUMBER" ? (
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="dw-bar-cf-key" className="text-foreground">
+                          Campo
+                        </Label>
+                        <select
+                          id="dw-bar-cf-key"
+                          className={panel.control}
+                          value={customFieldKey}
+                          onChange={(e) => setCustomFieldKey(e.target.value)}
+                        >
+                          <option
+                            value=""
+                            className="bg-popover text-popover-foreground"
+                          >
+                            Selecione…
+                          </option>
+                          {numericCustomFields.map((f) => (
+                            <option
+                              key={f.id}
+                              value={f.key}
+                              className="bg-popover text-popover-foreground"
+                            >
+                              {f.name}
+                            </option>
+                          ))}
+                        </select>
+                        {numericCustomFields.length === 0 ? (
+                          <p className={panel.muted}>
+                            Nenhum campo numérico em Deals.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="dw-bar-y-group" className="text-foreground">
+                        Agrupar por
+                      </Label>
+                      <select
+                        id="dw-bar-y-group"
+                        className={cn(panel.control, "opacity-80")}
+                        disabled
+                        value="NONE"
+                      >
+                        <option value="NONE">Nenhum</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
+                    <Label htmlFor="dw-pipeline" className="text-foreground">
+                      Fonte de dados
+                    </Label>
+                    <select
+                      id="dw-pipeline"
+                      className={panel.control}
+                      value={pipelineId}
+                      onChange={(e) => setPipelineId(e.target.value)}
+                    >
+                      {pipelines.map((p) => (
+                        <option
+                          key={p.id}
+                          value={p.id}
+                          className="bg-popover text-popover-foreground"
+                        >
+                          {p.name}
                         </option>
                       ))}
                     </select>
                   </div>
-                  {(dimension || "BY_STAGE") === "BY_DAY" ? (
+                  <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
+                    <Label htmlFor="dw-data-measure" className="text-foreground">
+                      Dados
+                    </Label>
+                    <select
+                      id="dw-data-measure"
+                      className={panel.control}
+                      value={dataMeasure}
+                      onChange={(e) =>
+                        setDataMeasure(e.target.value as DataMeasure)
+                      }
+                    >
+                      <option
+                        value="QUANTITY"
+                        className="bg-popover text-popover-foreground"
+                      >
+                        Números de deals
+                      </option>
+                      <option
+                        value="MONEY"
+                        className="bg-popover text-popover-foreground"
+                      >
+                        Dinheiro
+                      </option>
+                      <option
+                        value="CUSTOM_NUMBER"
+                        className="bg-popover text-popover-foreground"
+                      >
+                        Campo customizado
+                      </option>
+                    </select>
+                  </div>
+                  {dataMeasure !== "QUANTITY" ? (
                     <div className="grid gap-1.5">
-                      <Label htmlFor="dw-days" className="text-foreground">
-                        Dias
+                      <Label htmlFor="dw-calc" className="text-foreground">
+                        Cálculo
                       </Label>
-                      <Input
-                        id="dw-days"
-                        type="number"
-                        min={1}
-                        max={366}
-                        value={days}
-                        onChange={(e) => setDays(Number(e.target.value) || 30)}
+                      <select
+                        id="dw-calc"
                         className={panel.control}
-                      />
+                        value={aggregation}
+                        onChange={(e) =>
+                          setAggregation(e.target.value as Aggregation)
+                        }
+                      >
+                        <option
+                          value="SUM"
+                          className="bg-popover text-popover-foreground"
+                        >
+                          Somatória
+                        </option>
+                        <option
+                          value="AVG"
+                          className="bg-popover text-popover-foreground"
+                        >
+                          Média
+                        </option>
+                      </select>
                     </div>
                   ) : null}
+                  {dataMeasure === "CUSTOM_NUMBER" ? (
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="dw-cf-key" className="text-foreground">
+                        Campo
+                      </Label>
+                      <select
+                        id="dw-cf-key"
+                        className={panel.control}
+                        value={customFieldKey}
+                        onChange={(e) => setCustomFieldKey(e.target.value)}
+                      >
+                        <option
+                          value=""
+                          className="bg-popover text-popover-foreground"
+                        >
+                          Selecione…
+                        </option>
+                        {numericCustomFields.map((f) => (
+                          <option
+                            key={f.id}
+                            value={f.key}
+                            className="bg-popover text-popover-foreground"
+                          >
+                            {f.name}
+                          </option>
+                        ))}
+                      </select>
+                      {numericCustomFields.length === 0 ? (
+                        <p className={panel.muted}>
+                          Nenhum campo numérico em Deals.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {!isMetric ? (
+                    <>
+                      <div
+                        className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}
+                      >
+                        <Label htmlFor="dw-dim" className="text-foreground">
+                          Agrupar por
+                        </Label>
+                        <select
+                          id="dw-dim"
+                          className={panel.control}
+                          value={dimension || "BY_STAGE"}
+                          onChange={(e) =>
+                            setDimension(
+                              e.target.value as NonNullable<
+                                WidgetQuerySpec["dimension"]
+                              >,
+                            )
+                          }
+                        >
+                          {DIMENSION_OPTIONS.map((o) => (
+                            <option
+                              key={o.value}
+                              value={o.value}
+                              className="bg-popover text-popover-foreground"
+                            >
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {(dimension || "BY_STAGE") === "BY_DAY" ? (
+                        <div className="grid gap-1.5">
+                          <Label htmlFor="dw-days" className="text-foreground">
+                            Dias
+                          </Label>
+                          <Input
+                            id="dw-days"
+                            type="number"
+                            min={1}
+                            max={366}
+                            value={days}
+                            onChange={(e) =>
+                              setDays(Number(e.target.value) || 30)
+                            }
+                            className={panel.control}
+                          />
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
                 </>
-              ) : null}
+              )}
             </div>
           </TabsContent>
           <TabsContent
@@ -1028,7 +1323,7 @@ export function DashboardWidgetConfigDialog({
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-semibold text-foreground">
-                  Filtros de cartões
+                  {isBar ? "Dados e filtros" : "Filtros de cartões"}
                 </p>
                 <span
                   className="inline-flex text-muted-foreground"
@@ -1432,15 +1727,6 @@ export function DashboardWidgetConfigDialog({
                     variant="ghost"
                     size="sm"
                     className="mt-2 h-8 w-full text-xs text-muted-foreground"
-                    onClick={() => addRowToGroup(group.id)}
-                  >
-                    Adicionar filtro neste grupo
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-full text-xs text-muted-foreground"
                     onClick={() => addGroupedFilterAfter(group.id)}
                   >
                     Adicionar filtro agrupado
