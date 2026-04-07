@@ -89,6 +89,7 @@ const convertSchema = z.object({
   pipelineId: z.string(),
   title: z.string().optional(),
   value: z.number().optional(),
+  phoneOverride: z.string().max(80).optional(),
 });
 
 export async function prospectingConvert(input: z.infer<typeof convertSchema>) {
@@ -107,6 +108,9 @@ export async function prospectingConvert(input: z.infer<typeof convertSchema>) {
       pipelineId: data.pipelineId,
       title: data.title,
       value: data.value,
+      ...(data.phoneOverride?.trim()
+        ? { phoneOverride: data.phoneOverride.trim() }
+        : {}),
     },
   }));
   revalidatePath("/pesquisa");

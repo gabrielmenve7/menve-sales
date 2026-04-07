@@ -11,7 +11,7 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 import { PrismaService } from "../prisma/prisma.service";
-import { normalizeBrazilianPhone } from "./phone-utils";
+import { resolveBrazilianPhoneFromCandidates } from "./phone-utils";
 import {
   filterBusinessWebResults,
   sanitizeMapsResults,
@@ -38,6 +38,8 @@ const convertBodySchema = z.object({
   pipelineId: z.string(),
   title: z.string().optional(),
   value: z.number().optional(),
+  /** Número exibido na Pesquisa (prioridade na resolução do telefone do contato). */
+  phoneOverride: z.string().max(80).optional(),
 });
 
 const bulkConvertSchema = z.object({
@@ -422,13 +424,29 @@ export class ProspectingService {
 
     const stage0 = pipeline.stages[0]!;
 
-    let phone: string | null = null;
-    if (result.whatsapp) {
-      phone = normalizeBrazilianPhone(result.whatsapp) ?? result.whatsapp;
+    const enrichment =
+      (result.enrichmentData as Record<string, unknown> | null) ?? null;
+    const scrapedPhones: string[] = [];
+    const phonesRaw = enrichment?.phones;
+    if (Array.isArray(phonesRaw)) {
+      for (const p of phonesRaw) {
+        if (typeof p === "string" && p.trim()) scrapedPhones.push(p.trim());
+      }
     }
-    if (!phone && result.phone) {
-      phone = normalizeBrazilianPhone(result.phone) ?? result.phone;
-    }
+    const enrichWa =
+      typeof enrichment?.whatsapp === "string"
+        ? enrichment.whatsapp.trim()
+        : "";
+
+    const candidates: (string | null | undefined)[] = [
+      data.phoneOverride?.trim(),
+      result.whatsapp,
+      result.phone,
+      enrichWa || undefined,
+      ...scrapedPhones,
+    ];
+
+    const phone = resolveBrazilianPhoneFromCandidates(candidates);
 
     if (phone) {
       const dup = await this.prisma.contact.findFirst({
