@@ -29,7 +29,55 @@ alwaysApply: false
 - Chat panel e mensagens (pertence ao squad-inbox)
 - Providers de canal (pertence ao squad-canais)
 - Tags CRUD (pertence ao squad-tags; filtros consome dados de tag)
-- Pipeline e contatos (squads proprios; filtros pode ser expandido futuramente)
+- Alterar o Kanban, deals ou rotas do pipeline (squad-pipeline) -- o squad-filtros **nao** dono desses arquivos; apenas **alinha** novos filtros (ex.: inbox) ao modelo canonico abaixo e, no futuro, pode extrair componentes compartilhados em comum acordo.
+
+---
+
+## Modelo padrao de filtro (canonico do produto)
+
+Este **query builder** (titulo Filtros, grupos nomeados, linhas campo + valor) define o padrao visual e a logica booleana de filtros compostos no Menve Sales. A **implementacao de referencia** ja existe no pipeline (Popover + grupos + linhas).
+
+### Onde esta no codigo
+
+| Papel | Caminho |
+|-------|---------|
+| UI (titulo, grupos, botoes, linha campo + "e" + valor) | `menve-sales-web/src/app/(dashboard)/pipeline/pipeline-view.tsx` -- Popover disparado por `SlidersHorizontal`, `aria-label="Filtros do pipeline"` |
+| Tipos, estado inicial, presets de data, avaliacao (E/OU) | `menve-sales-web/src/app/(dashboard)/pipeline/pipeline-filter-utils.ts` |
+
+### Estrutura de dados
+
+- **Grupo** (`PipelineFilterGroupState`): `{ id, rows: PipelineFilterRowState[] }`.
+- **Linha / regra** (`PipelineFilterRowState`): campo discriminado + estado do valor conforme o campo (`datePreset`, `customFromStr`/`customToStr`, `sourceValue`, `assigneeValue`, etc.).
+- **Logica booleana** (comentario no codigo: `filterDealsByGroups`):
+  - **E (AND)** entre todas as linhas **dentro** do mesmo grupo (cada linha completa precisa satisfazer).
+  - **OU (OR)** entre **grupos** (basta um grupo satisfazer).
+- Linhas incompletas sao ignoradas na filtragem; grupos sem linhas completas nao restringem.
+
+### UX e copy (PT-BR) -- manter consistencia
+
+- Titulo do painel: **Filtros**; icone de informacao com tooltip explicando E dentro do grupo e OU entre grupos (texto atual no `title` do `Info` em `pipeline-view.tsx`).
+- Cabecalho do grupo: **Grupo N**; acao: **Remover grupo**.
+- Cada regra: `<select>` de campo, conector estatico **e**, controle de valor (varia por campo), **Remover filtro** (lixeira).
+- Dentro do grupo: **Adicionar filtro neste grupo**.
+- Rodape: **+ Adicionar filtro** (nova linha no ultimo grupo), **Adicionar filtro agrupado** (novo grupo), e quando houver filtros ativos: **Limpar filtros**.
+- Entre grupos (a partir do segundo): rotulo **ou** (uppercase, discreto).
+
+### Campos atuais no pipeline (extensivel)
+
+Definidos em `PipelineFilterFieldId` e `FIELD_LABELS` em `pipeline-view.tsx`:
+
+| `field` | Label na UI |
+|---------|-------------|
+| `createdAt` | Data de criação |
+| `source` | Origem |
+| `assignee` | Responsável |
+
+Novos modulos de filtro (inbox, relatorios, etc.) devem **repetir o mesmo padrao de fraseado e hierarquia**; operadores adicionais, se existirem, entram entre campo e valor ou como segundo controle, sem quebrar o modelo mental "campo + e + valor".
+
+### Implementacao futura (inbox e API)
+
+- Reutilizar a mesma forma de **grupos/linhas** na serializacao (URL ou saved filters) e na API (`AND`/`OR` aninhados).
+- Evitar segunda linguagem de filtro incompativel com este modelo; preferir extrair tipos/helpers compartilhados para `components/inbox/filters/` ou `lib/` quando houver segundo consumidor.
 
 ---
 
@@ -121,10 +169,12 @@ squad-filtros (5 pessoas)
 
 ## Estado atual
 
-A funcionalidade de filtros esta em **v1 basica**:
+A funcionalidade de filtros esta em **v1 basica** no inbox:
 - Busca por texto implementada client-side em `conversation-list.tsx` (filtra por nome do contato).
 - Badges de canal (Evolution, Meta, Instagram) visiveis em `conversation-item.tsx`.
-- Nao ha filtros compostos, busca server-side ou saved filters.
+- Nao ha no inbox filtros compostos, busca server-side ou saved filters.
+
+**Referencia ja pronta**: o pipeline usa o **modelo padrao de filtro** (grupos, E/OU, mesma copy PT-BR) com filtragem client-side em `pipeline-filter-utils.ts` + UI em `pipeline-view.tsx` (ver secao "Modelo padrao de filtro" acima).
 
 ### Proximos passos
 
@@ -145,6 +195,7 @@ A funcionalidade de filtros esta em **v1 basica**:
 | Tags (dados para filtro)    | squad-tags        | consumir lista de tags para filtro multi-select|
 | Canais (dados de canal)     | squad-canais      | consumir WhatsAppProvider para filtro de canal|
 | Auth e sessao               | squad-auth        | consumir `auth()` para saved filters por user |
+| UI/UX de filtro composto    | squad-pipeline (ref.) | modelo canonico implementado em `pipeline-view.tsx` / `pipeline-filter-utils.ts` |
 
 ---
 
@@ -153,6 +204,9 @@ A funcionalidade de filtros esta em **v1 basica**:
 ```
 menve-sales-web/
   src/
+    app/(dashboard)/pipeline/
+      pipeline-view.tsx ............... referencia UI: Popover "Filtros", grupos, linhas
+      pipeline-filter-utils.ts ........ referencia: estado, E/OU, presets de data, match
     components/
       inbox/
         conversation-list.tsx ........... busca client-side existente (evoluir)
