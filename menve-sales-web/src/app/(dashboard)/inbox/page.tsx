@@ -4,8 +4,25 @@ import { apiServer } from "@/lib/api-server";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { canConfigureTenant } from "@/lib/session";
 
-export default async function InboxPage() {
+export default async function InboxPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ contact?: string }>;
+}) {
   const canManageConnections = await canConfigureTenant();
+  const { contact: contactQuery } = await searchParams;
+  const initialContactId = contactQuery?.trim() || null;
+
+  if (initialContactId) {
+    try {
+      await apiServer<{ conversationId: string; created: boolean }>(
+        "/inbox/ensure-conversation",
+        { method: "POST", json: { contactId: initialContactId } },
+      );
+    } catch {
+      /* Contato sem telefone, sem canal WhatsApp ativo, ou contato inválido — segue com a lista atual */
+    }
+  }
 
   const [
     inboxBundle,
@@ -33,6 +50,7 @@ export default async function InboxPage() {
         connections={whatsAppConnections as never}
         quickReplies={quickReplies as never}
         initialConversations={conversations as never}
+        initialContactId={initialContactId}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={tenantMembers}
         canManageConnections={canManageConnections}
