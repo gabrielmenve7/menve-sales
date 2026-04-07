@@ -240,7 +240,7 @@ export function InboxLeadSidebar({
   const pipelineDealId = activeDeal?.id ?? null;
 
   const {
-    data: nextInStage,
+    data: queuePayload,
     isLoading: nextInStageLoading,
     isError: nextInStageError,
   } = useQuery({
@@ -251,11 +251,16 @@ export function InboxLeadSidebar({
     gcTime: 120_000,
   });
 
+  const nextInStage = queuePayload?.next ?? null;
+  const queueMeta = queuePayload?.queueMeta;
+
   const canGoToNextInQueue =
     Boolean(pipelineDealId) &&
     !nextInStageLoading &&
     !nextInStageError &&
-    Boolean(nextInStage);
+    Boolean(nextInStage) &&
+    (queueMeta?.total ?? 0) > 1 &&
+    (queueMeta?.position ?? 0) >= 1;
 
   const onRefresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["deal-next-in-stage"] });
@@ -282,14 +287,24 @@ export function InboxLeadSidebar({
           disabled={!canGoToNextInQueue}
           title={
             canGoToNextInQueue
-              ? "Próximo lead na mesma etapa, na ordem do quadro (de cima para baixo)"
+              ? queueMeta
+                ? `Próximo na etapa (${queueMeta.position} de ${queueMeta.total}). No último card, volta ao primeiro do quadro.`
+                : "Próximo lead na mesma etapa, ordem do quadro"
               : !pipelineDealId
                 ? "Selecione uma oportunidade aberta"
                 : nextInStageLoading
                   ? "Carregando…"
                   : nextInStageError
                     ? "Não foi possível carregar a fila. Atualize a página."
-                    : "Fim da fila nesta etapa ou só há um lead aqui"
+                    : queueMeta && queueMeta.total > 1 && queueMeta.position < 1
+                      ? "Oportunidade fora da fila desta etapa — atualize o Inbox"
+                      : queueMeta && queueMeta.total === 0
+                        ? "Esta oportunidade não está em aberto no servidor — atualize o Inbox ou confira o funil"
+                      : queueMeta && queueMeta.total === 1
+                        ? "Só há um lead OPEN nesta etapa neste funil"
+                      : !queueMeta
+                        ? "Fila indisponível — confira se a API está atualizada"
+                        : "Carregando fila…"
           }
           onClick={onGoToNextInQueue}
           className={cn(
