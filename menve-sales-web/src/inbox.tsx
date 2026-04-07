@@ -4,7 +4,10 @@ import type { CustomField, WhatsAppConnection } from "@prisma/client";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchInboxBundle } from "@/actions/inbox-fetch";
+import {
+  ensureInboxConversationForContact,
+  fetchInboxBundle,
+} from "@/actions/inbox-fetch";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { ChatPanel } from "@/components/inbox/chat-panel";
 import { ChatEmptyState } from "@/components/inbox/chat-empty-state";
@@ -172,15 +175,48 @@ export function InboxClient({
   );
 
   const openContactInInbox = useCallback(
-    (contactId: string) => {
-      const conv = conversations.find((c) => c.contact.id === contactId);
-      if (conv) {
-        setSelectedId(conv.id);
+    async (contactId: string) => {
+      const syncSelect = (list: InboxConversation[], cid: string) => {
+        const conv = list.find((c) => c.contact.id === cid);
+        if (conv) {
+          setSelectedId(conv.id);
+          return true;
+        }
+        return false;
+      };
+
+      if (syncSelect(conversations, contactId)) {
+        if (typeof window !== "undefined") {
+          window.history.replaceState(
+            null,
+            "",
+            `/inbox?contact=${encodeURIComponent(contactId)}`,
+          );
+        }
         return;
       }
-      router.push(`/inbox?contact=${encodeURIComponent(contactId)}`);
+
+      try {
+        const ensured = await ensureInboxConversationForContact(contactId);
+        const { data, error } = await refetch();
+        if (error) throw error;
+        const list = (data?.conversations ?? []) as InboxConversation[];
+        const nextId =
+          pickBestConversationForContact(list, contactId) ??
+          ensured.conversationId;
+        setSelectedId(nextId);
+        if (typeof window !== "undefined") {
+          window.history.replaceState(
+            null,
+            "",
+            `/inbox?contact=${encodeURIComponent(contactId)}`,
+          );
+        }
+      } catch {
+        router.push(`/inbox?contact=${encodeURIComponent(contactId)}`);
+      }
     },
-    [conversations, router],
+    [conversations, refetch, router],
   );
 
   return (

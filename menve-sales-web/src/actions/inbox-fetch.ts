@@ -21,6 +21,14 @@ export async function fetchInboxBundle(): Promise<InboxBundle> {
   return apiServer<InboxBundle>("/inbox");
 }
 
+/** Garante conversa no canal WhatsApp ativo (mesmo contrato da página `/inbox?contact=`). */
+export async function ensureInboxConversationForContact(contactId: string) {
+  return apiServer<{ conversationId: string; created: boolean }>(
+    "/inbox/ensure-conversation",
+    { method: "POST", json: { contactId } },
+  );
+}
+
 /** Lista mínima de funis para criar lead a partir do inbox (sob demanda). */
 export async function fetchPipelinesListForInbox(): Promise<InboxPipelineListItem[]> {
   return apiServer<InboxPipelineListItem[]>("/pipelines");

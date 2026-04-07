@@ -214,7 +214,7 @@ export function InboxLeadSidebar({
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   onLeadChanged: () => void;
-  onOpenContactInInbox: (contactId: string) => void;
+  onOpenContactInInbox: (contactId: string) => void | Promise<void>;
 }) {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
