@@ -35,9 +35,12 @@ function workspaceInitial(name: string) {
 export function WorkspaceSwitcher({
   tenant,
   className,
+  compactIconOnly = false,
 }: {
   tenant: WorkspaceSwitcherTenant;
   className?: string;
+  /** Só logo do workspace (sidebar recolhida). */
+  compactIconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const label = planLabel(tenant.plan);
@@ -49,14 +52,21 @@ export function WorkspaceSwitcher({
           type="button"
           variant="ghost"
           className={cn(
-            "h-auto w-full justify-start gap-2 rounded-xl border border-border/60 bg-card/80 px-2.5 py-2 text-left shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60",
+            compactIconOnly
+              ? "h-auto w-full flex-col justify-center gap-0 rounded-xl border border-border/60 bg-card/80 px-1 py-2 shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60"
+              : "h-auto w-full justify-start gap-2 rounded-xl border border-border/60 bg-card/80 px-2.5 py-2 text-left shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60",
             className,
           )}
           aria-expanded={open}
           aria-haspopup="dialog"
+          aria-label={compactIconOnly ? `Workspace: ${tenant.name}` : undefined}
+          title={compactIconOnly ? tenant.name : undefined}
         >
           <span
-            className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-foreground text-[13px] font-semibold text-background dark:bg-foreground dark:text-background"
+            className={cn(
+              "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-foreground font-semibold text-background dark:bg-foreground dark:text-background",
+              compactIconOnly ? "size-9 text-[14px]" : "size-8 text-[13px]",
+            )}
             aria-hidden={!!tenant.image}
           >
             {tenant.image ? (
@@ -71,18 +81,22 @@ export function WorkspaceSwitcher({
               workspaceInitial(tenant.name)
             )}
           </span>
-          <span className="min-w-0 flex-1 text-left">
-            <span className="block truncate text-[13px] font-semibold leading-tight tracking-tight">
-              {tenant.name}
-            </span>
-          </span>
-          <ChevronDown
-            className={cn(
-              "size-4 shrink-0 text-muted-foreground opacity-70 transition-transform",
-              open && "rotate-180",
-            )}
-            strokeWidth={2}
-          />
+          {!compactIconOnly ? (
+            <>
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-[13px] font-semibold leading-tight tracking-tight">
+                  {tenant.name}
+                </span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  "size-4 shrink-0 text-muted-foreground opacity-70 transition-transform",
+                  open && "rotate-180",
+                )}
+                strokeWidth={2}
+              />
+            </>
+          ) : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent
