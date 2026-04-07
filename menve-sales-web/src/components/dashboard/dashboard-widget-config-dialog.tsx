@@ -54,6 +54,7 @@ const BAR_X_DIMENSION_OPTIONS: {
 
 const BAR_TIME_PRESET_OPTIONS: { value: BarTimePreset; label: string }[] = [
   { value: "THIS_MONTH", label: "Este mês" },
+  { value: "NEXT_MONTH", label: "Próximo mês" },
   { value: "LAST_7_DAYS", label: "Últimos 7 dias" },
   { value: "LAST_30_DAYS", label: "Últimos 30 dias" },
   { value: "LAST_90_DAYS", label: "Últimos 90 dias" },
@@ -71,11 +72,17 @@ function firstDayOfMonthIsoLocal(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
+function firstDayOfNextMonthIsoLocal(): string {
+  const d = new Date();
+  const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 function inferBarTimePreset(spec: WidgetQuerySpec): BarTimePreset {
   if (spec.timelineStart) {
-    return spec.timelineStart === firstDayOfMonthIsoLocal()
-      ? "THIS_MONTH"
-      : "CUSTOM";
+    if (spec.timelineStart === firstDayOfNextMonthIsoLocal()) return "NEXT_MONTH";
+    if (spec.timelineStart === firstDayOfMonthIsoLocal()) return "THIS_MONTH";
+    return "CUSTOM";
   }
   const d = spec.days ?? 30;
   if (d === 7) return "LAST_7_DAYS";
@@ -156,6 +163,103 @@ function dealCustomFieldSelectOptions(cf: DealCustomFieldDef | undefined) {
   const raw = cf.options;
   if (!Array.isArray(raw)) return [];
   return raw.map((x) => String(x)).filter((s) => s.length > 0);
+}
+
+/** Um único `<select>`: valor da opção codifica par chave + opção do campo SELECT. */
+function encodeDashCustomFieldPair(key: string, value: string): string {
+  return JSON.stringify([key, value]);
+}
+
+function decodeDashCustomFieldPair(
+  raw: string,
+): { key: string; value: string } | null {
+  if (!raw) return null;
+  try {
+    const a = JSON.parse(raw) as unknown;
+    if (
+      Array.isArray(a) &&
+      a.length === 2 &&
+      typeof a[0] === "string" &&
+      typeof a[1] === "string"
+    ) {
+      return { key: a[0], value: a[1] };
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function dashCustomFieldPairIsValid(
+  key: string,
+  value: string,
+  dealCustomFields: DealCustomFieldDef[],
+): boolean {
+  if (!key || !value) return false;
+  const f = dealCustomFields.find((c) => c.key === key);
+  return dealCustomFieldSelectOptions(f).includes(value);
+}
+
+function DashCustomFieldFilterSelect({
+  rowKey,
+  rowValue,
+  dealCustomFields,
+  selectClass,
+  mutedClass,
+  onPick,
+}: {
+  rowKey: string;
+  rowValue: string;
+  dealCustomFields: DealCustomFieldDef[];
+  selectClass: string;
+  mutedClass: string;
+  onPick: (key: string, value: string) => void;
+}) {
+  const fieldsWithOpts = dealCustomFields.filter(
+    (f) => dealCustomFieldSelectOptions(f).length > 0,
+  );
+  if (fieldsWithOpts.length === 0) {
+    return (
+      <p className={cn(mutedClass, "py-2")}>
+        Nenhum campo em lista no funil para filtrar.
+      </p>
+    );
+  }
+  const selectValue = dashCustomFieldPairIsValid(
+    rowKey,
+    rowValue,
+    dealCustomFields,
+  )
+    ? encodeDashCustomFieldPair(rowKey, rowValue)
+    : "";
+  return (
+    <select
+      className={cn(selectClass, "min-w-[12rem]")}
+      value={selectValue}
+      onChange={(e) => {
+        const parsed = decodeDashCustomFieldPair(e.target.value);
+        onPick(parsed?.key ?? "", parsed?.value ?? "");
+      }}
+      aria-label="Campo e valor"
+    >
+      <option value="" className="bg-popover text-popover-foreground">
+        Selecionar opção
+      </option>
+      {fieldsWithOpts.map((f) => (
+        <optgroup key={f.id} label={f.name}>
+          {dealCustomFieldSelectOptions(f).map((opt) => (
+            <option
+              key={`${f.key}:${opt}`}
+              value={encodeDashCustomFieldPair(f.key, opt)}
+              className="bg-popover text-popover-foreground"
+            >
+              {opt}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
 }
 
 function numericFieldTypes(f: DealCustomFieldDef) {
@@ -489,6 +593,8 @@ export function DashboardWidgetConfigDialog({
   const [barShowLabels, setBarShowLabels] = useState(true);
   const [barShowLegend, setBarShowLegend] = useState(false);
   const [barTimePreset, setBarTimePreset] = useState<BarTimePreset>("LAST_30_DAYS");
+  /** Com este/próximo mês: eixo com todos os dias do mês (futuros = 0) vs só até hoje. */
+  const [barFillFullMonth, setBarFillFullMonth] = useState(false);
   const [barCustomDays, setBarCustomDays] = useState(30);
   const [barXGroupBy, setBarXGroupBy] = useState<BarXGroupBy>("DAY");
   const [filterGroups, setFilterGroups] = useState<DashFilterGroupState[]>(() => [
@@ -530,6 +636,7 @@ export function DashboardWidgetConfigDialog({
       setBarShowLabels(bc.showDataLabels ?? true);
       setBarShowLegend(bc.showLegend ?? false);
       setBarTimePreset(bc.timePreset ?? inferBarTimePreset(s));
+      setBarFillFullMonth(s.fillTimelineMonth === true);
       setBarXGroupBy(bc.xGroupBy ?? "DAY");
       setBarCustomDays(s.days ?? 30);
     }
@@ -760,6 +867,7 @@ export function DashboardWidgetConfigDialog({
     if (isMetric) {
       spec.dimension = null;
       delete spec.timelineStart;
+      delete spec.fillTimelineMonth;
       delete spec.days;
     } else if (isBar) {
       spec.dimension = (dimension || "BY_STAGE") as NonNullable<
@@ -768,22 +876,32 @@ export function DashboardWidgetConfigDialog({
       if (spec.dimension === "BY_DAY") {
         if (barTimePreset === "THIS_MONTH") {
           spec.timelineStart = firstDayOfMonthIsoLocal();
+          spec.fillTimelineMonth = barFillFullMonth;
+          delete spec.days;
+        } else if (barTimePreset === "NEXT_MONTH") {
+          spec.timelineStart = firstDayOfNextMonthIsoLocal();
+          spec.fillTimelineMonth = barFillFullMonth;
           delete spec.days;
         } else if (barTimePreset === "LAST_7_DAYS") {
           delete spec.timelineStart;
+          delete spec.fillTimelineMonth;
           spec.days = 7;
         } else if (barTimePreset === "LAST_30_DAYS") {
           delete spec.timelineStart;
+          delete spec.fillTimelineMonth;
           spec.days = 30;
         } else if (barTimePreset === "LAST_90_DAYS") {
           delete spec.timelineStart;
+          delete spec.fillTimelineMonth;
           spec.days = 90;
         } else {
           delete spec.timelineStart;
+          delete spec.fillTimelineMonth;
           spec.days = Math.min(366, Math.max(1, barCustomDays));
         }
       } else {
         delete spec.timelineStart;
+        delete spec.fillTimelineMonth;
         delete spec.days;
       }
     } else {
@@ -791,6 +909,7 @@ export function DashboardWidgetConfigDialog({
         WidgetQuerySpec["dimension"]
       >;
       delete spec.timelineStart;
+      delete spec.fillTimelineMonth;
       if (spec.dimension === "BY_DAY") {
         spec.days = Math.min(366, Math.max(1, days));
       }
@@ -993,6 +1112,22 @@ export function DashboardWidgetConfigDialog({
                             ))}
                           </select>
                         </div>
+                        {barTimePreset === "THIS_MONTH" ||
+                        barTimePreset === "NEXT_MONTH" ? (
+                          <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                            <BarConfigToggle
+                              id="dw-bar-fill-month"
+                              label="Eixo: mês completo"
+                              checked={barFillFullMonth}
+                              onCheckedChange={setBarFillFullMonth}
+                            />
+                            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                              Ligado, mostra todos os dias do mês (futuros com
+                              zero). Desligado, só até hoje — o gráfico cresce
+                              dia a dia.
+                            </p>
+                          </div>
+                        ) : null}
                         {barTimePreset === "CUSTOM" ? (
                           <div className="grid gap-1.5">
                             <Label
@@ -1653,126 +1788,29 @@ export function DashboardWidgetConfigDialog({
                         </div>
                       ) : null}
                       {row.field === "customField" ? (
-                        <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
-                          <select
-                            className={cn(selectClass, "min-w-[10rem]")}
-                            value={row.key}
-                            onChange={(e) =>
-                              setFilterGroups((prev) =>
-                                prev.map((g) => {
-                                  if (g.id !== group.id) return g;
-                                  return {
-                                    ...g,
-                                    rows: g.rows.map((r) =>
-                                      r.id === row.id &&
-                                      r.field === "customField"
-                                        ? {
-                                            ...r,
-                                            key: e.target.value,
-                                            value: "",
-                                          }
-                                        : r,
-                                    ),
-                                  };
-                                }),
-                              )
-                            }
-                            aria-label="Campo customizado"
-                          >
-                            <option
-                              value=""
-                              className="bg-popover text-popover-foreground"
-                            >
-                              Selecionar opção
-                            </option>
-                            {dealCustomFields.map((f) => (
-                              <option
-                                key={f.id}
-                                value={f.key}
-                                className="bg-popover text-popover-foreground"
-                              >
-                                {f.name}
-                              </option>
-                            ))}
-                          </select>
-                          {row.key ? (() => {
-                            const cf = dealCustomFields.find(
-                              (f) => f.key === row.key,
-                            );
-                            const selectOpts =
-                              dealCustomFieldSelectOptions(cf);
-                            if (selectOpts.length > 0) {
-                              return (
-                                <select
-                                  className={cn(selectClass, "min-w-[10rem]")}
-                                  value={row.value}
-                                  onChange={(e) =>
-                                    setFilterGroups((prev) =>
-                                      prev.map((g) => {
-                                        if (g.id !== group.id) return g;
-                                        return {
-                                          ...g,
-                                          rows: g.rows.map((r) =>
-                                            r.id === row.id &&
-                                            r.field === "customField"
-                                              ? {
-                                                  ...r,
-                                                  value: e.target.value,
-                                                }
-                                              : r,
-                                          ),
-                                        };
-                                      }),
-                                    )
-                                  }
-                                  aria-label="Valor do campo"
-                                >
-                                  <option
-                                    value=""
-                                    className="bg-popover text-popover-foreground"
-                                  >
-                                    Selecionar opção
-                                  </option>
-                                  {selectOpts.map((opt) => (
-                                    <option
-                                      key={opt}
-                                      value={opt}
-                                      className="bg-popover text-popover-foreground"
-                                    >
-                                      {opt}
-                                    </option>
-                                  ))}
-                                </select>
-                              );
-                            }
-                            return (
-                              <Input
-                                className={cn(selectClass, "min-w-[8rem]")}
-                                value={row.value}
-                                onChange={(e) =>
-                                  setFilterGroups((prev) =>
-                                    prev.map((g) => {
-                                      if (g.id !== group.id) return g;
-                                      return {
-                                        ...g,
-                                        rows: g.rows.map((r) =>
-                                          r.id === row.id &&
-                                          r.field === "customField"
-                                            ? {
-                                                ...r,
-                                                value: e.target.value,
-                                              }
-                                            : r,
-                                        ),
-                                      };
-                                    }),
-                                  )
-                                }
-                                aria-label="Valor do filtro"
-                              />
-                            );
-                          })() : null}
-                        </div>
+                        <DashCustomFieldFilterSelect
+                          rowKey={row.key}
+                          rowValue={row.value}
+                          dealCustomFields={dealCustomFields}
+                          selectClass={selectClass}
+                          mutedClass={panel.muted}
+                          onPick={(key, value) =>
+                            setFilterGroups((prev) =>
+                              prev.map((g) => {
+                                if (g.id !== group.id) return g;
+                                return {
+                                  ...g,
+                                  rows: g.rows.map((r) =>
+                                    r.id === row.id &&
+                                    r.field === "customField"
+                                      ? { ...r, key, value }
+                                      : r,
+                                  ),
+                                };
+                              }),
+                            )
+                          }
+                        />
                       ) : null}
                     </div>
                     <Button
