@@ -7,17 +7,19 @@ import {
   ChevronUp,
   CircleDot,
   ListTree,
+  PencilLine,
   Search,
   Tag,
   Target,
   Trash2,
   UserMinus,
   UserPlus,
+  Users,
   Zap,
 } from "lucide-react";
 import Link from "next/link";
 import type { Dispatch, SetStateAction } from "react";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createPipelineAutomationRule,
   deletePipelineAutomationRule,
@@ -32,14 +34,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import type {
   PipelineAutomationAction,
+  PipelineAutomationActionDatePreset,
+  PipelineAutomationActionKindType,
   PipelineAutomationRunRow,
   PipelineAutomationRuleRow,
   PipelineAutomationTriggerFilter,
   PipelineAutomationTriggerType,
 } from "@/lib/pipeline-automation-types";
-import { PIPELINE_AUTOMATION_TRIGGER_LABELS } from "@/lib/pipeline-automation-types";
+import {
+  PIPELINE_AUTOMATION_ACTION_DATE_PRESET_LABELS,
+  PIPELINE_AUTOMATION_TRIGGER_LABELS,
+  pipelineAutomationActionKindLabel,
+} from "@/lib/pipeline-automation-types";
 import { pipelineSelectClass } from "@/lib/pipeline-ui-tokens";
 import { cn } from "@/lib/utils";
 
@@ -87,6 +96,37 @@ const TRIGGER_GROUPS: { heading: string; types: PipelineAutomationTriggerType[] 
     },
   ];
 
+/** Lista do popover “Tipo de ação”: um item só para responsáveis. */
+const ACTION_KIND_GROUPS: {
+  heading: string;
+  types: PipelineAutomationActionKindType[];
+}[] = [
+  {
+    heading: "Ações",
+    types: [
+      "DEAL_STAGE_TRANSITION",
+      "DEAL_CREATED",
+      "DEAL_CUSTOM_FIELD_CHANGED",
+      "DEAL_ALTER_ASSIGNEES",
+      "DEAL_ENTERED_STAGE",
+      "DEAL_LEFT_STAGE",
+      "DEAL_MARKED_WON",
+      "DEAL_MARKED_LOST",
+      "CONTACT_TAG_ADDED",
+      "CONTACT_TAG_REMOVED",
+    ],
+  },
+];
+
+const ACTION_DATE_PRESET_ORDER: PipelineAutomationActionDatePreset[] = [
+  "DAYS_AFTER_TRIGGER",
+  "ON_TRIGGER_DATE",
+  "ON_TRIGGER_DATETIME",
+  "TRIGGER_FIELDS",
+  "PICK_DATE",
+  "REMOVE_DATE",
+];
+
 function triggerIcon(t: PipelineAutomationTriggerType) {
   switch (t) {
     case "DEAL_STAGE_TRANSITION":
@@ -107,6 +147,12 @@ function triggerIcon(t: PipelineAutomationTriggerType) {
     default:
       return Target;
   }
+}
+
+function actionKindIcon(k: PipelineAutomationActionKindType) {
+  if (k === "DEAL_ALTER_ASSIGNEES") return Users;
+  if (k === "DEAL_CUSTOM_FIELD_CHANGED") return PencilLine;
+  return triggerIcon(k);
 }
 
 function stageName(stages: Stage[], id: string) {
@@ -583,6 +629,282 @@ function AutomationKindConfigFields({
   );
 }
 
+function ActionAlterAssigneeBlock({
+  members,
+  addUserId,
+  setAddUserId,
+  removeUserId,
+  setRemoveUserId,
+  lbl,
+  sel,
+  isDialog,
+}: {
+  members: TenantMemberOption[];
+  addUserId: string;
+  setAddUserId: (v: string) => void;
+  removeUserId: string;
+  setRemoveUserId: (v: string) => void;
+  lbl: string;
+  sel: string;
+  isDialog: boolean;
+}) {
+  const display = (m: TenantMemberOption) =>
+    (m.name?.trim() ? m.name : m.email) ?? m.email;
+
+  return (
+    <div className="relative mt-4 space-y-3 pb-8">
+      <div className="space-y-1">
+        <p className={lbl}>Adicionar responsáveis</p>
+        <select
+          className={sel}
+          value={addUserId}
+          onChange={(e) => setAddUserId(e.target.value)}
+          aria-label="Adicionar responsável"
+        >
+          <option value="">Selecione um usuário</option>
+          {members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {display(m)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <p className={lbl}>Remover responsáveis</p>
+        <select
+          className={sel}
+          value={removeUserId}
+          onChange={(e) => setRemoveUserId(e.target.value)}
+          aria-label="Remover responsável"
+        >
+          <option value="">Selecione um usuário</option>
+          {members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {display(m)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="button"
+        className={cn(
+          "absolute bottom-0 right-0 text-[11px] underline-offset-2 hover:underline",
+          isDialog ? "text-zinc-500 hover:text-zinc-400" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        Avançado
+      </button>
+    </div>
+  );
+}
+
+function ActionDateCustomFieldBlock({
+  dealCustomFieldDefs,
+  customFieldKey,
+  setCustomFieldKey,
+  preset,
+  setPreset,
+  daysAfter,
+  setDaysAfter,
+  pick,
+  setPick,
+  lbl,
+  sel,
+  isDialog,
+  valueTrigBtn,
+}: {
+  dealCustomFieldDefs: CustomField[];
+  customFieldKey: string;
+  setCustomFieldKey: (v: string) => void;
+  preset: PipelineAutomationActionDatePreset | "";
+  setPreset: (v: PipelineAutomationActionDatePreset | "") => void;
+  daysAfter: string;
+  setDaysAfter: (v: string) => void;
+  pick: string;
+  setPick: (v: string) => void;
+  lbl: string;
+  sel: string;
+  isDialog: boolean;
+  valueTrigBtn: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filteredPresets = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = [...ACTION_DATE_PRESET_ORDER];
+    if (q) {
+      list = list.filter((p) =>
+        PIPELINE_AUTOMATION_ACTION_DATE_PRESET_LABELS[p]
+          .toLowerCase()
+          .includes(q),
+      );
+    }
+    return list;
+  }, [search]);
+
+  const triggerLabel = preset
+    ? PIPELINE_AUTOMATION_ACTION_DATE_PRESET_LABELS[preset]
+    : "Selecione uma data";
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="space-y-1">
+        <p className={lbl}>Campo personalizado</p>
+        <select
+          className={sel}
+          value={customFieldKey}
+          onChange={(e) => setCustomFieldKey(e.target.value)}
+          aria-label="Campo personalizado"
+        >
+          <option value="">Selecionar…</option>
+          {dealCustomFieldDefs.map((d) => (
+            <option key={d.id} value={d.key}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <p className={lbl}>Valor</p>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={valueTrigBtn}
+              aria-expanded={open}
+              aria-label="Valor da data"
+            >
+              <span className="min-w-0 flex-1 truncate text-left">
+                {triggerLabel}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "size-4 shrink-0",
+                  isDialog ? "text-zinc-500" : "text-muted-foreground",
+                )}
+                aria-hidden
+              />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            className={cn(
+              "p-0 shadow-lg",
+              isDialog
+                ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
+                : "w-[min(100vw-2rem,20rem)] border-border/60",
+            )}
+          >
+            <div
+              className={cn(
+                "border-b p-2",
+                isDialog ? "border-zinc-800" : "border-border/40",
+              )}
+            >
+              <div className="relative">
+                <Search
+                  className={cn(
+                    "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
+                    isDialog ? "text-zinc-500" : "text-muted-foreground",
+                  )}
+                />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Pesquisar…"
+                  className={cn(
+                    "h-9 pl-8 text-sm shadow-none",
+                    isDialog
+                      ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
+                      : "border-border/50 bg-background placeholder:text-muted-foreground/70",
+                  )}
+                />
+              </div>
+            </div>
+            <div className="max-h-56 overflow-y-auto py-1">
+              {filteredPresets.map((p) => {
+                const selected = p === preset;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
+                      isDialog
+                        ? cn(
+                            "hover:bg-zinc-800/80",
+                            selected && "bg-zinc-800",
+                          )
+                        : cn(
+                            "hover:bg-muted/50",
+                            selected && "bg-muted/40",
+                          ),
+                    )}
+                    onClick={() => {
+                      setPreset(p);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                  >
+                    <span className="flex-1 truncate">
+                      {PIPELINE_AUTOMATION_ACTION_DATE_PRESET_LABELS[p]}
+                    </span>
+                    {selected ? (
+                      <span
+                        className={
+                          isDialog ? "text-zinc-200" : "text-foreground"
+                        }
+                      >
+                        ✓
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+      {preset === "DAYS_AFTER_TRIGGER" ? (
+        <div className="space-y-1">
+          <p className={lbl}>Dias após o gatilho</p>
+          <Input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={daysAfter}
+            onChange={(e) => setDaysAfter(e.target.value)}
+            placeholder="0"
+            className={cn(
+              "h-10 text-sm shadow-none",
+              isDialog
+                ? "border-zinc-700/90 bg-zinc-900/45 text-zinc-100 placeholder:text-zinc-600"
+                : "border-border/50 bg-background shadow-sm",
+            )}
+          />
+        </div>
+      ) : null}
+      {preset === "PICK_DATE" ? (
+        <div className="space-y-1">
+          <p className={lbl}>Data</p>
+          <Input
+            type="date"
+            value={pick}
+            onChange={(e) => setPick(e.target.value)}
+            className={cn(
+              "h-10 text-sm shadow-none",
+              isDialog
+                ? "border-zinc-700/90 bg-zinc-900/45 text-zinc-100 [color-scheme:dark]"
+                : "border-border/50 bg-background shadow-sm",
+            )}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function PipelineAutomationsPanel({
   pipeline,
   rulesRaw,
@@ -593,6 +915,7 @@ export function PipelineAutomationsPanel({
   dealCustomFieldDefs = [],
   campaignSources = [],
   tenantTags = [],
+  tenantMembers = [],
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   rulesRaw: unknown;
@@ -604,6 +927,7 @@ export function PipelineAutomationsPanel({
   dealCustomFieldDefs?: CustomField[];
   campaignSources?: { id: string; name: string }[];
   tenantTags?: { id: string; name: string }[];
+  tenantMembers?: TenantMemberOption[];
 }) {
   const stages = useMemo(
     () => [...pipeline.stages].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -613,6 +937,15 @@ export function PipelineAutomationsPanel({
   const sortedTags = useMemo(
     () => [...tenantTags].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     [tenantTags],
+  );
+  const sortedTenantMembers = useMemo(
+    () =>
+      [...tenantMembers].sort((a, b) => {
+        const an = (a.name ?? a.email).toLowerCase();
+        const bn = (b.name ?? b.email).toLowerCase();
+        return an.localeCompare(bn, "pt-BR");
+      }),
+    [tenantMembers],
   );
 
   const [name, setName] = useState("");
@@ -634,7 +967,15 @@ export function PipelineAutomationsPanel({
   const [triggerMenuOpen, setTriggerMenuOpen] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState("");
   const [actionKindType, setActionKindType] =
-    useState<PipelineAutomationTriggerType>("DEAL_STAGE_TRANSITION");
+    useState<PipelineAutomationActionKindType>("DEAL_STAGE_TRANSITION");
+  const [actionAddAssigneeUserId, setActionAddAssigneeUserId] = useState("");
+  const [actionRemoveAssigneeUserId, setActionRemoveAssigneeUserId] =
+    useState("");
+  const [actionDatePreset, setActionDatePreset] = useState<
+    PipelineAutomationActionDatePreset | ""
+  >("");
+  const [actionDateDaysAfter, setActionDateDaysAfter] = useState("");
+  const [actionDatePick, setActionDatePick] = useState("");
   const [actionStageFromId, setActionStageFromId] = useState("");
   const [actionStageToId, setActionStageToId] = useState("");
   const [actionLegacyStageFilterId, setActionLegacyStageFilterId] =
@@ -668,14 +1009,37 @@ export function PipelineAutomationsPanel({
 
   const filteredActionGroups = useMemo(() => {
     const q = actionSearch.trim().toLowerCase();
-    if (!q) return TRIGGER_GROUPS;
-    return TRIGGER_GROUPS.map((g) => ({
+    if (!q) return ACTION_KIND_GROUPS;
+    return ACTION_KIND_GROUPS.map((g) => ({
       ...g,
       types: g.types.filter((t) =>
-        PIPELINE_AUTOMATION_TRIGGER_LABELS[t].toLowerCase().includes(q),
+        pipelineAutomationActionKindLabel(t).toLowerCase().includes(q),
       ),
     })).filter((g) => g.types.length > 0);
   }, [actionSearch]);
+
+  const actionSelectedField = useMemo(
+    () => dealCustomFieldDefs.find((d) => d.key === actionCustomFieldKey),
+    [dealCustomFieldDefs, actionCustomFieldKey],
+  );
+
+  useEffect(() => {
+    if (actionKindType !== "DEAL_ALTER_ASSIGNEES") {
+      setActionAddAssigneeUserId("");
+      setActionRemoveAssigneeUserId("");
+    }
+  }, [actionKindType]);
+
+  useEffect(() => {
+    if (
+      actionKindType !== "DEAL_CUSTOM_FIELD_CHANGED" ||
+      actionSelectedField?.fieldType !== "DATE"
+    ) {
+      setActionDatePreset("");
+      setActionDateDaysAfter("");
+      setActionDatePick("");
+    }
+  }, [actionKindType, actionSelectedField?.fieldType, actionCustomFieldKey]);
 
   function buildTriggerFilter(): PipelineAutomationTriggerFilter | null {
     const out: PipelineAutomationTriggerFilter = {};
@@ -733,6 +1097,28 @@ export function PipelineAutomationsPanel({
       setFormError("Selecione o campo personalizado na ação.");
       return;
     }
+    if (actionKindType === "DEAL_CUSTOM_FIELD_CHANGED") {
+      const af = dealCustomFieldDefs.find(
+        (d) => d.key === actionCustomFieldKey.trim(),
+      );
+      if (af?.fieldType === "DATE") {
+        if (!actionDatePreset) {
+          setFormError("Selecione um valor para a data.");
+          return;
+        }
+        if (actionDatePreset === "DAYS_AFTER_TRIGGER") {
+          const n = parseInt(actionDateDaysAfter.trim(), 10);
+          if (!Number.isFinite(n) || n < 0) {
+            setFormError("Informe quantos dias após o gatilho.");
+            return;
+          }
+        }
+        if (actionDatePreset === "PICK_DATE" && !actionDatePick.trim()) {
+          setFormError("Escolha uma data.");
+          return;
+        }
+      }
+    }
     const moveStageId =
       actionKindType === "DEAL_STAGE_TRANSITION"
         ? actionStageToId.trim()
@@ -777,6 +1163,11 @@ export function PipelineAutomationsPanel({
         setActionToCustomStr("");
         setActionTagFilterId("");
         setActionSearch("");
+        setActionAddAssigneeUserId("");
+        setActionRemoveAssigneeUserId("");
+        setActionDatePreset("");
+        setActionDateDaysAfter("");
+        setActionDatePick("");
       } catch (err) {
         setFormError(
           err instanceof Error ? err.message : "Não foi possível salvar.",
@@ -809,7 +1200,7 @@ export function PipelineAutomationsPanel({
   }
 
   const TriggerIcon = triggerIcon(triggerType);
-  const ActionIcon = triggerIcon(actionKindType);
+  const ActionIcon = actionKindIcon(actionKindType);
 
   const triggerFieldBundle: AutomationKindFieldBundle = {
     stageFromId,
@@ -1222,7 +1613,7 @@ export function PipelineAutomationsPanel({
                           aria-hidden
                         />
                         <span className="truncate">
-                          {PIPELINE_AUTOMATION_TRIGGER_LABELS[actionKindType]}
+                          {pipelineAutomationActionKindLabel(actionKindType)}
                         </span>
                       </span>
                       <ChevronDown
@@ -1281,7 +1672,7 @@ export function PipelineAutomationsPanel({
                             {group.heading}
                           </p>
                           {group.types.map((t) => {
-                            const Icon = triggerIcon(t);
+                            const Icon = actionKindIcon(t);
                             const selected = t === actionKindType;
                             return (
                               <button
@@ -1316,7 +1707,7 @@ export function PipelineAutomationsPanel({
                                   aria-hidden
                                 />
                                 <span className="flex-1 truncate">
-                                  {PIPELINE_AUTOMATION_TRIGGER_LABELS[t]}
+                                  {pipelineAutomationActionKindLabel(t)}
                                 </span>
                                 {selected ? (
                                   <span
@@ -1336,17 +1727,47 @@ export function PipelineAutomationsPanel({
                   </PopoverContent>
                 </Popover>
 
-                <AutomationKindConfigFields
-                  kind={actionKindType}
-                  bundle={actionFieldBundle}
-                  isDialog={isDialog}
-                  lbl={lbl}
-                  sel={sel}
-                  stages={stages}
-                  campaignSources={campaignSources}
-                  dealCustomFieldDefs={dealCustomFieldDefs}
-                  sortedTags={sortedTags}
-                />
+                {actionKindType === "DEAL_ALTER_ASSIGNEES" ? (
+                  <ActionAlterAssigneeBlock
+                    members={sortedTenantMembers}
+                    addUserId={actionAddAssigneeUserId}
+                    setAddUserId={setActionAddAssigneeUserId}
+                    removeUserId={actionRemoveAssigneeUserId}
+                    setRemoveUserId={setActionRemoveAssigneeUserId}
+                    lbl={lbl}
+                    sel={sel}
+                    isDialog={isDialog}
+                  />
+                ) : actionKindType === "DEAL_CUSTOM_FIELD_CHANGED" &&
+                  actionSelectedField?.fieldType === "DATE" ? (
+                  <ActionDateCustomFieldBlock
+                    dealCustomFieldDefs={dealCustomFieldDefs}
+                    customFieldKey={actionCustomFieldKey}
+                    setCustomFieldKey={setActionCustomFieldKey}
+                    preset={actionDatePreset}
+                    setPreset={setActionDatePreset}
+                    daysAfter={actionDateDaysAfter}
+                    setDaysAfter={setActionDateDaysAfter}
+                    pick={actionDatePick}
+                    setPick={setActionDatePick}
+                    lbl={lbl}
+                    sel={sel}
+                    isDialog={isDialog}
+                    valueTrigBtn={trigBtn}
+                  />
+                ) : (
+                  <AutomationKindConfigFields
+                    kind={actionKindType as PipelineAutomationTriggerType}
+                    bundle={actionFieldBundle}
+                    isDialog={isDialog}
+                    lbl={lbl}
+                    sel={sel}
+                    stages={stages}
+                    campaignSources={campaignSources}
+                    dealCustomFieldDefs={dealCustomFieldDefs}
+                    sortedTags={sortedTags}
+                  />
+                )}
 
                 <div className="mt-4 space-y-3">
                   {actionKindType !== "DEAL_STAGE_TRANSITION" ? (

@@ -616,6 +616,7 @@ export function PipelineView({
         dealCustomFieldDefs={dealCustomFieldDefs}
         campaignSources={campaignSources}
         tenantTags={tenantTags}
+        tenantMembers={tenantMembers}
       />
     </div>
   );

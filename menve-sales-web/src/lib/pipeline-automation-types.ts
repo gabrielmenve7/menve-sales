@@ -67,3 +67,43 @@ export const PIPELINE_AUTOMATION_TRIGGER_LABELS: Record<
   DEAL_MARKED_WON: "Marcada como ganha",
   DEAL_MARKED_LOST: "Marcada como perdida",
 };
+
+/** Só na coluna Ação: unifica “definir” e “remover” responsável em uma opção. */
+export type PipelineAutomationActionOnlyKind = "DEAL_ALTER_ASSIGNEES";
+
+export type PipelineAutomationActionKindType =
+  | Exclude<
+      PipelineAutomationTriggerType,
+      "DEAL_ASSIGNEE_ASSIGNED" | "DEAL_ASSIGNEE_REMOVED"
+    >
+  | PipelineAutomationActionOnlyKind;
+
+/** Rótulos da lista de tipo de ação (diferem do gatilho onde aplicável). */
+export function pipelineAutomationActionKindLabel(
+  k: PipelineAutomationActionKindType,
+): string {
+  if (k === "DEAL_ALTER_ASSIGNEES") return "Alterar responsável";
+  if (k === "DEAL_CUSTOM_FIELD_CHANGED") return "Definir campo personalizado";
+  return PIPELINE_AUTOMATION_TRIGGER_LABELS[k];
+}
+
+/** Presets de valor para campo personalizado tipo data (ação). */
+export type PipelineAutomationActionDatePreset =
+  | "DAYS_AFTER_TRIGGER"
+  | "ON_TRIGGER_DATE"
+  | "ON_TRIGGER_DATETIME"
+  | "TRIGGER_FIELDS"
+  | "PICK_DATE"
+  | "REMOVE_DATE";
+
+export const PIPELINE_AUTOMATION_ACTION_DATE_PRESET_LABELS: Record<
+  PipelineAutomationActionDatePreset,
+  string
+> = {
+  DAYS_AFTER_TRIGGER: "Dias após data de gatilho",
+  ON_TRIGGER_DATE: "Na data de gatilho",
+  ON_TRIGGER_DATETIME: "Na data e hora do gatilho",
+  TRIGGER_FIELDS: "Campos do disparador",
+  PICK_DATE: "Escolha uma data",
+  REMOVE_DATE: "Remover data",
+};

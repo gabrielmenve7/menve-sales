@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import { PipelineAutomationsPanel } from "./pipeline-automations-panel";
 
@@ -32,6 +33,7 @@ export function PipelineAutomationsDialog({
   dealCustomFieldDefs = [],
   campaignSources = [],
   tenantTags = [],
+  tenantMembers = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -40,6 +42,7 @@ export function PipelineAutomationsDialog({
   dealCustomFieldDefs?: CustomField[];
   campaignSources?: { id: string; name: string }[];
   tenantTags?: { id: string; name: string }[];
+  tenantMembers?: TenantMemberOption[];
 }) {
   const [rulesRaw, setRulesRaw] = useState<unknown>([]);
   const [loading, setLoading] = useState(false);
@@ -104,6 +107,7 @@ export function PipelineAutomationsDialog({
               dealCustomFieldDefs={dealCustomFieldDefs}
               campaignSources={campaignSources}
               tenantTags={tenantTags}
+              tenantMembers={tenantMembers}
             />
           )}
         </div>
