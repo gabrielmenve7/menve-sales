@@ -13,8 +13,8 @@ import { ChevronsLeft } from "lucide-react";
 const LS_WIDTH = "menve.sidebar.width";
 const LS_COLLAPSED = "menve.sidebar.collapsed";
 
-/** +20% vs 216 / 200 / 380 / 80 */
-const WIDTH_DEFAULT = 259;
+/** Padrão: 216 → 259 (+20%) → 311 (+20%) */
+const WIDTH_DEFAULT = 311;
 const WIDTH_MIN = 240;
 const WIDTH_MAX = 456;
 const WIDTH_COLLAPSED = 96;
