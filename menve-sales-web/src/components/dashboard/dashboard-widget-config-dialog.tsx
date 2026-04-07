@@ -249,10 +249,6 @@ export function DashboardWidgetConfigDialog({
     setFilterRows(specToFilterRows(s));
   }, [widget, open]);
 
-  if (!widget) return null;
-
-  const isMetric = widget.type === "METRIC";
-
   const filtersAreDefault = useMemo(() => {
     if (filterRows.length !== 1) return false;
     const r = filterRows[0];
@@ -264,6 +260,10 @@ export function DashboardWidgetConfigDialog({
       !r.status.ARCHIVED
     );
   }, [filterRows]);
+
+  if (!widget) return null;
+
+  const isMetric = widget.type === "METRIC";
 
   function coerceFilterValue(
     key: string,
