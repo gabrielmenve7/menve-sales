@@ -159,11 +159,12 @@ function DealListRow({
         data-pipeline-list-row
         className={cn(
           "transition-colors duration-75 hover:bg-muted/20",
+          !expanded && "border-b border-border/15",
           isDragging && "opacity-45",
         )}
       >
         <td
-          className="w-10 align-middle py-3 pl-3 pr-1 sm:pl-4"
+          className="align-middle py-4 pl-3 pr-2 sm:pl-4"
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -175,7 +176,7 @@ function DealListRow({
             onClick={(e) => e.stopPropagation()}
           />
         </td>
-        <td className="w-10 align-middle px-0.5 py-3">
+        <td className="align-middle px-2 py-4">
           <button
             type="button"
             className="flex size-9 touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -187,7 +188,7 @@ function DealListRow({
             <GripVertical className="size-4" strokeWidth={2} />
           </button>
         </td>
-        <td className="w-9 align-middle px-0 py-3">
+        <td className="align-middle px-2 py-4">
           <button
             type="button"
             className="flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -209,7 +210,7 @@ function DealListRow({
           </button>
         </td>
         <td
-          className="cursor-pointer align-middle py-3 pl-2 pr-2"
+          className="cursor-pointer align-middle py-4 pl-1 pr-3"
           onClick={onOpenDetail}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -233,7 +234,7 @@ function DealListRow({
           </div>
         </td>
         <td
-          className="cursor-pointer align-middle py-3 pl-1 pr-2"
+          className="cursor-pointer align-middle py-4 pl-2 pr-2"
           onClick={onOpenDetail}
         >
           <span
@@ -244,7 +245,7 @@ function DealListRow({
           </span>
         </td>
         <td
-          className="cursor-pointer align-middle py-3 pl-1 pr-3 sm:pr-4"
+          className="cursor-pointer align-middle py-4 pl-2 pr-3 sm:pr-4"
           onClick={onOpenDetail}
         >
           <div className="flex justify-start">
@@ -252,7 +253,10 @@ function DealListRow({
           </div>
         </td>
       </tr>
-      <tr aria-hidden={!expanded}>
+      <tr
+        aria-hidden={!expanded}
+        className={expanded ? "border-b border-border/15" : undefined}
+      >
         <td colSpan={colSpanDetail} className="p-0">
           <div
             className="grid ease-out"
@@ -262,7 +266,7 @@ function DealListRow({
             }}
           >
             <div className="min-h-0 overflow-hidden">
-              <div className="border-0 bg-transparent px-4 pb-3 pl-[7.75rem] pt-0 text-[12px] leading-relaxed text-muted-foreground sm:pl-[8rem]">
+              <div className="border-0 bg-transparent px-4 pb-4 pl-[8.5rem] pt-0 text-[12px] leading-relaxed text-muted-foreground sm:pl-[9rem]">
                 {phone ? (
                   <p>
                     <span className="font-medium text-foreground/80">
@@ -301,7 +305,11 @@ function DealListRow({
 
 const COL_COUNT = 6;
 
-function ListStageSection({
+/** Alinha barra da etapa com as colunas da tabela (mesmas larguras do colgroup). */
+const STAGE_BAR_GRID =
+  "grid grid-cols-[3rem_2.75rem_2.5rem_minmax(0,1fr)_10rem_4rem] items-center gap-x-1";
+
+function ListStageTbody({
   stage,
   stageIndex,
   stageDeals,
@@ -314,6 +322,7 @@ function ListStageSection({
   expandedDealIds,
   setExpandedDealIds,
   onOpenDetail,
+  isFirst,
 }: {
   stage: Stage;
   stageIndex: number;
@@ -327,6 +336,7 @@ function ListStageSection({
   expandedDealIds: Set<string>;
   setExpandedDealIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   onOpenDetail: (d: DealRow) => void;
+  isFirst: boolean;
 }) {
   const accent = stageAccentHex(stage, stageIndex);
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -347,149 +357,124 @@ function ListStageSection({
   }, [dealIds, setSelectedIds]);
 
   return (
-    <section
+    <tbody
       ref={setNodeRef}
       className={cn(
-        "overflow-hidden pb-4 transition-shadow duration-75",
-        isOver && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
+        !isFirst && "border-t-2 border-t-border/30",
+        isOver && "bg-primary/[0.07]",
       )}
     >
-      <button
-        type="button"
-        aria-expanded={!collapsed}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-75 hover:bg-muted/15 sm:gap-4 sm:px-8"
-        onClick={onToggleCollapsed}
-      >
-        <ChevronDown
-          className="size-4 shrink-0 text-muted-foreground ease-out"
-          style={{
-            transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
-            transition: `transform ${STAGE_CHEVRON_MS}ms ease-out`,
-          }}
-          strokeWidth={2}
-          aria-hidden
-        />
-        <span
-          className={cn(
-            "inline-flex max-w-[min(100%,14rem)] shrink-0 truncate rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide",
-            collapsed ? "border-2 bg-background/60" : "border-0 shadow-sm",
-          )}
-          style={
-            collapsed
-              ? {
-                  borderColor: accent,
-                  color: `color-mix(in srgb, ${accent} 78%, var(--foreground) 22%)`,
+      <tr className="bg-muted/40">
+        <td colSpan={COL_COUNT} className="p-0">
+          <div className={cn(STAGE_BAR_GRID, "border-b border-border/25 py-4")}>
+            <div
+              className="flex items-center justify-center pl-3 sm:pl-4"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <StageSelectAllCheckbox
+                dealIds={dealIds}
+                selectedIds={selectedIds}
+                onToggleAll={toggleAllInStage}
+              />
+            </div>
+            <div className="min-w-0" aria-hidden />
+            <div className="min-w-0" aria-hidden />
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              className="flex min-h-[2.75rem] min-w-0 items-center gap-2.5 rounded-md px-1 py-1.5 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={onToggleCollapsed}
+            >
+              <ChevronDown
+                className="size-4 shrink-0 text-muted-foreground ease-out"
+                style={{
+                  transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                  transition: `transform ${STAGE_CHEVRON_MS}ms ease-out`,
+                }}
+                strokeWidth={2}
+                aria-hidden
+              />
+              <span
+                className={cn(
+                  "inline-flex min-w-0 max-w-full truncate rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide",
+                  collapsed ? "border-2 bg-background/60" : "border-0 shadow-sm",
+                )}
+                style={
+                  collapsed
+                    ? {
+                        borderColor: accent,
+                        color: `color-mix(in srgb, ${accent} 78%, var(--foreground) 22%)`,
+                      }
+                    : stageSolidPillStyle(accent)
                 }
-              : stageSolidPillStyle(accent)
-          }
-        >
-          {stage.name}
-        </span>
-        <span className="ml-auto shrink-0 min-w-[1.75rem] rounded-md bg-muted/50 px-2 py-0.5 text-center text-xs font-semibold tabular-nums text-muted-foreground">
-          {stageDeals.length}
-        </span>
-      </button>
-
-      <div
-        className="grid ease-out"
-        style={{
-          gridTemplateRows: collapsed ? "0fr" : "1fr",
-          transition: `grid-template-rows ${STAGE_CHEVRON_MS}ms ease-out`,
-        }}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <div className="px-4 pb-3 pt-0.5 sm:px-8">
-            {stageDeals.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border/40 bg-muted/20 px-4 py-5 text-center">
-                <p className="text-[13px] text-muted-foreground">
-                  Nenhum lead nesta etapa
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-border/30 bg-card/30">
-                <table className="w-full min-w-[32rem] table-fixed border-collapse text-[13px]">
-                  <colgroup>
-                    <col style={{ width: "2.75rem" }} />
-                    <col style={{ width: "2.5rem" }} />
-                    <col style={{ width: "2.25rem" }} />
-                    <col />
-                    <col style={{ width: "9rem" }} />
-                    <col style={{ width: "3.5rem" }} />
-                  </colgroup>
-                  <thead>
-                    <tr className="border-b border-border/25 bg-muted/25 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      <th className="align-middle py-3 pl-3 pr-1 sm:pl-4">
-                        <StageSelectAllCheckbox
-                          dealIds={dealIds}
-                          selectedIds={selectedIds}
-                          onToggleAll={toggleAllInStage}
-                        />
-                      </th>
-                      <th
-                        className="align-middle px-0.5 py-3 text-center font-semibold"
-                        scope="col"
-                      >
-                        <span className="sr-only">Arrastar</span>
-                      </th>
-                      <th className="w-9 align-middle py-3 font-semibold" scope="col">
-                        <span className="sr-only">Expandir</span>
-                      </th>
-                      <th className="align-middle py-3 pl-2 pr-2 font-semibold" scope="col">
-                        Nome
-                      </th>
-                      <th className="align-middle py-3 pl-1 pr-2 font-semibold" scope="col">
-                        Status
-                      </th>
-                      <th className="align-middle py-3 pl-1 pr-3 font-semibold sm:pr-4" scope="col">
-                        Responsável
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/20">
-                    {stageDeals.map((deal) => (
-                      <DealListRow
-                        key={deal.id}
-                        deal={deal}
-                        stage={stage}
-                        accent={accent}
-                        colSpanDetail={COL_COUNT}
-                        isSelected={selectedIds.has(deal.id)}
-                        onToggleSelect={() => {
-                          setSelectedIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(deal.id)) next.delete(deal.id);
-                            else next.add(deal.id);
-                            return next;
-                          });
-                        }}
-                        expanded={expandedDealIds.has(deal.id)}
-                        onToggleExpand={() => {
-                          setExpandedDealIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(deal.id)) next.delete(deal.id);
-                            else next.add(deal.id);
-                            return next;
-                          });
-                        }}
-                        onOpenDetail={() => onOpenDetail(deal)}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="mt-2 pt-2">
+              >
+                {stage.name}
+              </span>
+            </button>
+            <div className="min-w-0" aria-hidden />
+            <div className="flex justify-end pr-3 sm:pr-4">
+              <span className="min-w-[2rem] rounded-md bg-muted/60 px-2.5 py-1 text-center text-xs font-semibold tabular-nums text-muted-foreground">
+                {stageDeals.length}
+              </span>
+            </div>
+          </div>
+        </td>
+      </tr>
+      {!collapsed && (
+        <>
+          {stageDeals.length === 0 ? (
+            <tr>
+              <td
+                colSpan={COL_COUNT}
+                className="border-b border-border/20 bg-muted/15 px-4 py-8 text-center text-[13px] leading-relaxed text-muted-foreground"
+              >
+                Nenhum lead nesta etapa
+              </td>
+            </tr>
+          ) : (
+            stageDeals.map((deal) => (
+              <DealListRow
+                key={deal.id}
+                deal={deal}
+                stage={stage}
+                accent={accent}
+                colSpanDetail={COL_COUNT}
+                isSelected={selectedIds.has(deal.id)}
+                onToggleSelect={() => {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(deal.id)) next.delete(deal.id);
+                    else next.add(deal.id);
+                    return next;
+                  });
+                }}
+                expanded={expandedDealIds.has(deal.id)}
+                onToggleExpand={() => {
+                  setExpandedDealIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(deal.id)) next.delete(deal.id);
+                    else next.add(deal.id);
+                    return next;
+                  });
+                }}
+                onOpenDetail={() => onOpenDetail(deal)}
+              />
+            ))
+          )}
+          <tr className="border-b border-border/25 bg-muted/10">
+            <td colSpan={COL_COUNT} className="p-4 pt-3">
               <PipelineNewDeal
                 pipeline={pipeline}
                 contacts={contacts}
                 defaultStageId={stage.id}
                 variant="column"
               />
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+            </td>
+          </tr>
+        </>
+      )}
+    </tbody>
   );
 }
 
@@ -645,23 +630,69 @@ export function PipelineListView({
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        {sortedStages.map((stage, stageIndex) => (
-          <ListStageSection
-            key={stage.id}
-            stage={stage}
-            stageIndex={stageIndex}
-            stageDeals={byStage.get(stage.id) ?? []}
-            pipeline={pipeline}
-            contacts={contacts}
-            collapsed={collapsedStageIds.has(stage.id)}
-            onToggleCollapsed={() => toggleStage(stage.id)}
-            selectedIds={selectedIds}
-            setSelectedIds={setSelectedIds}
-            expandedDealIds={expandedDealIds}
-            setExpandedDealIds={setExpandedDealIds}
-            onOpenDetail={openDetail}
-          />
-        ))}
+        <div className="px-4 pb-4 pt-1 sm:px-8">
+          <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/50 shadow-sm">
+            <table className="mx-auto w-full max-w-[52rem] min-w-[30rem] table-fixed border-collapse text-[13px]">
+              <colgroup>
+                <col style={{ width: "3rem" }} />
+                <col style={{ width: "2.75rem" }} />
+                <col style={{ width: "2.5rem" }} />
+                <col />
+                <col style={{ width: "10rem" }} />
+                <col style={{ width: "4rem" }} />
+              </colgroup>
+              <thead className="border-b-2 border-border/30 bg-muted/40 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th
+                    scope="col"
+                    className="py-4 pl-3 pr-2 align-middle sm:pl-4"
+                  >
+                    <span className="sr-only">Seleção por etapa</span>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-2 py-4 align-middle text-center font-semibold"
+                  >
+                    <span className="sr-only">Arrastar</span>
+                  </th>
+                  <th scope="col" className="px-2 py-4 align-middle font-semibold">
+                    <span className="sr-only">Expandir</span>
+                  </th>
+                  <th scope="col" className="py-4 pl-1 pr-3 align-middle font-semibold">
+                    Nome
+                  </th>
+                  <th scope="col" className="py-4 pl-2 pr-2 align-middle font-semibold">
+                    Status
+                  </th>
+                  <th
+                    scope="col"
+                    className="py-4 pl-2 pr-3 align-middle font-semibold sm:pr-4"
+                  >
+                    Responsável
+                  </th>
+                </tr>
+              </thead>
+              {sortedStages.map((stage, stageIndex) => (
+                <ListStageTbody
+                  key={stage.id}
+                  isFirst={stageIndex === 0}
+                  stage={stage}
+                  stageIndex={stageIndex}
+                  stageDeals={byStage.get(stage.id) ?? []}
+                  pipeline={pipeline}
+                  contacts={contacts}
+                  collapsed={collapsedStageIds.has(stage.id)}
+                  onToggleCollapsed={() => toggleStage(stage.id)}
+                  selectedIds={selectedIds}
+                  setSelectedIds={setSelectedIds}
+                  expandedDealIds={expandedDealIds}
+                  setExpandedDealIds={setExpandedDealIds}
+                  onOpenDetail={openDetail}
+                />
+              ))}
+            </table>
+          </div>
+        </div>
         <DragOverlay zIndex={120} dropAnimation={null}>
           {activeDragDeal ? (
             <ListDragOverlayFace deal={activeDragDeal} />
