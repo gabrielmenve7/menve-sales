@@ -13,7 +13,8 @@
     "db:studio": "prisma studio --schema prisma/schema.prisma",
     "db:seed": "prisma db seed --schema prisma/schema.prisma",
     "test:coerce": "tsx src/custom-fields/custom-field-coerce.selftest.ts",
-    "backfill:prospect-phones": "tsx scripts/backfill-contact-phones-from-prospects.ts"
+    "backfill:prospect-phones": "tsx scripts/backfill-contact-phones-from-prospects.ts",
+    "backfill:oportunidade-assignee": "tsx scripts/backfill-oportunidade-assignee.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
