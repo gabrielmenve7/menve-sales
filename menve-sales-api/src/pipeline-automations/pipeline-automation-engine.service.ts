@@ -7,7 +7,10 @@ import type { Prisma } from "@prisma/client";
 import { DealsService } from "../deals/deals.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PIPELINE_AUTOMATION_MAX_DEPTH } from "./pipeline-automation.constants";
-import { automationActionsSchema } from "./pipeline-automation.dto";
+import {
+  automationActionsSchema,
+  parseCompositeTriggerFilter,
+} from "./pipeline-automation.dto";
 
 type StageEventCtx = {
   tenantId: string;
@@ -138,6 +141,79 @@ export class PipelineAutomationEngineService {
     }
   }
 
+  private async tryCompositeRule(
+    rule: {
+      id: string;
+      tenantId: string;
+      pipelineId: string;
+      triggerFilter: Prisma.JsonValue | null;
+      actions: Prisma.JsonValue;
+    },
+    event: AutomationEvent,
+    dealId: string,
+    actorUserId: string,
+    depth: number,
+  ): Promise<void> {
+    const comp = parseCompositeTriggerFilter(rule.triggerFilter);
+    if (!comp || comp.clauses.length < 2) return;
+
+    const n = comp.clauses.length;
+    const fullMask = (1 << n) - 1;
+    const matchedIndices: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const c = comp.clauses[i];
+      if (
+        this.filterMatches(
+          c.triggerType,
+          c.triggerFilter as Prisma.JsonValue,
+          event,
+        )
+      ) {
+        matchedIndices.push(i);
+      }
+    }
+    if (matchedIndices.length === 0) return;
+
+    if (comp.op === "OR") {
+      const mt = comp.clauses[matchedIndices[0]].triggerType;
+      await this.executeRule(rule, dealId, actorUserId, mt, depth);
+      return;
+    }
+
+    const existing =
+      await this.prisma.pipelineAutomationAndProgress.findUnique({
+        where: {
+          ruleId_dealId: { ruleId: rule.id, dealId },
+        },
+      });
+    let mask = existing?.mask ?? 0;
+    for (const i of matchedIndices) {
+      mask |= 1 << i;
+    }
+    if (mask === fullMask) {
+      await this.executeRule(
+        rule,
+        dealId,
+        actorUserId,
+        comp.clauses[0].triggerType,
+        depth,
+      );
+      mask = 0;
+    }
+    await this.prisma.pipelineAutomationAndProgress.upsert({
+      where: {
+        ruleId_dealId: { ruleId: rule.id, dealId },
+      },
+      create: {
+        tenantId: rule.tenantId,
+        ruleId: rule.id,
+        dealId,
+        mask,
+      },
+      update: { mask },
+    });
+  }
+
   private async recordRun(
     tenantId: string,
     ruleId: string,
@@ -176,12 +252,12 @@ export class PipelineAutomationEngineService {
     );
   }
 
+  /** Só usa id/tenantId/pipelineId/actions; gatilho efetivo vem em matchedTriggerType (ex.: regras COMPOSITE). */
   private async executeRule(
     rule: {
       id: string;
       tenantId: string;
       pipelineId: string;
-      triggerType: PipelineAutomationTriggerType;
       actions: Prisma.JsonValue;
     },
     dealId: string,
@@ -305,6 +381,16 @@ export class PipelineAutomationEngineService {
       campaignSourceId: ctx.campaignSourceId,
     };
     for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
       if (rule.triggerType !== PipelineAutomationTriggerType.DEAL_CREATED)
         continue;
       if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
@@ -328,6 +414,16 @@ export class PipelineAutomationEngineService {
       toStageId: ctx.toStageId,
     };
     for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
       if (
         rule.triggerType !==
           PipelineAutomationTriggerType.DEAL_ENTERED_STAGE &&
@@ -368,9 +464,19 @@ export class PipelineAutomationEngineService {
       toValue: ctx.toValue,
     };
     for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
       if (
         rule.triggerType !==
-        PipelineAutomationTriggerType.DEAL_CUSTOM_FIELD_CHANGED
+          PipelineAutomationTriggerType.DEAL_CUSTOM_FIELD_CHANGED
       )
         continue;
       if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
@@ -390,9 +496,19 @@ export class PipelineAutomationEngineService {
     const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
     const event: AutomationEvent = { kind: "assignee", assigned: true };
     for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
       if (
         rule.triggerType !==
-        PipelineAutomationTriggerType.DEAL_ASSIGNEE_ASSIGNED
+          PipelineAutomationTriggerType.DEAL_ASSIGNEE_ASSIGNED
       )
         continue;
       if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
@@ -412,9 +528,19 @@ export class PipelineAutomationEngineService {
     const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
     const event: AutomationEvent = { kind: "assignee", assigned: false };
     for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
       if (
         rule.triggerType !==
-        PipelineAutomationTriggerType.DEAL_ASSIGNEE_REMOVED
+          PipelineAutomationTriggerType.DEAL_ASSIGNEE_REMOVED
       )
         continue;
       if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
@@ -453,9 +579,19 @@ export class PipelineAutomationEngineService {
     for (const d of deals) {
       const rules = await this.loadEnabledRules(ctx.tenantId, d.pipelineId);
       for (const rule of rules) {
+        if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+          await this.tryCompositeRule(
+            rule,
+            event,
+            d.id,
+            ctx.actorUserId,
+            ctx.depth,
+          );
+          continue;
+        }
         if (
           rule.triggerType !==
-          PipelineAutomationTriggerType.CONTACT_TAG_ADDED
+            PipelineAutomationTriggerType.CONTACT_TAG_ADDED
         )
           continue;
         if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
@@ -495,9 +631,19 @@ export class PipelineAutomationEngineService {
     for (const d of deals) {
       const rules = await this.loadEnabledRules(ctx.tenantId, d.pipelineId);
       for (const rule of rules) {
+        if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+          await this.tryCompositeRule(
+            rule,
+            event,
+            d.id,
+            ctx.actorUserId,
+            ctx.depth,
+          );
+          continue;
+        }
         if (
           rule.triggerType !==
-          PipelineAutomationTriggerType.CONTACT_TAG_REMOVED
+            PipelineAutomationTriggerType.CONTACT_TAG_REMOVED
         )
           continue;
         if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
@@ -518,6 +664,16 @@ export class PipelineAutomationEngineService {
     const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
     const event: AutomationEvent = { kind: "won" };
     for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
       if (rule.triggerType !== PipelineAutomationTriggerType.DEAL_MARKED_WON)
         continue;
       if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
@@ -537,6 +693,16 @@ export class PipelineAutomationEngineService {
     const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
     const event: AutomationEvent = { kind: "lost" };
     for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
       if (rule.triggerType !== PipelineAutomationTriggerType.DEAL_MARKED_LOST)
         continue;
       if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
