@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Info, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +25,7 @@ import type {
   WidgetQuerySpec,
   WidgetType,
 } from "@/lib/dashboard-builder-types";
+import { cn } from "@/lib/utils";
 
 const DIMENSION_OPTIONS: {
   value: NonNullable<WidgetQuerySpec["dimension"]> | "";
@@ -67,6 +68,119 @@ function numericFieldTypes(f: DealCustomFieldDef) {
   return f.fieldType === "NUMBER" || f.fieldType === "MONEY_BRL";
 }
 
+/** Mesmo padrão visual do filtro do pipeline (`pipeline-view`). */
+const selectClass = cn(
+  "min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-2 text-sm shadow-sm",
+  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+);
+
+const fieldSelectClass = cn(
+  "min-w-[13.5rem] shrink-0 rounded-md border border-input bg-background px-2 py-2 text-sm shadow-sm",
+  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+);
+
+type DashFilterField = "status" | "tags" | "createdAt" | "customField";
+
+const DASH_FIELD_LABELS: Record<DashFilterField, string> = {
+  status: "Status",
+  tags: "Tags",
+  createdAt: "Data de criação",
+  customField: "Campo customizado",
+};
+
+type DashFilterRow =
+  | { id: string; field: "status"; status: Record<DealStatusCode, boolean> }
+  | { id: string; field: "tags"; tagIds: string[] }
+  | { id: string; field: "createdAt"; createdFrom: string; createdTo: string }
+  | { id: string; field: "customField"; key: string; value: string };
+
+function newRowId(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `dw-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function defaultStatusRecord(): Record<DealStatusCode, boolean> {
+  return { OPEN: true, WON: false, LOST: false, ARCHIVED: false };
+}
+
+function createDashFilterRow(field: DashFilterField): DashFilterRow {
+  return createDashFilterRowWithId(newRowId(), field);
+}
+
+function createDashFilterRowWithId(
+  id: string,
+  field: DashFilterField,
+): DashFilterRow {
+  switch (field) {
+    case "status":
+      return { id, field: "status", status: defaultStatusRecord() };
+    case "tags":
+      return { id, field: "tags", tagIds: [] };
+    case "createdAt":
+      return { id, field: "createdAt", createdFrom: "", createdTo: "" };
+    case "customField":
+      return { id, field: "customField", key: "", value: "" };
+  }
+}
+
+function specToFilterRows(spec: WidgetQuerySpec): DashFilterRow[] {
+  const rows: DashFilterRow[] = [
+    {
+      id: newRowId(),
+      field: "status",
+      status: statusesFromSpec(spec),
+    },
+  ];
+  if (spec.filterTagIds && spec.filterTagIds.length > 0) {
+    rows.push({
+      id: newRowId(),
+      field: "tags",
+      tagIds: [...spec.filterTagIds],
+    });
+  }
+  if (spec.filterCreatedFrom || spec.filterCreatedTo) {
+    rows.push({
+      id: newRowId(),
+      field: "createdAt",
+      createdFrom: spec.filterCreatedFrom ?? "",
+      createdTo: spec.filterCreatedTo ?? "",
+    });
+  }
+  for (const f of spec.filterCustomFields ?? []) {
+    rows.push({
+      id: newRowId(),
+      field: "customField",
+      key: f.key,
+      value:
+        typeof f.value === "boolean"
+          ? String(f.value)
+          : String(f.value ?? ""),
+    });
+  }
+  return rows;
+}
+
+function fieldsTakenByOthers(
+  rows: DashFilterRow[],
+  exceptId: string,
+): Set<Exclude<DashFilterField, "customField">> {
+  const s = new Set<Exclude<DashFilterField, "customField">>();
+  for (const r of rows) {
+    if (r.id === exceptId) continue;
+    if (r.field !== "customField") s.add(r.field);
+  }
+  return s;
+}
+
+function nextFieldToAdd(rows: DashFilterRow[]): DashFilterField | null {
+  const taken = fieldsTakenByOthers(rows, "");
+  if (!taken.has("status")) return "status";
+  if (!taken.has("tags")) return "tags";
+  if (!taken.has("createdAt")) return "createdAt";
+  return "customField";
+}
+
 /** Estilos alinhados ao tema (light/dark via tokens do app). */
 const panel = {
   shell:
@@ -104,18 +218,9 @@ export function DashboardWidgetConfigDialog({
     NonNullable<WidgetQuerySpec["dimension"]> | ""
   >("");
   const [days, setDays] = useState(30);
-  const [statusPick, setStatusPick] = useState<Record<DealStatusCode, boolean>>({
-    OPEN: true,
-    WON: false,
-    LOST: false,
-    ARCHIVED: false,
-  });
-  const [tagIds, setTagIds] = useState<string[]>([]);
-  const [createdFrom, setCreatedFrom] = useState("");
-  const [createdTo, setCreatedTo] = useState("");
-  const [extraFilters, setExtraFilters] = useState<{ key: string; value: string }[]>(
-    [],
-  );
+  const [filterRows, setFilterRows] = useState<DashFilterRow[]>(() => [
+    createDashFilterRow("status"),
+  ]);
 
   const numericCustomFields = useMemo(
     () => dealCustomFields.filter(numericFieldTypes),
@@ -141,24 +246,24 @@ export function DashboardWidgetConfigDialog({
       s.dimension === null || s.dimension === undefined ? "" : s.dimension,
     );
     setDays(s.days ?? 30);
-    setStatusPick(statusesFromSpec(s));
-    setTagIds(s.filterTagIds ?? []);
-    setCreatedFrom(s.filterCreatedFrom ?? "");
-    setCreatedTo(s.filterCreatedTo ?? "");
-    setExtraFilters(
-      (s.filterCustomFields ?? []).map((f) => ({
-        key: f.key,
-        value:
-          typeof f.value === "boolean"
-            ? String(f.value)
-            : String(f.value ?? ""),
-      })),
-    );
+    setFilterRows(specToFilterRows(s));
   }, [widget, open]);
 
   if (!widget) return null;
 
   const isMetric = widget.type === "METRIC";
+
+  const filtersAreDefault = useMemo(() => {
+    if (filterRows.length !== 1) return false;
+    const r = filterRows[0];
+    if (r?.field !== "status") return false;
+    return (
+      r.status.OPEN &&
+      !r.status.WON &&
+      !r.status.LOST &&
+      !r.status.ARCHIVED
+    );
+  }, [filterRows]);
 
   function coerceFilterValue(
     key: string,
@@ -175,16 +280,74 @@ export function DashboardWidgetConfigDialog({
     return raw;
   }
 
+  function selectableFieldsForRow(rowId: string): DashFilterField[] {
+    const taken = fieldsTakenByOthers(filterRows, rowId);
+    const current = filterRows.find((r) => r.id === rowId)?.field;
+    const all: DashFilterField[] = [
+      "status",
+      "tags",
+      "createdAt",
+      "customField",
+    ];
+    return all.filter((f) => {
+      if (f === "customField") return true;
+      if (f === current) return true;
+      return !taken.has(f);
+    });
+  }
+
+  function removeFilterRow(rowId: string) {
+    setFilterRows((prev) => prev.filter((r) => r.id !== rowId));
+  }
+
+  function onDashRowFieldChange(rowId: string, field: DashFilterField) {
+    setFilterRows((prev) =>
+      prev.map((r) =>
+        r.id === rowId ? createDashFilterRowWithId(rowId, field) : r,
+      ),
+    );
+  }
+
+  function addDashFilterRow() {
+    const next = nextFieldToAdd(filterRows);
+    if (!next) return;
+    setFilterRows((prev) => [...prev, createDashFilterRow(next)]);
+  }
+
+  function clearDashFilters() {
+    setFilterRows([createDashFilterRow("status")]);
+  }
+
   function handleSave() {
     if (!widget) return;
+
+    const statusRow = filterRows.find((r) => r.field === "status");
+    const statusPick =
+      statusRow?.field === "status"
+        ? statusRow.status
+        : defaultStatusRecord();
     const statuses = STATUS_META.filter((x) => statusPick[x.code]).map(
       (x) => x.code,
     );
     const filterStatuses =
       statuses.length > 0 ? statuses : (["OPEN"] as DealStatusCode[]);
 
+    const tagsRow = filterRows.find((r) => r.field === "tags");
+    const tagIds =
+      tagsRow?.field === "tags" ? tagsRow.tagIds : [];
+
+    const createdRow = filterRows.find((r) => r.field === "createdAt");
+    const createdFrom =
+      createdRow?.field === "createdAt" ? createdRow.createdFrom : "";
+    const createdTo =
+      createdRow?.field === "createdAt" ? createdRow.createdTo : "";
+
+    const extraFromRows = filterRows.filter(
+      (r): r is Extract<DashFilterRow, { field: "customField" }> =>
+        r.field === "customField",
+    );
     const filterCustomFields =
-      extraFilters
+      extraFromRows
         .filter((r) => r.key.trim() && r.value.trim() !== "")
         .map((r) => ({
           key: r.key.trim(),
@@ -442,183 +605,279 @@ export function DashboardWidgetConfigDialog({
             value="filters"
             className="mt-0 flex-1 overflow-y-auto px-6 pb-4 pt-4 focus-visible:outline-none"
           >
-            <div className="grid gap-5">
-              <div className="grid gap-2">
-                <Label className="text-foreground">Status</Label>
-                <div className="flex flex-wrap gap-3">
-                  {STATUS_META.map(({ code, label }) => (
-                    <label
-                      key={code}
-                      className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={statusPick[code]}
-                        onChange={(e) =>
-                          setStatusPick((p) => ({
-                            ...p,
-                            [code]: e.target.checked,
-                          }))
-                        }
-                        className="rounded border-input bg-background text-primary"
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className={`grid gap-2 border-t pt-5 ${panel.divider}`}>
-                <Label htmlFor="dw-tags" className="text-foreground">
-                  Tags
-                </Label>
-                {tags.length === 0 ? (
-                  <p className={panel.muted}>Nenhuma tag cadastrada.</p>
-                ) : (
-                  <select
-                    id="dw-tags"
-                    multiple
-                    className={`min-h-[88px] w-full rounded-lg px-2 py-1 text-sm ${panel.control}`}
-                    value={tagIds}
-                    onChange={(e) => {
-                      const v = Array.from(
-                        e.target.selectedOptions,
-                        (o) => o.value,
-                      );
-                      setTagIds(v);
-                    }}
-                  >
-                    {tags.map((t) => (
-                      <option
-                        key={t.id}
-                        value={t.id}
-                        className="bg-popover text-popover-foreground"
-                      >
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <p className={panel.muted}>
-                  Ctrl + clique para várias. O deal precisa ter todas.
-                </p>
-              </div>
-              <div
-                className={`grid gap-3 border-t pt-5 sm:grid-cols-2 ${panel.divider}`}
+            <div className="mb-3 flex items-center gap-2">
+              <p className="text-sm font-semibold text-foreground">Filtros</p>
+              <span
+                className="inline-flex text-muted-foreground"
+                title="Cada linha é um critério; o cartão usa todos ao mesmo tempo (E). Em Tags, o deal precisa ter todas as tags selecionadas."
               >
-                <div className="grid gap-1.5">
-                  <Label htmlFor="dw-cfrom" className="text-foreground">
-                    Criado em (de)
-                  </Label>
-                  <Input
-                    id="dw-cfrom"
-                    type="date"
-                    value={createdFrom}
-                    onChange={(e) => setCreatedFrom(e.target.value)}
-                    className={panel.control}
-                  />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="dw-cto" className="text-foreground">
-                    Criado em (até)
-                  </Label>
-                  <Input
-                    id="dw-cto"
-                    type="date"
-                    value={createdTo}
-                    onChange={(e) => setCreatedTo(e.target.value)}
-                    className={panel.control}
-                  />
-                </div>
+                <Info className="size-3.5" strokeWidth={2} aria-hidden />
+              </span>
+            </div>
+
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 dark:bg-muted/10">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Grupo 1
+                </span>
               </div>
-              <div className={`grid gap-2 border-t pt-5 ${panel.divider}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <Label className="text-foreground">Campos customizados</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() =>
-                      setExtraFilters((r) => [...r, { key: "", value: "" }])
-                    }
+              <div className="space-y-2">
+                {filterRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex flex-col gap-2 border-b border-border/30 pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:flex-wrap sm:items-start"
                   >
-                    + Filtro
-                  </Button>
-                </div>
-                {extraFilters.length === 0 ? (
-                  <p className={panel.muted}>Valor igual ao salvo no deal.</p>
-                ) : null}
-                <div className="flex flex-col gap-2">
-                  {extraFilters.map((row, i) => (
-                    <div
-                      key={i}
-                      className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/40 p-2"
-                    >
-                      <div className="grid min-w-[140px] flex-1 gap-1">
-                        <Label className="text-foreground">Campo</Label>
-                        <select
-                          className={`h-8 w-full px-2 text-xs ${panel.control}`}
-                          value={row.key}
-                          onChange={(e) => {
-                            const k = e.target.value;
-                            setExtraFilters((rows) =>
-                              rows.map((x, j) =>
-                                j === i ? { ...x, key: k } : x,
-                              ),
-                            );
-                          }}
-                        >
-                          <option
-                            value=""
-                            className="bg-popover text-popover-foreground"
-                          >
-                            —
-                          </option>
-                          {dealCustomFields.map((f) => (
-                            <option
-                              key={f.id}
-                              value={f.key}
-                              className="bg-popover text-popover-foreground"
-                            >
-                              {f.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="grid min-w-[120px] flex-1 gap-1">
-                        <Label className="text-foreground">Valor</Label>
-                        <Input
-                          className={`h-8 text-xs ${panel.control}`}
-                          value={row.value}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setExtraFilters((rows) =>
-                              rows.map((x, j) =>
-                                j === i ? { ...x, value: v } : x,
-                              ),
-                            );
-                          }}
-                          placeholder="Valor"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() =>
-                          setExtraFilters((rows) =>
-                            rows.filter((_, j) => j !== i),
+                    <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+                      <select
+                        className={fieldSelectClass}
+                        value={row.field}
+                        onChange={(e) =>
+                          onDashRowFieldChange(
+                            row.id,
+                            e.target.value as DashFilterField,
                           )
                         }
+                        aria-label="Campo"
                       >
-                        Remover
-                      </Button>
+                        {selectableFieldsForRow(row.id).map((f) => (
+                          <option
+                            key={f}
+                            value={f}
+                            className="bg-popover text-popover-foreground"
+                          >
+                            {DASH_FIELD_LABELS[f]}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="flex h-10 shrink-0 items-center px-0.5 text-sm text-muted-foreground">
+                        é
+                      </span>
+                      {row.field === "status" ? (
+                        <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 py-1">
+                          {STATUS_META.map(({ code, label }) => (
+                            <label
+                              key={code}
+                              className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={row.status[code]}
+                                onChange={(e) =>
+                                  setFilterRows((prev) =>
+                                    prev.map((r) =>
+                                      r.id === row.id && r.field === "status"
+                                        ? {
+                                            ...r,
+                                            status: {
+                                              ...r.status,
+                                              [code]: e.target.checked,
+                                            },
+                                          }
+                                        : r,
+                                    ),
+                                  )
+                                }
+                                className="rounded border-input bg-background text-primary"
+                              />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
+                      {row.field === "tags" ? (
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          {tags.length === 0 ? (
+                            <p className={panel.muted}>
+                              Nenhuma tag cadastrada.
+                            </p>
+                          ) : (
+                            <select
+                              multiple
+                              className={cn(
+                                selectClass,
+                                "min-h-[88px] py-1.5",
+                              )}
+                              value={row.tagIds}
+                              onChange={(e) => {
+                                const v = Array.from(
+                                  e.target.selectedOptions,
+                                  (o) => o.value,
+                                );
+                                setFilterRows((prev) =>
+                                  prev.map((r) =>
+                                    r.id === row.id && r.field === "tags"
+                                      ? { ...r, tagIds: v }
+                                      : r,
+                                  ),
+                                );
+                              }}
+                              aria-label="Tags"
+                            >
+                              {tags.map((t) => (
+                                <option
+                                  key={t.id}
+                                  value={t.id}
+                                  className="bg-popover text-popover-foreground"
+                                >
+                                  {t.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {tags.length > 0 ? (
+                            <p className={panel.muted}>
+                              Ctrl + clique para várias. O deal precisa ter
+                              todas.
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {row.field === "createdAt" ? (
+                        <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+                          <div className="grid min-w-[8.5rem] flex-1 gap-1">
+                            <Label className="text-[10px] text-muted-foreground">
+                              De
+                            </Label>
+                            <Input
+                              type="date"
+                              value={row.createdFrom}
+                              onChange={(e) =>
+                                setFilterRows((prev) =>
+                                  prev.map((r) =>
+                                    r.id === row.id && r.field === "createdAt"
+                                      ? {
+                                          ...r,
+                                          createdFrom: e.target.value,
+                                        }
+                                      : r,
+                                  ),
+                                )
+                              }
+                              className="h-9 text-xs"
+                            />
+                          </div>
+                          <div className="grid min-w-[8.5rem] flex-1 gap-1">
+                            <Label className="text-[10px] text-muted-foreground">
+                              Até
+                            </Label>
+                            <Input
+                              type="date"
+                              value={row.createdTo}
+                              onChange={(e) =>
+                                setFilterRows((prev) =>
+                                  prev.map((r) =>
+                                    r.id === row.id && r.field === "createdAt"
+                                      ? {
+                                          ...r,
+                                          createdTo: e.target.value,
+                                        }
+                                      : r,
+                                  ),
+                                )
+                              }
+                              className="h-9 text-xs"
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                      {row.field === "customField" ? (
+                        <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
+                          <select
+                            className={cn(selectClass, "min-w-[10rem]")}
+                            value={row.key}
+                            onChange={(e) =>
+                              setFilterRows((prev) =>
+                                prev.map((r) =>
+                                  r.id === row.id && r.field === "customField"
+                                    ? { ...r, key: e.target.value }
+                                    : r,
+                                ),
+                              )
+                            }
+                            aria-label="Campo customizado"
+                          >
+                            <option
+                              value=""
+                              className="bg-popover text-popover-foreground"
+                            >
+                              Selecionar…
+                            </option>
+                            {dealCustomFields.map((f) => (
+                              <option
+                                key={f.id}
+                                value={f.key}
+                                className="bg-popover text-popover-foreground"
+                              >
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Input
+                            className={cn(selectClass, "min-w-[8rem]")}
+                            value={row.value}
+                            onChange={(e) =>
+                              setFilterRows((prev) =>
+                                prev.map((r) =>
+                                  r.id === row.id && r.field === "customField"
+                                    ? { ...r, value: e.target.value }
+                                    : r,
+                                ),
+                              )
+                            }
+                            placeholder="Valor no deal"
+                            aria-label="Valor do filtro"
+                          />
+                        </div>
+                      ) : null}
                     </div>
-                  ))}
-                </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-10 shrink-0 self-end text-muted-foreground hover:text-destructive sm:self-start"
+                      aria-label="Remover filtro"
+                      onClick={() => removeFilterRow(row.id)}
+                    >
+                      <Trash2 className="size-4" strokeWidth={2} />
+                    </Button>
+                  </div>
+                ))}
               </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-2 h-8 w-full text-xs text-muted-foreground"
+                onClick={addDashFilterRow}
+              >
+                Adicionar filtro neste grupo
+              </Button>
             </div>
+
+            <div className="mt-3 flex flex-col gap-2 border-t border-border/40 pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full justify-center gap-1.5"
+                onClick={addDashFilterRow}
+              >
+                <Plus className="size-4" strokeWidth={2} />
+                Adicionar filtro
+              </Button>
+            </div>
+
+            {!filtersAreDefault ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="mt-3 w-full"
+                onClick={clearDashFilters}
+              >
+                Limpar filtros
+              </Button>
+            ) : null}
           </TabsContent>
         </Tabs>
         <DialogFooter
