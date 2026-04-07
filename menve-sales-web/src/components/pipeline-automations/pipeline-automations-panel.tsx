@@ -86,6 +86,12 @@ const TRIGGER_GROUPS: { heading: string; types: PipelineAutomationTriggerType[] 
     },
   ];
 
+/** Tipos de ação persistidos na API (hoje só MOVE_TO_STAGE; lista pronta para expansão). */
+const AUTOMATION_ACTION_OPTIONS: {
+  type: PipelineAutomationAction["type"];
+  label: string;
+}[] = [{ type: "MOVE_TO_STAGE", label: "Alterar status (mover etapa)" }];
+
 function triggerIcon(t: PipelineAutomationTriggerType) {
   switch (t) {
     case "DEAL_STAGE_TRANSITION":
@@ -309,6 +315,9 @@ export function PipelineAutomationsPanel({
   const [pending, startTransition] = useTransition();
   const [triggerMenuOpen, setTriggerMenuOpen] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState("");
+  const [actionType, setActionType] =
+    useState<PipelineAutomationAction["type"]>("MOVE_TO_STAGE");
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
 
   const [openRunsId, setOpenRunsId] = useState<string | null>(null);
   const [runsByRule, setRunsByRule] = useState<
@@ -335,6 +344,13 @@ export function PipelineAutomationsPanel({
       ),
     })).filter((g) => g.types.length > 0);
   }, [triggerSearch]);
+
+  const actionTypeLabel = useMemo(
+    () =>
+      AUTOMATION_ACTION_OPTIONS.find((o) => o.type === actionType)?.label ??
+      actionType,
+    [actionType],
+  );
 
   function buildTriggerFilter(): PipelineAutomationTriggerFilter | null {
     const out: PipelineAutomationTriggerFilter = {};
@@ -397,7 +413,7 @@ export function PipelineAutomationsPanel({
           name: name.trim(),
           triggerType,
           triggerFilter,
-          actions: [{ type: "MOVE_TO_STAGE", stageId: targetStageId }],
+          actions: [{ type: actionType, stageId: targetStageId }],
         });
         onRulesChanged?.();
         setName("");
@@ -411,6 +427,7 @@ export function PipelineAutomationsPanel({
         setToCustomStr("");
         setTagFilterId("");
         setTargetStageId(stages[0]?.id ?? "");
+        setActionType("MOVE_TO_STAGE");
       } catch (err) {
         setFormError(
           err instanceof Error ? err.message : "Não foi possível salvar.",
@@ -504,7 +521,10 @@ export function PipelineAutomationsPanel({
 
           <div
             className={cn(
-              "grid gap-6 lg:grid-cols-[1fr_auto_1fr] lg:items-start",
+              "grid gap-6 lg:items-start",
+              isDialog
+                ? "lg:grid-cols-[minmax(0,1.25fr)_auto_minmax(0,1.25fr)]"
+                : "lg:grid-cols-[1fr_auto_1fr]",
               isDialog ? "text-zinc-100" : "text-foreground",
             )}
           >
@@ -594,10 +614,10 @@ export function PipelineAutomationsPanel({
                   <PopoverContent
                     align="start"
                     className={cn(
-                      "w-[min(100vw-2rem,320px)] p-0 shadow-lg",
+                      "p-0 shadow-lg",
                       isDialog
-                        ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-                        : "border-border/60",
+                        ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
+                        : "w-[min(100vw-2rem,20rem)] border-border/60",
                     )}
                   >
                     <div
@@ -984,7 +1004,7 @@ export function PipelineAutomationsPanel({
               </div>
             </div>
 
-            {/* Ação */}
+            {/* Ação — mesma hierarquia visual do bloco Acionar */}
             <div className="relative min-w-0 space-y-0">
               <div className="flex justify-center">
                 <div className={cn("h-4 w-px", dashV)} />
@@ -1016,77 +1036,167 @@ export function PipelineAutomationsPanel({
                     Ação
                   </span>
                 </div>
+                <span
+                  className={cn(
+                    "hidden shrink-0 rounded-md border px-2 py-1 text-[11px] sm:inline",
+                    isDialog
+                      ? "border-zinc-700 bg-zinc-900/50 text-zinc-400"
+                      : "border-border/60 bg-background text-muted-foreground shadow-sm",
+                  )}
+                >
+                  Neste funil
+                </span>
               </div>
               <div className="flex justify-center py-1">
                 <div className={cn("min-h-[12px] w-px flex-1", dashV)} />
               </div>
 
               <div className={cn(isDialog ? "space-y-4" : groupPanelClass)}>
-                <button
-                  type="button"
-                  className={cn(
-                    trigBtn,
-                    "mb-1 w-full cursor-default opacity-90",
-                  )}
-                  aria-hidden
+                <p className={cn("mb-1 uppercase tracking-wide", lbl)}>
+                  Tipo de ação
+                </p>
+                <Popover
+                  open={actionMenuOpen}
+                  onOpenChange={setActionMenuOpen}
                 >
-                  <span className="flex items-center gap-2">
-                    <Target
-                      className={cn(
-                        "size-4",
-                        isDialog ? "text-zinc-400" : "text-muted-foreground",
-                      )}
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                    <span>Alterar status (mover etapa)</span>
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "size-4 opacity-50",
-                      isDialog ? "text-zinc-500" : "text-muted-foreground",
-                    )}
-                    aria-hidden
-                  />
-                </button>
-                <div className="space-y-1">
-                  <p className={lbl}>
-                    Status
-                    <span
-                      className={
-                        isDialog ? "text-rose-400" : "text-destructive"
-                      }
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={trigBtn}
+                      aria-expanded={actionMenuOpen}
+                      aria-label="Tipo de ação"
                     >
-                      *
-                    </span>
-                  </p>
-                  <select
-                    className={sel}
-                    value={targetStageId}
-                    onChange={(e) => setTargetStageId(e.target.value)}
-                    aria-label="Etapa de destino da ação"
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Target
+                          className={cn(
+                            "size-4 shrink-0",
+                            isDialog
+                              ? "text-zinc-400"
+                              : "text-muted-foreground",
+                          )}
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                        <span className="truncate">{actionTypeLabel}</span>
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "size-4 shrink-0",
+                          isDialog ? "text-zinc-500" : "text-muted-foreground",
+                        )}
+                        aria-hidden
+                      />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className={cn(
+                      "p-0 shadow-lg",
+                      isDialog
+                        ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
+                        : "w-[min(100vw-2rem,20rem)] border-border/60",
+                    )}
                   >
-                    <option value="">Selecionar um status</option>
-                    {stages.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div
-                  className={cn(
-                    "mt-4 flex gap-2 rounded-md border px-3 py-2 text-[11px] leading-snug",
-                    isDialog
-                      ? "border-amber-500/25 bg-amber-500/10 text-amber-100/95"
-                      : "border-amber-500/35 bg-amber-500/10 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
-                  )}
-                >
-                  <span aria-hidden>⚠</span>
-                  <span>
-                    A oportunidade será movida para a etapa escolhida. Se a etapa
-                    não existir mais, a regra pode falhar na execução.
-                  </span>
+                    <div className="max-h-64 overflow-y-auto py-1">
+                      <p
+                        className={cn(
+                          "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
+                          isDialog ? "text-zinc-500" : "text-muted-foreground",
+                        )}
+                      >
+                        Ações
+                      </p>
+                      {AUTOMATION_ACTION_OPTIONS.map((opt) => {
+                        const selected = opt.type === actionType;
+                        return (
+                          <button
+                            key={opt.type}
+                            type="button"
+                            className={cn(
+                              "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
+                              isDialog
+                                ? cn(
+                                    "hover:bg-zinc-800/80",
+                                    selected && "bg-zinc-800",
+                                  )
+                                : cn(
+                                    "hover:bg-muted/50",
+                                    selected && "bg-muted/40",
+                                  ),
+                            )}
+                            onClick={() => {
+                              setActionType(opt.type);
+                              setActionMenuOpen(false);
+                            }}
+                          >
+                            <Target
+                              className={cn(
+                                "size-4 shrink-0",
+                                isDialog
+                                  ? "text-zinc-400"
+                                  : "text-muted-foreground",
+                              )}
+                              strokeWidth={2}
+                              aria-hidden
+                            />
+                            <span className="flex-1 truncate">{opt.label}</span>
+                            {selected ? (
+                              <span
+                                className={
+                                  isDialog ? "text-zinc-200" : "text-foreground"
+                                }
+                              >
+                                ✓
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <div className="mt-4 space-y-3">
+                  <div className="space-y-1">
+                    <p className={lbl}>
+                      Status
+                      <span
+                        className={
+                          isDialog ? "text-rose-400" : "text-destructive"
+                        }
+                      >
+                        *
+                      </span>
+                    </p>
+                    <select
+                      className={sel}
+                      value={targetStageId}
+                      onChange={(e) => setTargetStageId(e.target.value)}
+                      aria-label="Etapa de destino da ação"
+                      disabled={actionType !== "MOVE_TO_STAGE"}
+                    >
+                      <option value="">Selecionar um status</option>
+                      {stages.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div
+                    className={cn(
+                      "flex gap-2 rounded-md border px-3 py-2 text-[11px] leading-snug",
+                      isDialog
+                        ? "border-amber-500/25 bg-amber-500/10 text-amber-100/95"
+                        : "border-amber-500/35 bg-amber-500/10 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
+                    )}
+                  >
+                    <span aria-hidden>⚠</span>
+                    <span>
+                      A oportunidade será movida para a etapa escolhida. Se a
+                      etapa não existir mais, a regra pode falhar na execução.
+                    </span>
+                  </div>
                 </div>
               </div>
 
