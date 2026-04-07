@@ -79,7 +79,15 @@ const fieldSelectClass = cn(
   "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 );
 
+const opSelectClass = cn(
+  "h-10 w-[4.75rem] shrink-0 rounded-md border border-input bg-background px-2 text-sm shadow-sm",
+  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+);
+
 type DashFilterField = "status" | "tags" | "createdAt" | "customField";
+
+/** é = um valor / todas as tags; ou = vários status ou qualquer tag. */
+type DashFilterOp = "IS" | "OR";
 
 const DASH_FIELD_LABELS: Record<DashFilterField, string> = {
   status: "Status",
@@ -89,10 +97,10 @@ const DASH_FIELD_LABELS: Record<DashFilterField, string> = {
 };
 
 type DashFilterRow =
-  | { id: string; field: "status"; status: Record<DealStatusCode, boolean> }
-  | { id: string; field: "tags"; tagIds: string[] }
-  | { id: string; field: "createdAt"; createdFrom: string; createdTo: string }
-  | { id: string; field: "customField"; key: string; value: string };
+  | { id: string; field: "status"; op: DashFilterOp; statusCodes: DealStatusCode[] }
+  | { id: string; field: "tags"; op: DashFilterOp; tagIds: string[] }
+  | { id: string; field: "createdAt"; op: "IS"; createdFrom: string; createdTo: string }
+  | { id: string; field: "customField"; op: "IS"; key: string; value: string };
 
 function newRowId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -100,8 +108,15 @@ function newRowId(): string {
     : `dw-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function defaultStatusRecord(): Record<DealStatusCode, boolean> {
-  return { OPEN: true, WON: false, LOST: false, ARCHIVED: false };
+function statusOpAndCodesFromSpec(spec: WidgetQuerySpec): {
+  op: DashFilterOp;
+  codes: DealStatusCode[];
+} {
+  const rec = statusesFromSpec(spec);
+  const codes = STATUS_META.filter((x) => rec[x.code]).map((x) => x.code);
+  if (codes.length === 0) return { op: "IS", codes: ["OPEN"] };
+  if (codes.length === 1) return { op: "IS", codes };
+  return { op: "OR", codes };
 }
 
 function createDashFilterRow(field: DashFilterField): DashFilterRow {
@@ -114,28 +129,31 @@ function createDashFilterRowWithId(
 ): DashFilterRow {
   switch (field) {
     case "status":
-      return { id, field: "status", status: defaultStatusRecord() };
+      return { id, field: "status", op: "IS", statusCodes: ["OPEN"] };
     case "tags":
-      return { id, field: "tags", tagIds: [] };
+      return { id, field: "tags", op: "IS", tagIds: [] };
     case "createdAt":
-      return { id, field: "createdAt", createdFrom: "", createdTo: "" };
+      return { id, field: "createdAt", op: "IS", createdFrom: "", createdTo: "" };
     case "customField":
-      return { id, field: "customField", key: "", value: "" };
+      return { id, field: "customField", op: "IS", key: "", value: "" };
   }
 }
 
 function specToFilterRows(spec: WidgetQuerySpec): DashFilterRow[] {
+  const { op: stOp, codes: stCodes } = statusOpAndCodesFromSpec(spec);
   const rows: DashFilterRow[] = [
     {
       id: newRowId(),
       field: "status",
-      status: statusesFromSpec(spec),
+      op: stOp,
+      statusCodes: stCodes,
     },
   ];
   if (spec.filterTagIds && spec.filterTagIds.length > 0) {
     rows.push({
       id: newRowId(),
       field: "tags",
+      op: spec.filterTagMatch === "ANY" ? "OR" : "IS",
       tagIds: [...spec.filterTagIds],
     });
   }
@@ -143,6 +161,7 @@ function specToFilterRows(spec: WidgetQuerySpec): DashFilterRow[] {
     rows.push({
       id: newRowId(),
       field: "createdAt",
+      op: "IS",
       createdFrom: spec.filterCreatedFrom ?? "",
       createdTo: spec.filterCreatedTo ?? "",
     });
@@ -151,6 +170,7 @@ function specToFilterRows(spec: WidgetQuerySpec): DashFilterRow[] {
     rows.push({
       id: newRowId(),
       field: "customField",
+      op: "IS",
       key: f.key,
       value:
         typeof f.value === "boolean"
@@ -254,10 +274,9 @@ export function DashboardWidgetConfigDialog({
     const r = filterRows[0];
     if (r?.field !== "status") return false;
     return (
-      r.status.OPEN &&
-      !r.status.WON &&
-      !r.status.LOST &&
-      !r.status.ARCHIVED
+      r.op === "IS" &&
+      r.statusCodes.length === 1 &&
+      r.statusCodes[0] === "OPEN"
     );
   }, [filterRows]);
 
@@ -308,6 +327,25 @@ export function DashboardWidgetConfigDialog({
     );
   }
 
+  function onDashRowOpChange(rowId: string, op: DashFilterOp) {
+    setFilterRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId) return r;
+        if (r.field === "status") {
+          if (op === "IS") {
+            const first = r.statusCodes[0] ?? "OPEN";
+            return { ...r, op, statusCodes: [first] };
+          }
+          return { ...r, op };
+        }
+        if (r.field === "tags") {
+          return { ...r, op };
+        }
+        return r;
+      }),
+    );
+  }
+
   function addDashFilterRow() {
     const next = nextFieldToAdd(filterRows);
     if (!next) return;
@@ -322,19 +360,17 @@ export function DashboardWidgetConfigDialog({
     if (!widget) return;
 
     const statusRow = filterRows.find((r) => r.field === "status");
-    const statusPick =
-      statusRow?.field === "status"
-        ? statusRow.status
-        : defaultStatusRecord();
-    const statuses = STATUS_META.filter((x) => statusPick[x.code]).map(
-      (x) => x.code,
-    );
-    const filterStatuses =
-      statuses.length > 0 ? statuses : (["OPEN"] as DealStatusCode[]);
+    const statusCodes =
+      statusRow?.field === "status" && statusRow.statusCodes.length > 0
+        ? statusRow.statusCodes
+        : (["OPEN"] as DealStatusCode[]);
+    const filterStatuses = statusCodes;
 
     const tagsRow = filterRows.find((r) => r.field === "tags");
     const tagIds =
       tagsRow?.field === "tags" ? tagsRow.tagIds : [];
+    const filterTagMatch =
+      tagsRow?.field === "tags" && tagsRow.op === "OR" ? "ANY" : undefined;
 
     const createdRow = filterRows.find((r) => r.field === "createdAt");
     const createdFrom =
@@ -362,6 +398,7 @@ export function DashboardWidgetConfigDialog({
       customFieldKey:
         dataMeasure === "CUSTOM_NUMBER" ? customFieldKey || undefined : undefined,
       filterStatuses,
+      filterTagMatch,
       filterTagIds: tagIds.length > 0 ? tagIds : undefined,
       filterCreatedFrom: createdFrom.trim() || undefined,
       filterCreatedTo: createdTo.trim() || undefined,
@@ -609,7 +646,7 @@ export function DashboardWidgetConfigDialog({
               <p className="text-sm font-semibold text-foreground">Filtros</p>
               <span
                 className="inline-flex text-muted-foreground"
-                title="Cada linha é um critério; o cartão usa todos ao mesmo tempo (E). Em Tags, o deal precisa ter todas as tags selecionadas."
+                title="Cada linha é um critério combinado com E. Em Status, «ou» = qualquer um dos status. Em Tags, «é» = todas as tags; «ou» = pelo menos uma."
               >
                 <Info className="size-3.5" strokeWidth={2} aria-hidden />
               </span>
@@ -625,9 +662,9 @@ export function DashboardWidgetConfigDialog({
                 {filterRows.map((row) => (
                   <div
                     key={row.id}
-                    className="flex flex-col gap-2 border-b border-border/30 pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:flex-wrap sm:items-start"
+                    className="flex flex-col gap-2 border-b border-border/30 pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:flex-wrap sm:items-center"
                   >
-                    <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                       <select
                         className={fieldSelectClass}
                         value={row.field}
@@ -637,7 +674,7 @@ export function DashboardWidgetConfigDialog({
                             e.target.value as DashFilterField,
                           )
                         }
-                        aria-label="Campo"
+                        aria-label="Categoria do filtro"
                       >
                         {selectableFieldsForRow(row.id).map((f) => (
                           <option
@@ -649,40 +686,93 @@ export function DashboardWidgetConfigDialog({
                           </option>
                         ))}
                       </select>
-                      <span className="flex h-10 shrink-0 items-center px-0.5 text-sm text-muted-foreground">
-                        é
-                      </span>
+                      {row.field === "status" || row.field === "tags" ? (
+                        <select
+                          className={opSelectClass}
+                          value={row.op}
+                          onChange={(e) =>
+                            onDashRowOpChange(
+                              row.id,
+                              e.target.value as DashFilterOp,
+                            )
+                          }
+                          aria-label="Operador"
+                        >
+                          <option value="IS">é</option>
+                          <option value="OR">ou</option>
+                        </select>
+                      ) : (
+                        <select
+                          className={cn(opSelectClass, "text-muted-foreground")}
+                          value="IS"
+                          disabled
+                          aria-label="Operador"
+                        >
+                          <option value="IS">é</option>
+                        </select>
+                      )}
                       {row.field === "status" ? (
-                        <div className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-1 py-1">
-                          {STATUS_META.map(({ code, label }) => (
-                            <label
-                              key={code}
-                              className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={row.status[code]}
-                                onChange={(e) =>
-                                  setFilterRows((prev) =>
-                                    prev.map((r) =>
-                                      r.id === row.id && r.field === "status"
-                                        ? {
-                                            ...r,
-                                            status: {
-                                              ...r.status,
-                                              [code]: e.target.checked,
-                                            },
-                                          }
-                                        : r,
-                                    ),
-                                  )
-                                }
-                                className="rounded border-input bg-background text-primary"
-                              />
-                              {label}
-                            </label>
-                          ))}
-                        </div>
+                        row.op === "IS" ? (
+                          <select
+                            className={selectClass}
+                            value={row.statusCodes[0] ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value as DealStatusCode;
+                              setFilterRows((prev) =>
+                                prev.map((r) =>
+                                  r.id === row.id && r.field === "status"
+                                    ? {
+                                        ...r,
+                                        statusCodes: v ? [v] : [],
+                                      }
+                                    : r,
+                                ),
+                              );
+                            }}
+                            aria-label="Valor do status"
+                          >
+                            <option value="">Selecionar opção</option>
+                            {STATUS_META.map(({ code, label }) => (
+                              <option
+                                key={code}
+                                value={code}
+                                className="bg-popover text-popover-foreground"
+                              >
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <select
+                            multiple
+                            className={cn(selectClass, "min-h-[88px] py-1.5")}
+                            value={row.statusCodes}
+                            onChange={(e) => {
+                              const v = Array.from(
+                                e.target.selectedOptions,
+                                (o) => o.value,
+                              ) as DealStatusCode[];
+                              setFilterRows((prev) =>
+                                prev.map((r) =>
+                                  r.id === row.id && r.field === "status"
+                                    ? { ...r, statusCodes: v }
+                                    : r,
+                                ),
+                              );
+                            }}
+                            aria-label="Status (um ou mais)"
+                          >
+                            {STATUS_META.map(({ code, label }) => (
+                              <option
+                                key={code}
+                                value={code}
+                                className="bg-popover text-popover-foreground"
+                              >
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        )
                       ) : null}
                       {row.field === "tags" ? (
                         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -726,8 +816,10 @@ export function DashboardWidgetConfigDialog({
                           )}
                           {tags.length > 0 ? (
                             <p className={panel.muted}>
-                              Ctrl + clique para várias. O deal precisa ter
-                              todas.
+                              Ctrl + clique para várias.
+                              {row.op === "IS"
+                                ? " Com «é», o deal precisa ter todas."
+                                : " Com «ou», basta uma das tags."}
                             </p>
                           ) : null}
                         </div>
@@ -800,7 +892,7 @@ export function DashboardWidgetConfigDialog({
                               value=""
                               className="bg-popover text-popover-foreground"
                             >
-                              Selecionar…
+                              Selecionar opção
                             </option>
                             {dealCustomFields.map((f) => (
                               <option

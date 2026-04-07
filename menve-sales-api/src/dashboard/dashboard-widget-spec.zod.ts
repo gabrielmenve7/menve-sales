@@ -29,6 +29,8 @@ export const widgetQuerySpecInputSchema = z.object({
 
   /** Filtros explícitos (se ausente, usa legado por status) */
   filterStatuses: z.array(dealStatusEnum).max(4).optional(),
+  /** ALL = deal com todas as tags; ANY = deal com pelo menos uma (ou). */
+  filterTagMatch: z.enum(["ALL", "ANY"]).optional(),
   filterTagIds: z.array(z.string()).max(32).optional(),
   filterCreatedFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   filterCreatedTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -47,6 +49,7 @@ export type ResolvedWidgetQuerySpec = {
   aggregation: "SUM" | "AVG";
   customFieldKey?: string;
   filterStatuses: DealStatus[];
+  filterTagMatch?: "ALL" | "ANY";
   filterTagIds?: string[];
   filterCreatedFrom?: string;
   filterCreatedTo?: string;
@@ -101,6 +104,7 @@ export function resolveWidgetQuerySpec(
     aggregation,
     customFieldKey: input.customFieldKey,
     filterStatuses,
+    filterTagMatch: input.filterTagMatch,
     filterTagIds: input.filterTagIds,
     filterCreatedFrom: input.filterCreatedFrom,
     filterCreatedTo: input.filterCreatedTo,

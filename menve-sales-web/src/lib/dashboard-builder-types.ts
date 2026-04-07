@@ -16,6 +16,8 @@ export type WidgetQuerySpec = {
   aggregation?: Aggregation;
   customFieldKey?: string;
   filterStatuses?: DealStatusCode[];
+  /** ALL = todas as tags (é); ANY = qualquer uma (ou). */
+  filterTagMatch?: "ALL" | "ANY";
   filterTagIds?: string[];
   filterCreatedFrom?: string;
   filterCreatedTo?: string;

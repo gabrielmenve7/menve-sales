@@ -107,11 +107,18 @@ export class DashboardQueryService {
     ];
 
     if (spec.filterTagIds && spec.filterTagIds.length > 0) {
-      and.push({
-        AND: spec.filterTagIds.map((tid) => ({
-          dealTags: { some: { tagId: tid } },
-        })),
+      const byTag = (tid: string) => ({
+        dealTags: { some: { tagId: tid } },
       });
+      if (spec.filterTagMatch === "ANY") {
+        and.push({
+          OR: spec.filterTagIds.map((tid) => byTag(tid)),
+        });
+      } else {
+        and.push({
+          AND: spec.filterTagIds.map((tid) => byTag(tid)),
+        });
+      }
     }
 
     if (spec.filterCreatedFrom || spec.filterCreatedTo) {
