@@ -275,12 +275,12 @@ export function InboxLeadSidebar({
           disabled={!canGoToNextInQueue}
           title={
             canGoToNextInQueue
-              ? "Próximo lead na mesma etapa do funil"
+              ? "Próximo lead na mesma etapa deste funil (ordem do quadro; no fim volta ao primeiro)"
               : !pipelineDealId
                 ? "Selecione uma oportunidade aberta"
                 : nextInStageLoading
                   ? "Carregando fila da etapa…"
-                  : "Não há outro lead nesta etapa"
+                  : "Só há um lead OPEN nesta etapa neste funil. Etapas com o mesmo nome em outro funil são outra fila."
           }
           onClick={onGoToNextInQueue}
           className={cn(

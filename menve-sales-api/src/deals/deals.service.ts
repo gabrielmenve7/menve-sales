@@ -515,7 +515,8 @@ export class DealsService {
   }
 
   /**
-   * Próximo deal OPEN na mesma etapa do mesmo funil, na mesma ordem do board (`updatedAt` desc).
+   * Próximo deal OPEN na mesma etapa do mesmo funil, mesma ordem do board (`updatedAt` desc).
+   * Fila circular: no último da ordem, o “próximo” é o primeiro (evita falso “sem próximo”).
    */
   async nextOpenDealInSameStageQueue(tenantId: string, dealId: string) {
     const current = await this.prisma.deal.findFirst({
@@ -533,15 +534,19 @@ export class DealsService {
         stageId: current.stageId,
         status: "OPEN",
       },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       select: { id: true, contactId: true },
     });
 
     const idx = stageDeals.findIndex((d) => d.id === dealId);
-    if (idx < 0 || idx >= stageDeals.length - 1) {
+    if (idx < 0) {
       return { next: null };
     }
-    const next = stageDeals[idx + 1]!;
+    if (stageDeals.length <= 1) {
+      return { next: null };
+    }
+    const nextIdx = (idx + 1) % stageDeals.length;
+    const next = stageDeals[nextIdx]!;
     return {
       next: { dealId: next.id, contactId: next.contactId },
     };
