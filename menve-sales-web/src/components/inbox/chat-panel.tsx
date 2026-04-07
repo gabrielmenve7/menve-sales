@@ -2,6 +2,7 @@
 
 import {
   ChevronDown,
+  ChevronUp,
   FileText,
   Loader2,
   Mic,
@@ -69,12 +70,19 @@ export function ChatPanel({
   const [isRecording, setIsRecording] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [openQuickReplyCategoryId, setOpenQuickReplyCategoryId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [conversation.messages.length, conversation.id]);
+
+  useEffect(() => {
+    setOpenQuickReplyCategoryId(null);
+  }, [conversation.id]);
 
   const photo = getContactPhotoUrl(conversation.contact);
   const conn = conversation.whatsappConnection;
@@ -339,22 +347,40 @@ export function ChatPanel({
               <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
                 {quickReplyCategories.map((cat) =>
                   cat.replies.length === 0 ? null : (
-                    <DropdownMenu key={cat.id}>
+                    <DropdownMenu
+                      key={cat.id}
+                      open={openQuickReplyCategoryId === cat.id}
+                      onOpenChange={(open) =>
+                        setOpenQuickReplyCategoryId(open ? cat.id : null)
+                      }
+                    >
                       <DropdownMenuTrigger asChild>
                         <Button
                           type="button"
                           variant="secondary"
                           size="sm"
                           className="h-7 max-w-[12rem] shrink-0 gap-1 border-0 bg-muted/70 px-2 text-xs shadow-none hover:bg-muted dark:bg-muted/50"
-                          title={`${cat.name} — abrir scripts`}
+                          title={
+                            openQuickReplyCategoryId === cat.id
+                              ? `${cat.name} — fechar lista`
+                              : `${cat.name} — abrir lista de scripts`
+                          }
+                          aria-expanded={openQuickReplyCategoryId === cat.id}
                         >
                           <span className="min-w-0 flex-1 truncate text-left">
                             {cat.name}
                           </span>
-                          <ChevronDown
-                            className="size-3.5 shrink-0 opacity-70"
-                            aria-hidden
-                          />
+                          {openQuickReplyCategoryId === cat.id ? (
+                            <ChevronDown
+                              className="size-3.5 shrink-0 opacity-70"
+                              aria-hidden
+                            />
+                          ) : (
+                            <ChevronUp
+                              className="size-3.5 shrink-0 opacity-70"
+                              aria-hidden
+                            />
+                          )}
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
