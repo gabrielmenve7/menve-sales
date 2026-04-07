@@ -21,9 +21,9 @@ const actionMoveToStageSchema = z.object({
   stageId: z.string().min(1),
 });
 
+/** Vazio = regra só dispara registro de execução (útil até haver mais tipos de ação na API). */
 export const automationActionsSchema = z
   .array(actionMoveToStageSchema)
-  .min(1)
   .max(5);
 
 export const createPipelineAutomationRuleSchema = z.object({

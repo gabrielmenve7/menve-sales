@@ -470,6 +470,9 @@ function describeTriggerFilter(
 
 function summarizeRule(r: PipelineAutomationRuleRow, stages: Stage[]) {
   const acts = r.actions;
+  if (acts.length === 0) {
+    return "Sem mover etapa";
+  }
   const first = acts[0];
   if (first?.type === "MOVE_TO_STAGE") {
     return `Mover para “${stageName(stages, first.stageId)}”`;
@@ -493,7 +496,6 @@ function parseRulesFromApi(raw: unknown): PipelineAutomationRuleRow[] {
         actions.push({ type: "MOVE_TO_STAGE", stageId: ao.stageId });
       }
     }
-    if (actions.length === 0) continue;
     const triggerFilter = parseAutomationTriggerFilter(o.triggerFilter);
     const tt = o.triggerType;
     if (typeof tt !== "string") continue;
@@ -1349,12 +1351,6 @@ export function PipelineAutomationsPanel({
       }
     }
     const actions = buildMoveActionsFromSteps(actionSteps);
-    if (actions.length === 0) {
-      setFormError(
-        'Inclua ao menos uma ação do tipo “Alteração de status” com o campo “Para” preenchido para mover a oportunidade.',
-      );
-      return;
-    }
     if (actions.length > MAX_GROUPED_ACTIONS) {
       setFormError(
         `No máximo ${MAX_GROUPED_ACTIONS} movimentações de etapa por automação.`,
