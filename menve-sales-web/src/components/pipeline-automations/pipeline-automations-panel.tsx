@@ -29,6 +29,12 @@ import {
   updatePipelineAutomationRule,
 } from "@/actions/pipeline-automations";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,6 +47,7 @@ import type {
   PipelineAutomationAction,
   PipelineAutomationActionDatePreset,
   PipelineAutomationActionKindType,
+  PipelineAutomationCompositeClause,
   PipelineAutomationRunRow,
   PipelineAutomationRuleRow,
   PipelineAutomationTriggerFilter,
@@ -143,6 +150,8 @@ type AutomationTriggerStepRow = {
   tagFilterId: string;
 };
 
+type TriggerGroupOp = "AND" | "OR";
+
 type AutomationActionStepRow = {
   id: string;
   actionKindType: PipelineAutomationActionKindType;
@@ -237,6 +246,34 @@ function clearedFieldsForActionKind(
     actionDatePreset: "",
     actionDateDaysAfter: "",
     actionDatePick: "",
+  };
+}
+
+function buildApiTriggerFromSteps(
+  steps: AutomationTriggerStepRow[],
+  groupOp: TriggerGroupOp,
+): {
+  triggerType: PipelineAutomationTriggerType;
+  triggerFilter: PipelineAutomationTriggerFilter | null | Record<string, unknown>;
+} {
+  if (steps.length === 1) {
+    return {
+      triggerType: steps[0].triggerType,
+      triggerFilter: buildTriggerFilterFromStep(steps[0]),
+    };
+  }
+  return {
+    triggerType: "COMPOSITE",
+    triggerFilter: {
+      composite: {
+        op: groupOp,
+        clauses: steps.map((s) => ({
+          triggerType:
+            s.triggerType as PipelineAutomationCompositeClause["triggerType"],
+          triggerFilter: buildTriggerFilterFromStep(s),
+        })),
+      },
+    },
   };
 }
 
@@ -369,12 +406,18 @@ function stageName(stages: Stage[], id: string) {
   return stages.find((s) => s.id === id)?.name ?? id.slice(0, 8);
 }
 
-function previewTriggerLabel(steps: AutomationTriggerStepRow[]): string {
+function previewTriggerLabel(
+  steps: AutomationTriggerStepRow[],
+  groupOp: TriggerGroupOp,
+): string {
   if (steps.length === 1) {
     return PIPELINE_AUTOMATION_TRIGGER_LABELS[steps[0].triggerType];
   }
   if (steps.length > 1) {
-    return `${steps.length} gatilhos · uma regra para cada`;
+    const conj = groupOp === "AND" ? " e " : " ou ";
+    return steps
+      .map((s) => PIPELINE_AUTOMATION_TRIGGER_LABELS[s.triggerType])
+      .join(conj);
   }
   return "…";
 }
@@ -438,14 +481,46 @@ function parseAutomationTriggerFilter(
   return Object.keys(out).length ? out : null;
 }
 
-function describeTriggerFilter(
-  r: PipelineAutomationRuleRow,
+function parseCompositeFromApi(
+  triggerFilterRaw: unknown,
+): NonNullable<PipelineAutomationRuleRow["composite"]> | null {
+  if (!triggerFilterRaw || typeof triggerFilterRaw !== "object") return null;
+  const root = triggerFilterRaw as Record<string, unknown>;
+  const composite = root.composite;
+  if (!composite || typeof composite !== "object") return null;
+  const c = composite as Record<string, unknown>;
+  const op = c.op;
+  if (op !== "AND" && op !== "OR") return null;
+  const clausesRaw = c.clauses;
+  if (!Array.isArray(clausesRaw) || clausesRaw.length < 2) return null;
+  const clauses: PipelineAutomationCompositeClause[] = [];
+  for (const row of clausesRaw) {
+    if (!row || typeof row !== "object") continue;
+    const cl = row as Record<string, unknown>;
+    const tt = cl.triggerType;
+    if (
+      typeof tt !== "string" ||
+      !(tt in PIPELINE_AUTOMATION_TRIGGER_LABELS) ||
+      tt === "COMPOSITE"
+    ) {
+      continue;
+    }
+    clauses.push({
+      triggerType: tt as PipelineAutomationCompositeClause["triggerType"],
+      triggerFilter: parseAutomationTriggerFilter(cl.triggerFilter),
+    });
+  }
+  if (clauses.length < 2) return null;
+  return { op, clauses };
+}
+
+function describeFilterSuffix(
+  f: PipelineAutomationTriggerFilter | null,
   stages: Stage[],
   campaignSources: { id: string; name: string }[],
   dealFields: CustomField[],
   tags: { id: string; name: string }[],
 ): string {
-  const f = r.triggerFilter;
   if (!f) return "";
   const parts: string[] = [];
   if (f.fromStageId)
@@ -468,6 +543,38 @@ function describeTriggerFilter(
     parts.push(`tag “${tn}”`);
   }
   return parts.length ? ` · ${parts.join(" · ")}` : "";
+}
+
+function describeTriggerFilter(
+  r: PipelineAutomationRuleRow,
+  stages: Stage[],
+  campaignSources: { id: string; name: string }[],
+  dealFields: CustomField[],
+  tags: { id: string; name: string }[],
+): string {
+  if (r.triggerType === "COMPOSITE" && r.composite?.clauses.length) {
+    const conj = r.composite.op === "AND" ? " e " : " ou ";
+    return r.composite.clauses
+      .map(
+        (cl) =>
+          PIPELINE_AUTOMATION_TRIGGER_LABELS[cl.triggerType] +
+          describeFilterSuffix(
+            cl.triggerFilter,
+            stages,
+            campaignSources,
+            dealFields,
+            tags,
+          ),
+      )
+      .join(conj);
+  }
+  return describeFilterSuffix(
+    r.triggerFilter,
+    stages,
+    campaignSources,
+    dealFields,
+    tags,
+  );
 }
 
 function summarizeRule(r: PipelineAutomationRuleRow, stages: Stage[]) {
@@ -498,10 +605,17 @@ function parseRulesFromApi(raw: unknown): PipelineAutomationRuleRow[] {
         actions.push({ type: "MOVE_TO_STAGE", stageId: ao.stageId });
       }
     }
-    const triggerFilter = parseAutomationTriggerFilter(o.triggerFilter);
+    let triggerFilter = parseAutomationTriggerFilter(o.triggerFilter);
+    let composite: PipelineAutomationRuleRow["composite"] | undefined;
     const tt = o.triggerType;
     if (typeof tt !== "string") continue;
     if (!(tt in PIPELINE_AUTOMATION_TRIGGER_LABELS)) continue;
+    if (tt === "COMPOSITE") {
+      const parsed = parseCompositeFromApi(o.triggerFilter);
+      if (!parsed) continue;
+      composite = parsed;
+      triggerFilter = null;
+    }
     out.push({
       id: String(o.id),
       tenantId: String(o.tenantId),
@@ -511,6 +625,7 @@ function parseRulesFromApi(raw: unknown): PipelineAutomationRuleRow[] {
       sortOrder: Number(o.sortOrder ?? 0),
       triggerType: tt as PipelineAutomationTriggerType,
       triggerFilter,
+      ...(composite !== undefined ? { composite } : {}),
       actions,
       createdAt: String(o.createdAt ?? ""),
       updatedAt: String(o.updatedAt ?? ""),
@@ -529,45 +644,49 @@ function automationValueToFormString(v: unknown): string {
   }
 }
 
-/** Preenche o builder a partir de uma regra persistida (uma regra = um gatilho). */
+function fillTriggerStepFromFilter(
+  step: AutomationTriggerStepRow,
+  triggerType: PipelineAutomationCompositeClause["triggerType"],
+  f: PipelineAutomationTriggerFilter | null,
+) {
+  step.triggerType = triggerType;
+  if (!f) return;
+  switch (triggerType) {
+    case "DEAL_STAGE_TRANSITION":
+      if (f.fromStageId) step.stageFromId = f.fromStageId;
+      if (f.toStageId) step.stageToId = f.toStageId;
+      break;
+    case "DEAL_ENTERED_STAGE":
+      if (f.toStageId) step.legacyStageFilterId = f.toStageId;
+      break;
+    case "DEAL_LEFT_STAGE":
+      if (f.fromStageId) step.legacyStageFilterId = f.fromStageId;
+      break;
+    case "DEAL_CREATED":
+      if (f.campaignSourceIds?.length)
+        step.selectedCampaignIds = [...f.campaignSourceIds];
+      break;
+    case "DEAL_CUSTOM_FIELD_CHANGED":
+      if (f.customFieldKey) step.customFieldKey = f.customFieldKey;
+      step.fromCustomStr = automationValueToFormString(f.fromCustomValue);
+      step.toCustomStr = automationValueToFormString(f.toCustomValue);
+      break;
+    case "CONTACT_TAG_ADDED":
+    case "CONTACT_TAG_REMOVED":
+      if (f.tagId) step.tagFilterId = f.tagId;
+      break;
+    default:
+      break;
+  }
+}
+
+/** Preenche o builder a partir de uma regra persistida (simples ou composta E/OU). */
 function ruleRowToFormState(rule: PipelineAutomationRuleRow): {
   name: string;
   triggerSteps: AutomationTriggerStepRow[];
   actionSteps: AutomationActionStepRow[];
+  triggerGroupOp: TriggerGroupOp;
 } {
-  const step = createTriggerStepRow();
-  step.triggerType = rule.triggerType;
-  const f = rule.triggerFilter;
-  if (f) {
-    switch (rule.triggerType) {
-      case "DEAL_STAGE_TRANSITION":
-        if (f.fromStageId) step.stageFromId = f.fromStageId;
-        if (f.toStageId) step.stageToId = f.toStageId;
-        break;
-      case "DEAL_ENTERED_STAGE":
-        if (f.toStageId) step.legacyStageFilterId = f.toStageId;
-        break;
-      case "DEAL_LEFT_STAGE":
-        if (f.fromStageId) step.legacyStageFilterId = f.fromStageId;
-        break;
-      case "DEAL_CREATED":
-        if (f.campaignSourceIds?.length)
-          step.selectedCampaignIds = [...f.campaignSourceIds];
-        break;
-      case "DEAL_CUSTOM_FIELD_CHANGED":
-        if (f.customFieldKey) step.customFieldKey = f.customFieldKey;
-        step.fromCustomStr = automationValueToFormString(f.fromCustomValue);
-        step.toCustomStr = automationValueToFormString(f.toCustomValue);
-        break;
-      case "CONTACT_TAG_ADDED":
-      case "CONTACT_TAG_REMOVED":
-        if (f.tagId) step.tagFilterId = f.tagId;
-        break;
-      default:
-        break;
-    }
-  }
-
   const actionSteps: AutomationActionStepRow[] = [];
   for (const a of rule.actions) {
     if (a.type === "MOVE_TO_STAGE") {
@@ -578,10 +697,31 @@ function ruleRowToFormState(rule: PipelineAutomationRuleRow): {
     }
   }
 
+  if (rule.triggerType === "COMPOSITE" && rule.composite?.clauses.length) {
+    const triggerSteps = rule.composite.clauses.map((cl) => {
+      const s = createTriggerStepRow();
+      fillTriggerStepFromFilter(s, cl.triggerType, cl.triggerFilter);
+      return s;
+    });
+    return {
+      name: rule.name,
+      triggerSteps,
+      actionSteps,
+      triggerGroupOp: rule.composite.op,
+    };
+  }
+
+  const step = createTriggerStepRow();
+  fillTriggerStepFromFilter(
+    step,
+    rule.triggerType as PipelineAutomationCompositeClause["triggerType"],
+    rule.triggerFilter,
+  );
   return {
     name: rule.name,
     triggerSteps: [step],
     actionSteps,
+    triggerGroupOp: "OR",
   };
 }
 
@@ -1296,6 +1436,7 @@ export function PipelineAutomationsPanel({
       : "list",
   );
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [triggerGroupOp, setTriggerGroupOp] = useState<TriggerGroupOp>("OR");
 
   const filteredTriggerGroups = useMemo(() => {
     const q = triggerSearch.trim().toLowerCase();
@@ -1323,6 +1464,7 @@ export function PipelineAutomationsPanel({
     setName("");
     setTriggerSteps([createTriggerStepRow()]);
     setActionSteps([createActionStepRow()]);
+    setTriggerGroupOp("OR");
     setFormError(null);
     setOpenTriggerMenuId(null);
     setOpenActionMenuId(null);
@@ -1343,6 +1485,7 @@ export function PipelineAutomationsPanel({
       const mapped = ruleRowToFormState(r);
       setName(mapped.name);
       setTriggerSteps(mapped.triggerSteps);
+      setTriggerGroupOp(mapped.triggerGroupOp);
       setActionSteps(
         mapped.actionSteps.length ? mapped.actionSteps : [createActionStepRow()],
       );
@@ -1477,11 +1620,11 @@ export function PipelineAutomationsPanel({
       );
       return;
     }
-    if (editingRuleId && triggerSteps.length !== 1) {
-      setFormError("Na edição use apenas um gatilho.");
-      return;
-    }
     const baseName = name.trim();
+    const { triggerType, triggerFilter } = buildApiTriggerFromSteps(
+      triggerSteps,
+      triggerGroupOp,
+    );
     startTransition(async () => {
       try {
         if (editingRuleId) {
@@ -1489,32 +1632,26 @@ export function PipelineAutomationsPanel({
             pipelineId: pipeline.id,
             ruleId: editingRuleId,
             name: baseName,
-            triggerType: triggerSteps[0].triggerType,
-            triggerFilter: buildTriggerFilterFromStep(triggerSteps[0]),
+            triggerType,
+            triggerFilter,
             actions,
           });
           onRulesChanged?.();
           backToRulesList();
           return;
         }
-        for (let i = 0; i < triggerSteps.length; i++) {
-          const step = triggerSteps[i];
-          const ruleName =
-            triggerSteps.length > 1
-              ? `${baseName} · gatilho ${i + 1}`
-              : baseName;
-          await createPipelineAutomationRule({
-            pipelineId: pipeline.id,
-            name: ruleName,
-            triggerType: step.triggerType,
-            triggerFilter: buildTriggerFilterFromStep(step),
-            actions,
-          });
-        }
+        await createPipelineAutomationRule({
+          pipelineId: pipeline.id,
+          name: baseName,
+          triggerType,
+          triggerFilter,
+          actions,
+        });
         onRulesChanged?.();
         setName("");
         setTriggerSteps([createTriggerStepRow()]);
         setActionSteps([createActionStepRow()]);
+        setTriggerGroupOp("OR");
         setOpenTriggerMenuId(null);
         setOpenActionMenuId(null);
         setTriggerSearch("");
@@ -1591,8 +1728,8 @@ export function PipelineAutomationsPanel({
     workspaceView === "list";
 
   const previewTriggerText = useMemo(
-    () => previewTriggerLabel(triggerSteps),
-    [triggerSteps],
+    () => previewTriggerLabel(triggerSteps, triggerGroupOp),
+    [triggerSteps, triggerGroupOp],
   );
   const previewActionText = useMemo(
     () => previewActionLabel(actionSteps),
@@ -1990,33 +2127,137 @@ export function PipelineAutomationsPanel({
                 })}
               </div>
 
+              {triggerSteps.length >= 2 ? (
+                <div className="flex flex-col items-center gap-2 px-2 py-3">
+                  <p
+                    className={cn(
+                      "text-center text-[11px]",
+                      dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
+                    )}
+                  >
+                    Combinar gatilhos
+                  </p>
+                  <div
+                    className={cn(
+                      "inline-flex rounded-lg border p-0.5",
+                      dialogChromeDark
+                        ? "border-zinc-700 bg-zinc-950/40"
+                        : "border-border/60 bg-muted/20",
+                    )}
+                    role="group"
+                    aria-label="Operador entre gatilhos"
+                  >
+                    <button
+                      type="button"
+                      className={cn(
+                        "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                        triggerGroupOp === "OR"
+                          ? dialogChromeDark
+                            ? "bg-zinc-800 text-zinc-100"
+                            : "bg-background text-foreground shadow-sm"
+                          : dialogChromeDark
+                            ? "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
+                      onClick={() => setTriggerGroupOp("OR")}
+                    >
+                      OU
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                        triggerGroupOp === "AND"
+                          ? dialogChromeDark
+                            ? "bg-zinc-800 text-zinc-100"
+                            : "bg-background text-foreground shadow-sm"
+                          : dialogChromeDark
+                            ? "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
+                      onClick={() => setTriggerGroupOp("AND")}
+                    >
+                      E
+                    </button>
+                  </div>
+                  <p
+                    className={cn(
+                      "max-w-[16rem] text-center text-[10px] leading-snug",
+                      dialogChromeDark ? "text-zinc-600" : "text-muted-foreground/90",
+                    )}
+                  >
+                    {triggerGroupOp === "OR"
+                      ? "Dispara quando qualquer condição ocorrer."
+                      : "Só dispara depois que todas as condições tiverem ocorrido (ordem livre)."}
+                  </p>
+                </div>
+              ) : null}
+
               <div className="flex justify-center pt-2">
                 <div className={cn("h-6 w-px", dashV)} />
               </div>
               <div className="flex justify-center">
-                <button
-                  type="button"
-                  disabled={
-                    !!editingRuleId ||
-                    triggerSteps.length >= MAX_GROUPED_TRIGGERS
-                  }
-                  className={cn(
-                    "flex size-8 items-center justify-center rounded-lg border border-dashed transition-colors",
-                    dialogChromeDark
-                      ? "border-zinc-600 bg-zinc-900/40 text-zinc-300 hover:bg-zinc-800/80 disabled:cursor-not-allowed disabled:opacity-40"
-                      : "border-border/60 bg-muted/30 text-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40",
-                  )}
-                  aria-label="Adicionar outro gatilho (cria uma regra por gatilho com as mesmas ações)"
-                  title="Cada gatilho adicional gera uma regra separada com as mesmas ações."
-                  onClick={() =>
-                    setTriggerSteps((prev) => {
-                      if (prev.length >= MAX_GROUPED_TRIGGERS) return prev;
-                      return [...prev, createTriggerStepRow()];
-                    })
-                  }
-                >
-                  +
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={triggerSteps.length >= MAX_GROUPED_TRIGGERS}
+                      className={cn(
+                        "flex size-8 items-center justify-center rounded-lg border border-dashed transition-colors",
+                        dialogChromeDark
+                          ? "border-zinc-600 bg-zinc-900/40 text-zinc-300 hover:bg-zinc-800/80 disabled:cursor-not-allowed disabled:opacity-40"
+                          : "border-border/60 bg-muted/30 text-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40",
+                      )}
+                      aria-label="Adicionar gatilho"
+                      title="Escolha como combinar com o próximo gatilho"
+                    >
+                      +
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="center"
+                    className={
+                      dialogChromeDark
+                        ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                        : ""
+                    }
+                  >
+                    <DropdownMenuItem
+                      className={
+                        dialogChromeDark ? "focus:bg-zinc-800 focus:text-zinc-50" : ""
+                      }
+                      onSelect={() => {
+                        setTriggerGroupOp("OR");
+                        setTriggerSteps((prev) => {
+                          if (prev.length >= MAX_GROUPED_TRIGGERS) return prev;
+                          return [...prev, createTriggerStepRow()];
+                        });
+                      }}
+                    >
+                      <span className="font-medium text-foreground">OU</span>
+                      <span className="ml-1 text-muted-foreground">
+                        — qualquer condição dispara
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className={
+                        dialogChromeDark ? "focus:bg-zinc-800 focus:text-zinc-50" : ""
+                      }
+                      onSelect={() => {
+                        setTriggerGroupOp("AND");
+                        setTriggerSteps((prev) => {
+                          if (prev.length >= MAX_GROUPED_TRIGGERS) return prev;
+                          return [...prev, createTriggerStepRow()];
+                        });
+                      }}
+                    >
+                      <span className="font-medium text-foreground">E</span>
+                      <span className="ml-1 text-muted-foreground">
+                        — todas precisam ocorrer
+                      </span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -2635,14 +2876,29 @@ export function PipelineAutomationsPanel({
                   <div className="min-w-0 space-y-1">
                     <p className="font-medium text-foreground">{r.name}</p>
                     <p className="text-[12px] text-muted-foreground">
-                      {PIPELINE_AUTOMATION_TRIGGER_LABELS[r.triggerType]}
-                      {describeTriggerFilter(
-                        r,
-                        stages,
-                        campaignSources,
-                        dealCustomFieldDefs,
-                        sortedTags,
-                      )}
+                      {(() => {
+                        const detail = describeTriggerFilter(
+                          r,
+                          stages,
+                          campaignSources,
+                          dealCustomFieldDefs,
+                          sortedTags,
+                        );
+                        if (r.triggerType === "COMPOSITE") {
+                          return (
+                            <>
+                              {PIPELINE_AUTOMATION_TRIGGER_LABELS.COMPOSITE}
+                              {detail ? ` — ${detail}` : ""}
+                            </>
+                          );
+                        }
+                        return (
+                          <>
+                            {PIPELINE_AUTOMATION_TRIGGER_LABELS[r.triggerType]}
+                            {detail}
+                          </>
+                        );
+                      })()}
                     </p>
                     <p className="text-[13px] text-foreground/90">
                       {summarizeRule(r, stages)}

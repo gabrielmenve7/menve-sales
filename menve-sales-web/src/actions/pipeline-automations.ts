@@ -18,7 +18,8 @@ export async function createPipelineAutomationRule(input: {
   pipelineId: string;
   name: string;
   triggerType: PipelineAutomationTriggerType;
-  triggerFilter: PipelineAutomationTriggerFilter | null;
+  /** Legado (filtro plano) ou `{ composite: { op, clauses } }`. */
+  triggerFilter: PipelineAutomationTriggerFilter | null | Record<string, unknown>;
   actions: PipelineAutomationAction[];
   enabled?: boolean;
 }) {
@@ -41,7 +42,7 @@ export async function updatePipelineAutomationRule(input: {
   ruleId: string;
   name: string;
   triggerType: PipelineAutomationTriggerType;
-  triggerFilter: PipelineAutomationTriggerFilter | null;
+  triggerFilter: PipelineAutomationTriggerFilter | null | Record<string, unknown>;
   actions: PipelineAutomationAction[];
 }) {
   await assertCanConfigureTenant();
