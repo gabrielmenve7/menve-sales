@@ -744,7 +744,7 @@ function PipelineViewBody({
       </div>
 
       <Dialog open={listPanelOpen} onOpenChange={setListPanelOpen}>
-        <DialogContent className="flex max-h-[min(92vh,56rem)] w-[min(100vw-1rem,52rem)] max-w-[min(100vw-1rem,52rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl">
+        <DialogContent className="flex max-h-[min(92vh,56rem)] w-[min(100vw-1rem,78rem)] max-w-[min(100vw-1rem,78rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[78rem]">
           <DialogHeader className="shrink-0 space-y-1 border-b border-border/40 px-6 py-4 text-left">
             <DialogTitle>Lista por etapa</DialogTitle>
             <DialogDescription>

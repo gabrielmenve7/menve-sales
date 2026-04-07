@@ -635,7 +635,7 @@ export function PipelineListView({
       >
         <div className="px-4 pb-4 pt-1 sm:px-8">
           <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/50 shadow-sm">
-            <table className="mx-auto w-full max-w-[52rem] min-w-[30rem] table-fixed border-collapse text-[13px]">
+            <table className="mx-auto w-full max-w-[78rem] min-w-[30rem] table-fixed border-collapse text-[13px]">
               <colgroup>
                 <col style={{ width: "3rem" }} />
                 <col style={{ width: "2.75rem" }} />

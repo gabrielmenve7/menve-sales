@@ -173,7 +173,7 @@ export function PipelineListBulkToolbar({
       >
         <div
           className={cn(
-            "pointer-events-auto flex max-w-[min(100vw-1.5rem,56rem)] flex-wrap items-center gap-1 rounded-xl border border-border/60 bg-card/95 px-2 py-2 shadow-lg backdrop-blur-sm",
+            "pointer-events-auto flex max-w-[min(100vw-1.5rem,84rem)] flex-wrap items-center gap-1 rounded-xl border border-border/60 bg-card/95 px-2 py-2 shadow-lg backdrop-blur-sm",
           )}
         >
           <span className="px-2 text-[13px] text-muted-foreground">
