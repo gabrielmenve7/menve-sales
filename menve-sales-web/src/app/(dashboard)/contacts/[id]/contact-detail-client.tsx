@@ -14,6 +14,7 @@ import type {
   Tag,
   User,
 } from "@prisma/client";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { ActivityType } from "@/types/domain";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -91,12 +92,14 @@ export function ContactDetailClient({
   messages,
   allTags,
   customFields,
+  tenantMembers = [],
 }: {
   contact: ContactRow;
   activities: ActivityRow[];
   messages: MessageRow[];
   allTags: Tag[];
   customFields: CustomField[];
+  tenantMembers?: TenantMemberOption[];
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -248,6 +251,7 @@ export function ContactDetailClient({
                 fields={customFields}
                 customData={contact.customData}
                 idPrefix={`contact-${contact.id}`}
+                members={tenantMembers}
                 onSave={async (values) => {
                   await updateContactCustomData({
                     contactId: contact.id,

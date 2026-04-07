@@ -1,0 +1,128 @@
+---
+description: Squad LAYOUT - identidade visual, minimalismo, shell e design system primitivo (Menve Sales)
+globs:
+  - menve-sales-web/src/app/globals.css
+  - menve-sales-web/src/app/layout.tsx
+  - menve-sales-web/src/app/(dashboard)/layout.tsx
+  - menve-sales-web/src/components/dashboard/**
+  - menve-sales-web/src/components/providers.tsx
+  - menve-sales-web/src/components/theme-toggle.tsx
+  - menve-sales-web/src/components/ui/**
+alwaysApply: false
+---
+
+# Squad LAYOUT
+
+## Identidade
+
+- **Squad**: squad-layout
+- **Dominio**: identidade visual, **minimalismo**, hierarquia de interface, shell (layouts, sidebar) e primitivos em `components/ui/`.
+- **Missao**: manter o Menve Sales como um produto unico -- leve, calmo, legivel -- com tokens coerentes (off-white no claro, cartoes discretos, bordas suaves), tipografia consistente e interacao previsivel (foco, cursor, estados).
+
+## Principios Menve (referencia)
+
+- **Minimalismo funcional**: cada elemento justifica leitura ou acao; evitar ornamentacao e sombras pesadas.
+- **Superficie**: `--background` / `--card` / `--border` em `globals.css`; dark com cartoes levemente elevados.
+- **Tipografia**: sans moderna; hierarquia por peso/tamanho; uppercase só onde fizer sentido semantico.
+- **Cor**: acentos para estado e pouca cor decorativa; densidade usa neutros e `muted-foreground`.
+- **Interacao**: clicaveis com ponteiro; `disabled` com `not-allowed` quando couber; foco visivel.
+- **A11y**: contraste WCAG AA; respeitar `prefers-reduced-motion`.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/globals.css`, `layout.tsx`, `(dashboard)/layout.tsx`
+- `menve-sales-web/src/components/dashboard/**`, `providers.tsx`, `theme-toggle.tsx`
+- `menve-sales-web/src/components/ui/**`
+- Revisao visual em PRs de outros squads (aderencia a tokens)
+
+### Fora de escopo
+
+- Regra de negocio, Prisma, `menve-sales-api/**` (exceto dados só para UI)
+- `auth.ts`, `tenant` -- squad-auth
+- Infra CI/CD (salvo gates acordados)
+
+### Colaboracao
+
+- Outros squads **nao** alteram `globals.css` / tokens sem review squad-layout.
+- Mudancas em `ui/` exigem review do time **Primitivos UI**.
+
+---
+
+## Organograma
+
+```
+squad-layout (15)
+|-- LIDERANCA (3): Helena Rocha (Lead/Design Tech), Ricardo Mendes (EM), Paula Santoro (Brand/UX)
+|-- TOKENS & TEMA (3): Andre Vieira, Leticia Pires, Otavio Nunes
+|-- SHELL & NAVEGACAO (3): Carla Menezes, Felipe Duarte, Renata Iglesias
+|-- PRIMITIVOS UI (3): Gustavo Paiva, Bianca Torres, Daniel Fuchs (A11y)
+|-- TIPO, DENSIDADE & MOTION (3): Marina Lopes, Igor Campos, Sandra Freitas (Design QA)
+```
+
+---
+
+## Lideranca (resumo)
+
+### Helena Rocha -- Squad Lead / Design Technologist
+
+Arquitetura de tokens, temas e primitivos; aprova cores/fontes novas; ADRs de tema; review em `ui/` e shell.
+
+### Ricardo Mendes -- Engineering Manager
+
+Priorizacao, capacidade, mediacao com squads de feature que pedem excecao visual.
+
+### Paula Santoro -- Brand & UX Lead
+
+Regras de marca, specs de shell, biblioteca "faca assim / nao faca assim", validacao UX em mudancas grandes.
+
+---
+
+## Times e caminhos
+
+**Tokens & tema**: `globals.css`, `providers.tsx` (ThemeProvider).
+
+**Shell & navegacao**: `app/layout.tsx`, `(dashboard)/layout.tsx`, `components/dashboard/**`.
+
+**Primitivos UI**: `components/ui/**` -- Radix/shadcn, CVA, variantes com tokens.
+
+**Tipo, densidade & motion**: convencoes globais; animacoes leves; QA pixel entre modulos.
+
+---
+
+## Protocolo
+
+```
+Ricardo prioriza -> Paula (marca) -> Helena (tecnico) -> time -> review (senior + A11y) -> merge
+```
+
+**DoD layout**: tokens respeitados; contraste claro/escuro; foco/teclado ok; review squad-layout em `ui/` e `globals.css`.
+
+---
+
+## Dependencias
+
+| Precisa | Quem |
+|---------|------|
+| Novo primitivo | squad-layout (Gustavo/Helena) |
+| Feature UI | squads dominio consomem `ui/` + shell |
+| Auth | squad-auth |
+
+---
+
+## Mapa de arquivos
+
+```
+globals.css ........ tokens :root / .dark
+layout.tsx ......... root
+(dashboard)/layout .. shell + sidebar
+components/ui/ ..... primitivos
+```
+
+```
+[Tokens] -> [Root + Theme] -> [Dashboard shell] -> [Paginas dominio]
+                      \___________[ui primitivos]___/
+```
+
+Squads de dominio fazem fluxo e dados; squad-layout mantem involucro visual coerente e minimalista.

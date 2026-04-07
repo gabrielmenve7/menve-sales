@@ -27,14 +27,24 @@ type Daily = { date: string; count: number };
 type NamedCount = { name: string; count: number };
 type SourceSlice = { name: string; value: number };
 
+type ProspectingBlock = {
+  total: number;
+  won: number;
+  open: number;
+  contactRate: number | null;
+  funnel: { name: string; count: number }[];
+};
+
 export function DashboardHomeCharts({
   dailyDeals,
   dealsByStage,
   contactsBySource,
+  prospecting,
 }: {
   dailyDeals: Daily[];
   dealsByStage: NamedCount[];
   contactsBySource: SourceSlice[];
+  prospecting?: ProspectingBlock | null;
 }) {
   const pieData = contactsBySource.filter((s) => s.value > 0);
   const formatDay = (d: string) => {
@@ -44,6 +54,42 @@ export function DashboardHomeCharts({
 
   return (
     <div className="space-y-6">
+      {prospecting && prospecting.funnel.length > 0 ? (
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium">
+              Funil — deals da Pesquisa (abertos por etapa)
+            </CardTitle>
+            <CardDescription>
+              Pipeline padrão · origem Prospecção Ativa
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={prospecting.funnel} layout="vertical" margin={{ left: 8, right: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/80" />
+                <XAxis type="number" allowDecimals={false} width={28} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={100}
+                  tick={{ fontSize: 10 }}
+                />
+                <Tooltip />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                  {prospecting.funnel.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={CHART_BAR_SEQUENCE[i % CHART_BAR_SEQUENCE.length]}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="border-border/60 shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-medium">Novos deals (30 dias)</CardTitle>

@@ -1,7 +1,6 @@
 "use server";
 
-import prisma from "@/lib/prisma";
-import { getActiveTenantId, requireSession } from "@/lib/session";
+import { apiServer } from "@/lib/api-server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -11,21 +10,10 @@ const noteSchema = z.object({
 });
 
 export async function addConversationNote(input: z.infer<typeof noteSchema>) {
-  const tenantId = await getActiveTenantId();
-  const session = await requireSession();
   const data = noteSchema.parse(input);
-
-  const conv = await prisma.conversation.findFirst({
-    where: { id: data.conversationId, tenantId },
-  });
-  if (!conv) throw new Error("Conversa não encontrada");
-
-  await prisma.internalNote.create({
-    data: {
-      conversationId: data.conversationId,
-      userId: session.user.id,
-      body: data.body.trim(),
-    },
+  await apiServer(`/conversations/${data.conversationId}/notes`, {
+    method: "POST",
+    json: { body: data.body.trim() },
   });
   revalidatePath("/inbox");
 }

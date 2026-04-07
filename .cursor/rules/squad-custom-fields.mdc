@@ -1,0 +1,452 @@
+---
+description: Squad CUSTOM FIELDS - time dedicado a definicoes e valores de campos customizados (contato e oportunidade)
+globs:
+  - menve-sales-web/src/actions/custom-fields.ts
+  - menve-sales-web/src/components/custom-fields/**
+  - menve-sales-web/src/lib/custom-field-entity.ts
+  - menve-sales-web/src/app/(dashboard)/settings/settings-custom-fields.tsx
+  - menve-sales-web/src/app/(dashboard)/pipeline/page.tsx
+  - menve-sales-web/src/app/(dashboard)/pipeline/pipeline-view.tsx
+  - menve-sales-web/src/app/(dashboard)/pipeline/pipeline-board.tsx
+  - menve-sales-web/src/app/(dashboard)/pipeline/pipeline-deal-detail-dialog.tsx
+  - menve-sales-web/src/app/(dashboard)/contacts/[id]/contact-detail-client.tsx
+  - menve-sales-web/src/app/(dashboard)/contacts/[id]/page.tsx
+  - menve-sales-web/src/lib/custom-field-types.ts
+  - menve-sales-api/src/custom-fields/**
+  - menve-sales-api/src/contacts/contacts.service.ts
+  - menve-sales-api/src/deals/deals.service.ts
+  - menve-sales-api/prisma/schema.prisma
+  - menve-sales-api/prisma/seed.ts
+alwaysApply: false
+---
+
+# Squad CUSTOM FIELDS
+
+## Identidade
+
+- **Squad**: squad-custom-fields
+- **Dominio**: Campos customizados (definicoes por tenant + valores em `Contact.customData` e `Deal.customData`)
+- **Missao**: permitir que cada organizacao modele metadados de contato e de oportunidade sem migracao de schema — com **catalogo de tipos estilo ClickUp** (criacao por tipo, lista “Campos” com label/valor ou “—”), ordem, obrigatoriedade, **coerção única na API** (`custom-field-coerce.ts`), validacao consistente, formularios alinhados no web e integridade entre `CONTACT` e `DEAL`.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-api/src/custom-fields/` -- modulo Nest (`controller`, `service`, `module`, `custom-fields-load.util.ts`, **`custom-field-types.ts`**, **`custom-field-coerce.ts`**)
+- Endpoints e regras de negocio de **`PATCH .../custom-data`** em `menve-sales-api/src/contacts/contacts.service.ts` e `menve-sales-api/src/deals/deals.service.ts` (apenas fluxo de merge/coercao/validacao ligado a definicoes de custom field)
+- `menve-sales-api/src/settings/settings.service.ts` -- quando agregar ou filtrar lista de custom fields no bundle de settings
+- Modelo Prisma `CustomField`, enums `CustomFieldEntity`, campos `customData` em `Contact` e `Deal`, indices e migracoes dedicadas a esses modelos
+- `menve-sales-api/prisma/seed.ts` -- dados de exemplo ou limpeza de chaves obsoletas relacionadas a custom fields
+- `menve-sales-web/src/actions/custom-fields.ts` -- server actions (CRUD definicoes, atualizacao de valores via API)
+- `menve-sales-web/src/components/custom-fields/` -- `CustomFieldsForm` e componentes derivados
+- `menve-sales-web/src/lib/custom-field-entity.ts` -- literais de entidade seguros para o browser
+- `menve-sales-web/src/lib/custom-field-types.ts` -- codigos e labels PT-BR dos tipos (**manter igual** ao array na API)
+- `menve-sales-web/src/app/(dashboard)/settings/settings-custom-fields.tsx` -- UI de gestao de definicoes (contato e oportunidade)
+- Consumo de definicoes e exibicao de formularios em:
+  - `menve-sales-web/src/app/(dashboard)/pipeline/page.tsx` (SSR de defs para o board)
+  - `menve-sales-web/src/app/(dashboard)/pipeline/pipeline-deal-detail-dialog.tsx` (blocos de campos extras)
+  - `menve-sales-web/src/app/(dashboard)/contacts/[id]/contact-detail-client.tsx` e `page.tsx`
+- `menve-sales-web/src/app/(dashboard)/pipeline/pipeline-view.tsx` / `pipeline-board.tsx` -- props `*CustomFieldDefs` e **`tenantMembers`** (para campo `USER`) ate o modal
+- Testes unitarios, integracao e E2E focados em custom fields
+
+### Fora de escopo
+
+- Auth global, `apiServer` base, tenant session (`src/auth.ts`, `src/lib/api-server.ts`, `src/lib/tenant.ts`, `src/lib/session.ts`) -- consumir; mudancas estruturais sao squad-auth
+- Componentes UI genericos em `src/components/ui/` -- solicitar ao design system
+- Restante de **Settings** (organizacao, canais, membros, tags, notificacoes) -- squad-settings; este squad cuida apenas de `settings-custom-fields.tsx` e do embed em `settings-general.tsx` em coordenacao
+- Logica de negocio de pipeline (estagios, drag-and-drop, won/lost) exceto onde acopla defs de custom field
+- Inbox, WhatsApp, prospeccao -- exceto se issue for estritamente leitura/escrita de `customData` em outro modulo (abrir PR com review do squad dono do arquivo)
+- Infraestrutura de deploy e CI/CD
+
+---
+
+## Modelo de produto (referencia ClickUp)
+
+- **Painel Campos**: blocos “Campos extras” em Configuracoes, ficha de contato e modal do deal — lista vertical com nome do campo e valor ou estado vazio (“—”).
+- **Criar campo**: primeiro escolher **tipo**, depois nome/chave; listas suspensas exigem opcoes nao vazias na API.
+- **Metadados**: em telas largas, preferir grid em duas colunas (label mais suave, valor em destaque), alinhado a fichas tipo CRM.
+
+### UI/UX — tema claro (Menve) vs escuro (referencia ClickUp)
+
+Diretrizes para **layouts e elementos** deste squad; implementacao de referencia: `CustomFieldsInlineTable`, `InlineSelectFieldPopover`, fluxo de criacao em `create-custom-field-dialog.tsx`.
+
+1. **Dois temas conscientes**  
+   - **Claro**: superficies brancas/cinza-claro Menve, bordas `border-border`, texto legivel, **destaque de selecao** com `primary` (azul do produto) — alinhado a fichas CRM atuais.  
+   - **Escuro (`dark:`)**: paineis ~`#1e1e1e`–`#2a2a2a`, bordas ~`#333`–`#404040`, texto neutro claro; listas e popovers um tom acima do fundo para hierarquia (referencia visual ClickUp, nao copia de marca).
+
+2. **Campos na lista (inline)**  
+   - **Sem seta de dropdown** no estado neutro: o valor parece texto ate hover/foco na celula (borda suave `group-hover` / `focus-within`).  
+   - Icone do tipo + label a esquerda; **valor alinhado a direita** na mesma linha.  
+   - Linhas com divisores finos; hover de linha discreto (`hover:bg-muted/25`).
+
+3. **Lista suspensa (`SELECT`) — nao usar `<select>` nativo** no inline  
+   - Componente **`InlineSelectFieldRow`** (`inline-select-field-popover.tsx`): **`PopoverAnchor` envolve a linha inteira**; painel **compacto ~252px** de largura (estilo ClickUp, **nao** largura total da linha), `side="bottom"`, **`align="end"`** para ancorar junto à zona do valor, `avoidCollisions={false}`.  
+   - **Popover** com `modal={false}` (DnD).  
+   - Busca: **1px**, altura **~28px**, `text-xs` (discreta, nao borda grossa).  
+   - Primeira acao: **limpar** (`—`) quando o campo nao for obrigatorio; quando essa linha esta selecionada, usar **muted** no tema claro (sem fundo preto/cinza-escuro tipo barra).  
+   - Opcoes em **linhas retangulares** (`rounded-sm`, `text-xs`, `py-1`), handles **menores** — sem formato oval (`rounded-full`).  
+   - Opcao de valor atual: **primary** no claro; **azul** no escuro (`dark:bg-blue-600`).  
+   - **Handles** (`GripVertical`) quando houver `onReorderSelectOptions` e busca vazia.  
+   - **z-index** acima do modal do deal (`z-[100]`).
+
+4. **Campo USER e outros tipos**  
+   - Manter **sem chevron** no trigger quando o padrao for “neutro ate interacao”.  
+   - Reutilizar tokens acima para qualquer novo popover de escolha.
+
+5. **Acessibilidade**  
+   - `role="listbox"` / `role="option"` onde fizer sentido; manter `id`/`htmlFor` entre label e trigger; foco inicial no campo de busca ao abrir o popover.
+
+6. **Permissoes**  
+   - Reordenar / adicionar opcao exige `assertCanConfigureTenant`; se o usuario nao puder, **nao passar** `onReorderSelectOptions` / `onAppendSelectOption` (handles e “adicionar” somem).
+
+---
+
+## Catalogo de tipos (`fieldType`)
+
+| Codigo API | Label (web) | Valor em `customData` | Notas |
+|------------|-------------|----------------------|--------|
+| `TEXT` | Texto | string (max ~2048 na coercao) | trim na API |
+| `NUMBER` | Numero | number JSON | `Number.isFinite` |
+| `DATE` | Data | string ISO (ex. `YYYY-MM-DD`) | aceita ISO completo |
+| `SELECT` | Lista suspensa | string em `options` | `CustomField.options` JSON array |
+| `MONEY_BRL` | Dinheiro (R$) | number (reais, 2 dec.) | >= 0; strings tipo `1.234,56` na API |
+| `URL` | Site | string | apenas `http` / `https` |
+| `PHONE` | Telefone | string | 8–32 chars |
+| `EMAIL` | E-mail | string | normalizado minusculo |
+| `USER` | Pessoa (usuarios) | string (`User.id`) | membro do **mesmo tenant**; web usa `GET /settings/members` (SSR) |
+
+**Fonte de verdade do array de tipos**: `CUSTOM_FIELD_TYPES` / `CUSTOM_FIELD_TYPES_ENUM` na API; `CUSTOM_FIELD_TYPE_CODES` / `CUSTOM_FIELD_TYPE_ZOD_ENUM` no web.
+
+---
+
+## Campos padrao CRM (seed demo tenant)
+
+Criados em `prisma/seed.ts` para o tenant `demo` se ainda nao existirem (`entity: DEAL`):
+
+| Nome | key | Tipo |
+|------|-----|------|
+| Origem | `origem` | SELECT |
+| Responsavel | `responsavel` | USER |
+| Motivo de perda | `motivo_perda` | SELECT |
+| Produto | `produto` | SELECT |
+| Atividade | `atividade` | SELECT |
+
+---
+
+## Coexistencia com colunas nativas do `Deal`
+
+- `Deal.value`, `assignedToId`, `lostReason` cobrem parte do mesmo conceito que campos custom homonimos.
+- **Regra de produto**: nao duplicar na mesma UI sem sincronizacao; preferir **nativo** para relatorios e automacoes ate existir migracao; custom para flexibilidade (ex. multiplas “origens” no futuro exigiria RFC).
+
+---
+
+## Implementacao tecnica (pontos fixos)
+
+- **Coercao**: `menve-sales-api/src/custom-fields/custom-field-coerce.ts` — usada por `ContactsService.updateCustomData` e `DealsService.updateCustomData` (sem duplicar switch).
+- **Teste rapido**: `npm run test:coerce` na API (`custom-field-coerce.selftest.ts`).
+- **Campo USER**: `CustomFieldsForm` recebe `members?: TenantMemberOption[]`; `pipeline/page.tsx` e `contacts/[id]/page.tsx` fazem fetch paralelo de `/settings/members`.
+
+---
+
+## Bar raiser (qualidade do squad)
+
+- Novo tipo ou mudanca de semantica: **RFC curta** + atualizar esta regra + teste de coercao.
+- PR que toca coercao: revisao de Felipe (valores) ou Patricia (defs) + Ricardo se alterar contrato JSON.
+
+---
+
+## Organograma
+
+```
+squad-custom-fields (15 pessoas)
+|
+|-- LIDERANCA (3)
+|   |-- Ricardo Alves ........... Squad Lead / Tech Lead
+|   |-- Beatriz Freitas ......... Engineering Manager
+|   |-- Andre Luiz Cardoso ...... UX Lead / Product Designer
+|
+|-- TIME DEFINICOES & API (3)
+|   |-- Patricia Nogueira ....... Senior Backend Dev
+|   |-- Gustavo Henrique ........ Backend Dev
+|   |-- Larissa Monteiro ........ Fullstack Dev
+|
+|-- TIME VALORES & VALIDACAO (3)
+|   |-- Felipe Rocha ............ Senior Backend Dev
+|   |-- Renata Dias ............. Backend Dev
+|   |-- Tiago Barros ............ Fullstack Dev
+|
+|-- TIME FORMULARIOS & WEB (3)
+|   |-- Vanessa Prado ........... Senior Frontend Dev
+|   |-- Igor Santana ............ Frontend Dev
+|   |-- Camila Ribeiro .......... Fullstack Dev
+|
+|-- TIME SUPERFICIES & QUALIDADE (3)
+|   |-- Eduardo Matos ........... Fullstack Dev (pipeline + contatos)
+|   |-- Luana Ferreira .......... QA Engineer
+|   |-- Rodrigo Pires ........... SRE / Observabilidade
+```
+
+---
+
+## Lideranca (3 pessoas)
+
+### Ricardo Alves -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura de custom fields (modelo de dados, contratos API, formato JSON de `customData`).
+- **Responsabilidades**:
+  - Definir como novos tipos de campo e entidades entram no produto (RFC / ADR).
+  - Garantir unicidade de `key` por tenant, ordenacao `sortOrder`, e compatibilidade com clientes antigos.
+  - Review final em PRs que alteram coercao, obrigatoriedade ou migracao de dados JSON.
+  - Alinhar com squad-dados em mudancas no Prisma.
+- **Entradas**: priorizacao de Beatriz, specs de UX de Andre, alertas de Rodrigo.
+- **Saidas**: ADRs, guias de implementacao para valores e defs.
+- **Handoff**: Beatriz prioriza -> Ricardo distribui entre Patricia (API defs) e Felipe (valores).
+
+### Beatriz Freitas -- Engineering Manager
+
+- **Funcao**: delivery, dependencias entre web e API, comunicacao com produto.
+- **Responsabilidades**:
+  - Backlog de melhorias (novos tipos, importacao em massa, campos condicionais).
+  - Desbloquear integracao com pipeline e settings.
+  - Acompanhar metricas de erro 400 em `PATCH custom-data` e latencia de `GET /custom-fields`.
+- **Entradas**: roadmap, feedback de CS/usuarios.
+- **Saidas**: sprint plan, status, escalacao para outros squads.
+
+### Andre Luiz Cardoso -- UX Lead / Product Designer
+
+- **Funcao**: experiencia de criar/editar definicoes e preencher valores em contexto (modal denso vs ficha).
+- **Responsabilidades**:
+  - Estados vazios, erros de validacao inline, acessibilidade dos inputs por tipo (SELECT, DATE).
+  - Consistencia de labels entre Configuracoes, contato e pipeline.
+- **Entradas**: pesquisa com usuarios, analytics de abandono em formularios longos.
+- **Saidas**: specs e criterios de aceitacao visual.
+
+---
+
+## Time Definicoes & API (3 pessoas)
+
+**Dominio**: CRUD de `CustomField`, listagem por `entity`, reorder, RBAC `assertCanConfigureTenant`.
+
+**Caminhos principais**:
+- `menve-sales-api/src/custom-fields/custom-fields.controller.ts` -- `GET/POST/PUT/DELETE/PATCH reorder`
+- `menve-sales-api/src/custom-fields/custom-fields.service.ts`
+- `menve-sales-api/src/custom-fields/custom-fields-load.util.ts` -- `findContactCustomFieldDefinitions`, `findDealCustomFieldDefinitions`
+
+### Patricia Nogueira -- Senior Backend Dev
+
+- **Funcao**: lideranca tecnica do modulo `custom-fields` na API.
+- **Responsabilidades**: contratos REST estaveis, transacoes em reorder, mensagens de erro claros para o web.
+
+### Gustavo Henrique -- Backend Dev
+
+- **Funcao**: evolucao de filtros (futuro: versionamento de defs, soft delete).
+
+### Larissa Monteiro -- Fullstack Dev
+
+- **Funcao**: alinhar payloads do web (`createCustomField` action) com DTOs da API e testes de contrato.
+
+---
+
+## Time Valores & validacao (3 pessoas)
+
+**Dominio**: merge de `values` no `customData`, coercao por `fieldType`, opcao SELECT, campos obrigatorios.
+
+**Caminhos principais**:
+- `menve-sales-api/src/contacts/contacts.service.ts` -- `updateCustomData` (contato)
+- `menve-sales-api/src/deals/deals.service.ts` -- `updateCustomData` (deal)
+- Consumo de `findContactCustomFieldDefinitions` / `findDealCustomFieldDefinitions`
+
+### Felipe Rocha -- Senior Backend Dev
+
+- **Funcao**: dono das regras de coercao e mensagens i18n-ready (`Campo X e obrigatorio`, `Opcao invalida`).
+
+### Renata Dias -- Backend Dev
+
+- **Funcao**: testes de borda (JSON null, chaves desconhecidas, troca de tipo de campo).
+
+### Tiago Barros -- Fullstack Dev
+
+- **Funcao**: garantir que `revalidatePath` / invalidacao no web refletem mudancas de valores apos PATCH.
+
+---
+
+## Time Formularios & Web (3 pessoas)
+
+**Dominio**: `CustomFieldsForm`, server actions, SSR de listas de defs.
+
+**Caminhos principais**:
+- `menve-sales-web/src/components/custom-fields/custom-fields-form.tsx`
+- `menve-sales-web/src/actions/custom-fields.ts`
+- `menve-sales-web/src/app/(dashboard)/settings/settings-custom-fields.tsx`
+- `menve-sales-web/src/lib/custom-field-entity.ts`
+
+### Vanessa Prado -- Senior Frontend Dev
+
+- **Funcao**: performance e UX do formulario (muitos campos, sync de estado com `fieldsSyncKey`).
+
+### Igor Santana -- Frontend Dev
+
+- **Funcao**: acessibilidade, ids unicos por prefixo (`idPrefix`), mobile.
+
+### Camila Ribeiro -- Fullstack Dev
+
+- **Funcao**: `listCustomFieldsForEntity` resiliente, alinhamento SSR (`Promise.all` + fallback `[]`) em `pipeline/page.tsx` e `settings/page.tsx`.
+
+---
+
+## Time Superficies & qualidade (3 pessoas)
+
+**Dominio**: onde os valores aparecem -- modal do deal, ficha do contato, seed, monitoracao.
+
+**Caminhos principais**:
+- `menve-sales-web/src/app/(dashboard)/pipeline/pipeline-deal-detail-dialog.tsx`
+- `menve-sales-web/src/app/(dashboard)/contacts/[id]/contact-detail-client.tsx`
+- `menve-sales-api/prisma/seed.ts` (trechos de custom field / limpeza de chaves)
+
+### Eduardo Matos -- Fullstack Dev
+
+- **Funcao**: integrar defs no pipeline e contato sem duplicar logica de coercao no cliente (so display + submit).
+
+### Luana Ferreira -- QA Engineer
+
+- **Funcao**: matriz de regressao (CONTACT vs DEAL, SELECT com opcoes vazias, reorder).
+
+### Rodrigo Pires -- SRE / Observabilidade
+
+- **Funcao**: dashboards de erro por tenant em endpoints de custom field; alertas se taxa de 4xx subir apos deploy.
+
+---
+
+## Protocolo operacional
+
+### Fluxo de feature
+
+```
+Beatriz prioriza
+  -> Andre especifica UX
+    -> Ricardo valida arquitetura (ADR se mudar modelo ou contrato)
+      -> Times implementam (branch por feature)
+        -> Review senior (Patricia ou Felipe ou Vanessa conforme area)
+          -> Luana valida
+            -> Merge
+              -> Rodrigo monitora
+```
+
+### Escalonamento
+
+```
+Dev
+  -> Senior do time (Patricia, Felipe ou Vanessa)
+    -> Ricardo (Tech Lead)
+      -> Beatriz (EM)
+        -> Outro squad se arquivo for fora do escopo
+```
+
+### Definition of Done
+
+- [ ] Review do senior do time afetado.
+- [ ] Review de Ricardo em mudancas de schema ou coercao.
+- [ ] Testes verdes (CI).
+- [ ] Validacao de UX de Andre quando houver mudanca de UI.
+- [ ] Deploy preview sem regressao em pipeline e contato.
+- [ ] Rodrigo confirma ausencia de spike de erros na API.
+
+---
+
+## Governanca
+
+### SLA interno
+
+| Atividade       | SLA                          |
+|-----------------|------------------------------|
+| PR review       | ate 4h uteis                 |
+| Bug critico     | resposta em ate 2h           |
+| Bug dados JSON  | resolvido no sprint corrente |
+| Post-mortem     | ate 48h apos incidente       |
+
+### Metricas do squad
+
+- Tempo medio de `GET /custom-fields?entity=*`.
+- Taxa de 4xx em `PATCH /contacts/:id/custom-data` e `PATCH /deals/:id/custom-data`.
+- Campos obrigatorios nao preenchidos (falhas de validacao) por semana.
+- Tempo para novo tenant ter primeira def criada (funnel produto).
+
+### Melhoria continua
+
+- Retrospectiva quinzenal com Beatriz.
+- Revisao trimestral do modelo JSON com Ricardo.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia              | Squad / area        | Interacao |
+|--------------------------|---------------------|-----------|
+| UI generica              | design-system       | nao alterar `components/ui/` diretamente |
+| Auth, apiServer, tenant  | squad-auth          | consumir APIs internas |
+| Migracoes Prisma         | squad-dados         | RFC para novos indices ou tipos |
+| Settings (layout geral)  | squad-settings      | coordenar embed em `settings-general.tsx` |
+| Pipeline (board, DnD)    | squad-pipeline      | apenas props e modal; nao refatorar board sem alinhamento |
+| Prospeccao usando JSON   | squad-prospeccao    | review cruzado se escrever `customData` |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    actions/
+      custom-fields.ts .............. server actions -> apiServer
+    components/
+      custom-fields/
+        custom-fields-form.tsx ...... formulario generico por lista de CustomField
+    lib/
+      custom-field-entity.ts ........ CUSTOM_FIELD_ENTITY (evita enum Prisma no browser)
+      custom-field-types.ts ......... codigos + labels PT-BR (alinhar com API)
+    app/(dashboard)/
+      settings/
+        settings-custom-fields.tsx .. cards CONTACT + DEAL
+      pipeline/
+        page.tsx .................... SSR: GET /custom-fields?entity=
+        pipeline-deal-detail-dialog.tsx ... blocos Campos extras
+      contacts/[id]/
+        page.tsx .................... bundle com customFields
+        contact-detail-client.tsx ... CustomFieldsForm
+
+menve-sales-api/
+  src/
+    custom-fields/
+      custom-fields.module.ts
+      custom-fields.controller.ts ... REST /custom-fields
+      custom-fields.service.ts
+      custom-fields-load.util.ts ... find*Definitions(prisma, tenantId)
+      custom-field-types.ts ........ array canonicos + tupla Zod
+      custom-field-coerce.ts ....... coercao unica (PATCH custom-data)
+    contacts/
+      contacts.service.ts .......... updateCustomData (merge + coerce)
+    deals/
+      deals.service.ts ............. updateCustomData (deal)
+    settings/
+      settings.service.ts .......... lista de defs no bundle (se aplicavel)
+  prisma/
+    schema.prisma .................. model CustomField, CustomFieldEntity, customData Json
+    seed.ts ........................ dados demo / limpeza de chaves
+```
+
+## Arquitetura (resumo)
+
+```
+[Next.js RSC / actions]
+  |-- apiServer("/custom-fields?entity=CONTACT|DEAL")
+  |-- apiServer("PATCH /contacts/:id/custom-data", { values })
+  |-- apiServer("PATCH /deals/:id/custom-data", { values })
+        |
+        v
+[NestJS + Prisma]
+  CustomFieldsController  ---> CustomFieldsService ---> CustomField table
+  ContactsController PATCH --> ContactsService ------> merge customData + defs CONTACT
+  DealsController PATCH -----> DealsService --------> merge customData + defs DEAL
+```
+
+---

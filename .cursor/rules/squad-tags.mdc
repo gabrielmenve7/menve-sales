@@ -1,0 +1,130 @@
+---
+description: Squad TAGS - time de engenharia dedicado ao sistema de tags do Menve Sales
+globs:
+  - menve-sales-web/src/app/(dashboard)/settings/settings-tags-catalog.tsx
+  - menve-sales-web/src/actions/tags.ts
+  - menve-sales-api/src/tags/**
+alwaysApply: false
+---
+
+# Squad TAGS
+
+## Identidade
+
+- **Squad**: squad-tags
+- **Dominio**: Tags (catalogo de tags, associacao a contatos e deals, cores, categorias)
+- **Missao**: construir, evoluir e manter o sistema de tags do Menve Sales -- catalogo global, associacao a contatos e deals, cores customizaveis, filtros por tag -- garantindo organizacao, usabilidade e consistencia entre telas.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/settings/settings-tags-catalog.tsx` -- UI do catalogo de tags
+- `menve-sales-web/src/actions/tags.ts` -- server actions de tags (CRUD, associar, desassociar)
+- `menve-sales-api/src/tags/` -- controller, service e module de tags
+- Schemas Prisma: `Tag`, `ContactTag`, `DealTag`
+
+### Fora de escopo
+
+- UI de tags no detalhe de contato (pertence ao squad-contatos; usa server actions de tags)
+- Filtros compostos por tag (pertence ao squad-filtros)
+- Pipeline (apenas fornece `DealTag` para associacao)
+
+---
+
+## Organograma
+
+```
+squad-tags (4 pessoas)
+|
+|-- LIDERANCA (1)
+|   |-- Luciana Barros ............. Squad Lead / Tech Lead
+|
+|-- TIME CORE (3)
+|   |-- João Victor ................ Frontend Dev
+|   |-- Renata Campos .............. Backend Dev
+|   |-- Pedro Augusto .............. QA Engineer
+```
+
+---
+
+## Lideranca
+
+### Luciana Barros -- Squad Lead / Tech Lead
+
+- **Funcao**: dona da arquitetura do sistema de tags.
+- **Responsabilidades**:
+  - Definir modelo de dados (categorias, hierarquia, cores).
+  - Garantir consistencia de tags entre contatos e deals.
+  - Code review e pareceres em PRs.
+  - Interface com squad-contatos e squad-pipeline para uso de tags.
+
+---
+
+## Time Core (3 pessoas)
+
+### João Victor -- Frontend Dev
+
+- **Funcao**: dono da UI de tags.
+- **Responsabilidades**:
+  - Manter `settings-tags-catalog.tsx` (CRUD de tags com nome, cor, acoes).
+  - Implementar color picker e preview de tag.
+  - Garantir consistencia visual entre catalogo e uso inline (contatos, deals).
+- **Criterios de qualidade**:
+  - CRUD sem reload de pagina.
+  - Cores renderizam identicas no catalogo e no detalhe de contato.
+
+### Renata Campos -- Backend Dev
+
+- **Funcao**: dona dos endpoints de tags.
+- **Responsabilidades**:
+  - Manter `TagsController` e `TagsService` (CRUD, regras de unicidade por tenant).
+  - Implementar endpoints de associacao: `POST /contacts/:id/tags/:tagId`, `DELETE /contacts/:id/tags/:tagId`.
+  - Garantir integridade referencial (nao deletar tag com associacoes ativas sem confirmacao).
+- **Criterios de qualidade**:
+  - Tags unicas por nome dentro do tenant.
+  - Delecao cascade ou soft-delete com confirmacao.
+
+### Pedro Augusto -- QA Engineer
+
+- **Funcao**: qualidade do sistema de tags.
+- **Responsabilidades**:
+  - Testes E2E de CRUD de tags.
+  - Testes de associacao/desassociacao em contatos e deals.
+  - Validar unicidade e edge cases (nome duplicado, cor invalida).
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                          |
+|-----------------------------|-------------------|--------------------------------------------|
+| Contatos (uso de tags)      | squad-contatos    | fornecer tags; consumir `addTagToContact`  |
+| Pipeline (DealTag)          | squad-pipeline    | fornecer tags para deals                   |
+| Filtros por tag             | squad-filtros     | fornecer dados para filtro por tag         |
+| Settings UI (tab Tags)      | squad-tags        | proprio squad                              |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/(dashboard)/
+      settings/
+        settings-tags-catalog.tsx ....... UI do catalogo de tags
+    actions/
+      tags.ts ........................... CRUD tags, addTagToContact, removeTagFromContact
+
+menve-sales-api/
+  src/
+    tags/
+      tags.controller.ts ................ endpoints REST de tags
+      tags.service.ts ................... logica de negocio
+      tags.module.ts .................... modulo NestJS
+  prisma/
+    schema.prisma ....................... Tag, ContactTag, DealTag
+```
+
+---

@@ -37,6 +37,13 @@ const selectClass =
 const selectClassMinimal =
   "h-9 w-full cursor-pointer appearance-none border-0 bg-transparent bg-none px-0 py-1 text-left text-sm shadow-none outline-none ring-0 [-moz-appearance:none] focus-visible:ring-0 disabled:opacity-50 [&::-webkit-appearance]:none";
 
+/** Alinhado às linhas nativas do modal (ícone + valor, ~32px). */
+const inputClassMinimalCompact =
+  "h-8 min-h-8 w-full border-0 bg-transparent px-0 py-0 text-left text-sm leading-tight italic text-foreground shadow-none outline-none ring-0 placeholder:text-muted-foreground/80 placeholder:italic focus-visible:ring-0 disabled:opacity-50";
+
+const selectClassMinimalCompact =
+  "h-8 min-h-8 w-full cursor-pointer appearance-none border-0 bg-transparent bg-none px-0 py-0 text-left text-sm leading-tight shadow-none outline-none ring-0 [-moz-appearance:none] focus-visible:ring-0 disabled:opacity-50 [&::-webkit-appearance]:none";
+
 export function CustomFieldsInlineTable({
   title,
   fields,
@@ -49,6 +56,8 @@ export function CustomFieldsInlineTable({
   onAppendSelectOption,
   embedded = false,
   variant = "default",
+  /** Padrão compacto alinhado às linhas ícone + valor do modal do deal (todas as visualizações). */
+  compactMinimalRows = true,
 }: {
   /** Omitir ou deixar vazio quando o título já está no cabeçalho da seção (ex.: modal do pipeline). */
   title?: string;
@@ -56,6 +65,8 @@ export function CustomFieldsInlineTable({
   embedded?: boolean;
   /** `board`: modal largo estilo ClickUp — linhas mais altas e área de valor mais ampla. `minimal`: lista sem tabela, ícone + valor (referência CRM). */
   variant?: "default" | "board" | "minimal";
+  /** `false` restaura linhas mais altas (ex.: layout estilo board). Só afeta `variant="minimal"`. */
+  compactMinimalRows?: boolean;
   fields: CustomField[];
   customData: unknown;
   members: TenantMemberOption[];
@@ -150,7 +161,9 @@ export function CustomFieldsInlineTable({
   const isMinimal = variant === "minimal";
   const isBoard = variant === "board";
   const rowPad = isMinimal
-    ? "min-h-[44px] gap-3 py-2.5"
+    ? compactMinimalRows
+      ? "min-h-0 items-center gap-3 py-1"
+      : "min-h-[44px] gap-3 py-2.5"
     : isBoard
       ? "min-h-[52px] px-4 py-2.5 sm:px-6 sm:py-3"
       : "min-h-[48px] px-3 py-1.5 sm:px-4";
@@ -159,8 +172,18 @@ export function CustomFieldsInlineTable({
     : isBoard
       ? "max-w-[min(100%,22rem)] sm:max-w-[min(28rem,36vw)]"
       : "max-w-[min(100%,14rem)] sm:max-w-[16rem]";
-  const ic = isMinimal ? inputClassMinimal : inputClass;
-  const sc = isMinimal ? selectClassMinimal : selectClass;
+  const ic =
+    isMinimal && compactMinimalRows
+      ? inputClassMinimalCompact
+      : isMinimal
+        ? inputClassMinimal
+        : inputClass;
+  const sc =
+    isMinimal && compactMinimalRows
+      ? selectClassMinimalCompact
+      : isMinimal
+        ? selectClassMinimal
+        : selectClass;
 
   return (
     <div className={className}>
@@ -189,14 +212,10 @@ export function CustomFieldsInlineTable({
           const inputId = `${idPrefix}-inline-${f.id}`;
 
           const rowClass = cn(
-            "group flex items-stretch",
-            isMinimal ? "items-center" : "gap-3 sm:gap-4",
+            "group flex transition-colors",
+            isMinimal ? "items-center rounded-lg px-0 hover:bg-muted/35" : "items-stretch gap-3 sm:gap-4 hover:bg-muted/25",
             rowPad,
             !isMinimal && (embedded || idx > 0) && "border-t border-border/50",
-            "transition-colors",
-            isMinimal
-              ? "rounded-lg px-0 hover:bg-muted/35"
-              : "hover:bg-muted/25",
           );
 
           const labelCol = isMinimal ? (
@@ -244,6 +263,7 @@ export function CustomFieldsInlineTable({
                   isMinimal && "border-0 group-hover:border-transparent",
                 )}
                 variant={isMinimal ? "minimal" : "default"}
+                compact={compactMinimalRows}
                 onDefinitionError={(msg) => setErr(msg)}
                 onCommitValue={async (next) => {
                   if (storedFieldAsDraftString(f, customData) === next) return;

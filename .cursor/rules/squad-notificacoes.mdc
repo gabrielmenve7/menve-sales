@@ -1,0 +1,162 @@
+---
+description: Squad NOTIFICACOES - time de engenharia dedicado ao sistema de notificacoes do Menve Sales
+globs:
+  - menve-sales-web/src/app/(dashboard)/settings/settings-notifications.tsx
+  - menve-sales-web/src/components/inbox/notifications/**
+  - menve-sales-api/src/notifications/**
+alwaysApply: false
+---
+
+# Squad NOTIFICACOES
+
+## Identidade
+
+- **Squad**: squad-notificacoes
+- **Dominio**: Notificacoes (in-app, push, contadores de nao-lidos, preferencias de notificacao)
+- **Missao**: construir, evoluir e manter o sistema de notificacoes do Menve Sales -- notificacoes in-app, push notifications, contadores de nao-lidos, preferencias por usuario e canal -- garantindo entrega confiavel, baixa latencia e controle granular pelo usuario.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/settings/settings-notifications.tsx` -- UI de preferencias
+- `menve-sales-web/src/components/inbox/notifications/` -- componentes de notificacao (criar)
+- `menve-sales-api/src/notifications/` -- controller, service, module (criar)
+- Schemas Prisma: modelos de notificacao e preferencias (criar)
+
+### Fora de escopo
+
+- Logica de mensagens/conversas (pertence ao squad-inbox)
+- Envio de emails transacionais (pertence a infra)
+- Auth e sessao
+
+---
+
+## Organograma
+
+```
+squad-notificacoes (5 pessoas)
+|
+|-- LIDERANCA (1)
+|   |-- André Cardoso .............. Squad Lead / Tech Lead
+|
+|-- TIME CORE (4)
+|   |-- Bianca Ferreira ............ Frontend Dev
+|   |-- Leandro Motta .............. Backend Dev
+|   |-- Cristiane Soares ........... Fullstack Dev
+|   |-- Victor Hugo ................ QA Engineer
+```
+
+---
+
+## Lideranca
+
+### André Cardoso -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura do sistema de notificacoes.
+- **Responsabilidades**:
+  - Projetar sistema de notificacoes (in-app, push, email futuro).
+  - Definir modelo de dados (Notification, NotificationPreference).
+  - Garantir entrega confiavel com debounce para rafagas.
+  - Interface com squad-inbox para eventos de nova mensagem.
+
+---
+
+## Time Core (4 pessoas)
+
+### Bianca Ferreira -- Frontend Dev
+
+- **Funcao**: dona da UI de notificacoes.
+- **Responsabilidades**:
+  - Implementar badge de nao-lidos na sidebar e no inbox.
+  - Construir dropdown de notificacoes recentes.
+  - Implementar toasts para notificacoes em tempo real.
+  - Manter `settings-notifications.tsx` (preferencias de notificacao).
+- **Criterios de qualidade**:
+  - Badge atualiza em tempo real (<2s apos mensagem recebida).
+  - Toast nao bloqueia interacao do usuario.
+
+### Leandro Motta -- Backend Dev
+
+- **Funcao**: dono da engine de notificacoes.
+- **Responsabilidades**:
+  - Criar `NotificationsService` (criacao, leitura, mark-as-read).
+  - Implementar contadores de nao-lidos por conversa e total.
+  - Implementar debounce para rafagas de mensagens (1 notificacao para N msgs em 30s).
+  - Implementar Web Push API para push notifications.
+  - Criar endpoints: `GET /notifications`, `PATCH /notifications/:id/read`, `PATCH /notifications/read-all`.
+- **Criterios de qualidade**:
+  - Contadores consistentes entre abas e dispositivos.
+  - Debounce funcional sem perder notificacoes criticas.
+
+### Cristiane Soares -- Fullstack Dev
+
+- **Funcao**: integracao e preferencias.
+- **Responsabilidades**:
+  - Implementar CRUD de preferencias de notificacao por usuario.
+  - Integrar eventos de websocket com sistema de notificacoes.
+  - Implementar logica de mute por conversa e por canal.
+  - Manter server actions de notificacoes.
+- **Criterios de qualidade**:
+  - Mute respeita preferencia em todos os canais de entrega.
+  - Preferencias sincronizam entre dispositivos.
+
+### Victor Hugo -- QA Engineer
+
+- **Funcao**: qualidade de notificacoes.
+- **Responsabilidades**:
+  - Testes E2E de fluxo completo (mensagem recebida -> notificacao exibida).
+  - Testes de debounce e mute.
+  - Testes de push notification em diferentes browsers.
+
+---
+
+## Estado atual
+
+A funcionalidade de notificacoes esta em **placeholder**:
+- Tab "Notificacoes" em configuracoes exibe apenas "Em breve".
+- Nao ha backend, modelos Prisma ou logica de notificacao implementados.
+
+### Proximos passos
+
+1. Criar modelo Prisma `Notification` e `NotificationPreference`.
+2. Criar `NotificationsModule` no NestJS (controller + service).
+3. Implementar badge de nao-lidos na sidebar.
+4. Implementar dropdown de notificacoes.
+5. Integrar com eventos de websocket do inbox.
+6. Implementar preferencias de notificacao na UI.
+7. Implementar Web Push API.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                              |
+|-----------------------------|-------------------|------------------------------------------------|
+| Eventos de mensagem         | squad-inbox       | consumir eventos de nova mensagem              |
+| Websocket                   | squad-inbox       | consumir canal websocket para push em tempo real|
+| Settings UI                 | squad-notificacoes| proprio squad (settings-notifications.tsx)      |
+| Auth e sessao               | squad-auth        | consumir `auth()` para identificar usuario     |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/(dashboard)/
+      settings/
+        settings-notifications.tsx ...... placeholder "Em breve" (preferencias futuras)
+    components/
+      inbox/
+        notifications/ .................. (criar) badges, toasts, dropdown
+
+menve-sales-api/
+  src/
+    notifications/ ....................... (criar) controller, service, module
+  prisma/
+    schema.prisma ....................... (criar) Notification, NotificationPreference
+```
+
+---

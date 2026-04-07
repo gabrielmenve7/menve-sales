@@ -10,6 +10,11 @@ import {
   reorderCustomFields,
   updateCustomField,
 } from "@/actions/custom-fields";
+import {
+  CUSTOM_FIELD_TYPE_CODES,
+  CUSTOM_FIELD_TYPE_LABELS,
+  type CustomFieldTypeCode,
+} from "@/lib/custom-field-types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,8 +25,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-const TYPES = ["TEXT", "NUMBER", "DATE", "SELECT"] as const;
 
 export function SettingsCustomFields({
   fields: initial,
@@ -148,7 +151,8 @@ function NewFieldForm({
 }) {
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
-  const [fieldType, setFieldType] = useState<(typeof TYPES)[number]>("TEXT");
+  const [fieldType, setFieldType] =
+    useState<CustomFieldTypeCode>("TEXT");
   const [optionsText, setOptionsText] = useState("");
   const [required, setRequired] = useState(false);
 
@@ -218,12 +222,12 @@ function NewFieldForm({
             className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             value={fieldType}
             onChange={(e) =>
-              setFieldType(e.target.value as (typeof TYPES)[number])
+              setFieldType(e.target.value as CustomFieldTypeCode)
             }
           >
-            {TYPES.map((t) => (
+            {CUSTOM_FIELD_TYPE_CODES.map((t) => (
               <option key={t} value={t}>
-                {t}
+                {CUSTOM_FIELD_TYPE_LABELS[t]}
               </option>
             ))}
           </select>
@@ -314,7 +318,7 @@ function FieldRow({
       await updateCustomField({
         id: field.id,
         name: name.trim(),
-        fieldType: fieldType as (typeof TYPES)[number],
+        fieldType: fieldType as CustomFieldTypeCode,
         options: fieldType === "SELECT" ? options : undefined,
         required,
       });
@@ -359,9 +363,9 @@ function FieldRow({
             onChange={(e) => setFieldType(e.target.value)}
             disabled={disabled}
           >
-            {TYPES.map((t) => (
+            {CUSTOM_FIELD_TYPE_CODES.map((t) => (
               <option key={t} value={t}>
-                {t}
+                {CUSTOM_FIELD_TYPE_LABELS[t]}
               </option>
             ))}
           </select>

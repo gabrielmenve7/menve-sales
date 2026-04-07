@@ -1,32 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import prisma from "../../menve-sales-web/src/lib/prisma";
-
-function loadDotEnvIfAvailable() {
-  const envPath = resolve(process.cwd(), ".env");
-  if (!existsSync(envPath)) return;
-  const content = readFileSync(envPath, "utf8");
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const raw = trimmed.slice(eq + 1).trim();
-    const value = raw.replace(/^['"]|['"]$/g, "");
-    if (!process.env[key]) process.env[key] = value;
-  }
-}
-
-function requiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing env: ${name}`);
-  return value;
-}
+import "./load-api-env";
+import { scriptPrisma as prisma } from "./_prisma";
 
 async function main() {
-  loadDotEnvIfAvailable();
-  const appUrl = requiredEnv("NEXT_PUBLIC_APP_URL").replace(/\/$/, "");
+  const appUrl = (
+    process.env.PUBLIC_APP_URL ||
+    process.env.INTERNAL_API_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://127.0.0.1:4000"
+  ).replace(/\/$/, "");
 
   const tenant = await prisma.tenant.findFirst({
     select: { id: true },
@@ -78,7 +59,7 @@ async function main() {
     if (webhookSecret) headers["x-webhook-secret"] = webhookSecret;
 
     const webhookRes = await fetch(
-      `${appUrl}/api/webhooks/whatsapp/evolution/${connection.id}`,
+      `${appUrl}/webhooks/whatsapp/evolution/${connection.id}`,
       {
         method: "POST",
         headers,

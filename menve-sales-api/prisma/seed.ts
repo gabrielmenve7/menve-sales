@@ -14,6 +14,8 @@ const REMOVED_CUSTOM_FIELD_KEYS = [
   "prioridade",
   "observacoes",
   "oportunidade",
+  /** Duplica `campaignSource` do contato (origem no card do deal). */
+  "origem",
 ] as const;
 
 function omitCustomDataKeys(
@@ -171,21 +173,6 @@ async function main() {
     sortOrder: number;
     options?: string[];
   }> = [
-    {
-      key: "origem",
-      name: "Origem",
-      fieldType: "SELECT",
-      sortOrder: 11,
-      options: [
-        "Inbound",
-        "Outbound",
-        "Indicação",
-        "Site",
-        "Evento",
-        "Parceiro",
-        "Outro",
-      ],
-    },
     { key: "responsavel", name: "Responsável", fieldType: "USER", sortOrder: 12 },
     {
       key: "motivo_perda",

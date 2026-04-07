@@ -14,5 +14,10 @@ export type DealRow = Deal & {
   };
   stage: Stage;
   dealTags: (DealTag & { tag: Tag })[];
-  assignedTo: { id: string; name: string | null; email?: string } | null;
+  assignedTo: {
+    id: string;
+    name: string | null;
+    email?: string;
+    image?: string | null;
+  } | null;
 };

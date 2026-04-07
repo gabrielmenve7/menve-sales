@@ -5,27 +5,21 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
+import {
+  customDataToStringMap,
+  stringToApiValue,
+} from "@/lib/custom-field-value-helpers";
 
-function customDataToStringMap(
+function buildPayload(
   fields: CustomField[],
-  customData: unknown,
-): Record<string, string> {
-  const base =
-    customData && typeof customData === "object" && !Array.isArray(customData)
-      ? (customData as Record<string, unknown>)
-      : {};
-  const out: Record<string, string> = {};
+  values: Record<string, string>,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
   for (const f of fields) {
-    const v = base[f.key];
-    if (v === undefined || v === null) out[f.key] = "";
-    else if (typeof v === "number") out[f.key] = String(v);
-    else {
-      const s = String(v);
-      out[f.key] =
-        f.fieldType === "DATE" && s.includes("T") ? s.slice(0, 10) : s;
-    }
+    payload[f.key] = stringToApiValue(f.fieldType, values[f.key] ?? "");
   }
-  return out;
+  return payload;
 }
 
 type CustomFieldsFormProps = {
@@ -34,6 +28,8 @@ type CustomFieldsFormProps = {
   /** Prefixo único para ids (ex.: `deal-abc` / `contact-xyz`) */
   idPrefix: string;
   submitLabel?: string;
+  /** Obrigatório se existir campo `USER` — use `GET /settings/members` no RSC pai. */
+  members?: TenantMemberOption[];
   onSave: (values: Record<string, unknown>) => Promise<void>;
 };
 
@@ -42,6 +38,7 @@ export function CustomFieldsForm({
   customData,
   idPrefix,
   submitLabel = "Salvar campos extras",
+  members = [],
   onSave,
 }: CustomFieldsFormProps) {
   const [loading, setLoading] = useState(false);
@@ -50,7 +47,6 @@ export function CustomFieldsForm({
     customDataToStringMap(fields, customData),
   );
 
-  /** Evita reset a cada render quando `fields` vem com nova referência de array (mesmo conteúdo). */
   const fieldsSyncKey = useMemo(
     () =>
       fields
@@ -73,15 +69,17 @@ export function CustomFieldsForm({
     setValues(customDataToStringMap(fields, customData));
   }, [fieldsSyncKey, customDataSyncKey]);
 
+  const needsMembers = useMemo(
+    () => fields.some((f) => f.fieldType === "USER"),
+    [fields],
+  );
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setErr(null);
     try {
-      const payload: Record<string, unknown> = {};
-      for (const f of fields) {
-        payload[f.key] = values[f.key] ?? "";
-      }
+      const payload = buildPayload(fields, values);
       await onSave(payload);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro ao salvar");
@@ -95,6 +93,12 @@ export function CustomFieldsForm({
   return (
     <form onSubmit={(e) => void onSubmit(e)} className="space-y-3">
       {err ? <p className="text-sm text-destructive">{err}</p> : null}
+      {needsMembers && members.length === 0 ? (
+        <p className="text-xs text-amber-600 dark:text-amber-500">
+          Campos “Pessoa” precisam da lista de membros do tenant. Recarregue a
+          página ou verifique a sessão.
+        </p>
+      ) : null}
       {fields.map((f) => {
         const val = values[f.key] ?? "";
         const inputId = `${idPrefix}-cf-${f.id}`;
@@ -130,12 +134,59 @@ export function CustomFieldsForm({
             </div>
           );
         }
+        if (f.fieldType === "USER") {
+          return (
+            <div key={f.id} className="grid gap-1">
+              {label}
+              <select
+                id={inputId}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                required={f.required}
+                value={val}
+                onChange={(e) =>
+                  setValues((prev) => ({ ...prev, [f.key]: e.target.value }))
+                }
+              >
+                <option value="">{f.required ? "Selecione…" : "—"}</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name?.trim() || m.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        }
+        if (f.fieldType === "MONEY_BRL") {
+          return (
+            <div key={f.id} className="grid gap-1">
+              {label}
+              <Input
+                id={inputId}
+                type="text"
+                inputMode="decimal"
+                placeholder="0,00"
+                required={f.required}
+                value={val}
+                onChange={(e) =>
+                  setValues((prev) => ({ ...prev, [f.key]: e.target.value }))
+                }
+              />
+            </div>
+          );
+        }
         const inputType =
           f.fieldType === "NUMBER"
             ? "number"
             : f.fieldType === "DATE"
               ? "date"
-              : "text";
+              : f.fieldType === "EMAIL"
+                ? "email"
+                : f.fieldType === "URL"
+                  ? "url"
+                  : f.fieldType === "PHONE"
+                    ? "tel"
+                    : "text";
         return (
           <div key={f.id} className="grid gap-1">
             {label}

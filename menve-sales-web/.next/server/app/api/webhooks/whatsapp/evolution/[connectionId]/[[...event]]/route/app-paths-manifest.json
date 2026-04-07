@@ -1,3 +1,0 @@
-{
-  "/api/webhooks/whatsapp/evolution/[connectionId]/[[...event]]/route": "app/api/webhooks/whatsapp/evolution/[connectionId]/[[...event]]/route.js"
-}

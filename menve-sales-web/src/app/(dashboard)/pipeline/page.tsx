@@ -48,15 +48,19 @@ export default async function PipelinePage({
     pipelines.find((p) => p.isDefault) ??
     pipelines[0];
 
-  const [dealsResult, dealCustomFieldDefs, members] = await Promise.all([
-    apiServer<PipelineDealsPayload>(`/pipelines/${activePipeline!.id}/deals`),
-    apiServer<unknown>("/custom-fields?entity=DEAL")
-      .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
-      .catch(() => [] as CustomField[]),
-    apiServer<TenantMemberOption[]>("/settings/members").catch(
-      () => [] as TenantMemberOption[],
-    ),
-  ]);
+  const [dealsResult, dealCustomFieldDefs, members, campaignSources] =
+    await Promise.all([
+      apiServer<PipelineDealsPayload>(`/pipelines/${activePipeline!.id}/deals`),
+      apiServer<unknown>("/custom-fields?entity=DEAL")
+        .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
+        .catch(() => [] as CustomField[]),
+      apiServer<TenantMemberOption[]>("/settings/members").catch(
+        () => [] as TenantMemberOption[],
+      ),
+      apiServer<{ id: string; name: string }[]>("/contacts/campaign-sources").catch(
+        () => [] as { id: string; name: string }[],
+      ),
+    ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
@@ -68,6 +72,7 @@ export default async function PipelinePage({
         stats={dealsResult.stats}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={members}
+        campaignSources={campaignSources}
       />
     </div>
   );

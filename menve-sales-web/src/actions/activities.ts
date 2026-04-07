@@ -1,14 +1,22 @@
 "use server";
 
-import prisma from "@/lib/prisma";
-import { getActiveTenantId, requireSession } from "@/lib/session";
+import { ActivityType } from "@/types/domain";
+import { apiServer } from "@/lib/api-server";
 import { revalidatePath } from "next/cache";
-import { ActivityType } from "@prisma/client";
 import { z } from "zod";
+
+const activityTypeZ = z.enum([
+  ActivityType.CALL,
+  ActivityType.EMAIL,
+  ActivityType.MEETING,
+  ActivityType.TASK,
+  ActivityType.NOTE,
+  ActivityType.WHATSAPP,
+]);
 
 const activitySchema = z.object({
   title: z.string().min(1),
-  type: z.nativeEnum(ActivityType),
+  type: activityTypeZ,
   contactId: z.string().optional(),
   dealId: z.string().optional(),
   dueAt: z.string().optional(),
@@ -16,39 +24,19 @@ const activitySchema = z.object({
 });
 
 export async function createActivity(input: z.infer<typeof activitySchema>) {
-  const tenantId = await getActiveTenantId();
-  const session = await requireSession();
   const data = activitySchema.parse(input);
-  await prisma.activity.create({
-    data: {
-      tenantId,
-      userId: session.user.id,
-      title: data.title,
-      type: data.type,
-      contactId: data.contactId,
-      dealId: data.dealId,
-      description: data.description,
-      dueAt: data.dueAt ? new Date(data.dueAt) : undefined,
-    },
+  await apiServer("/activities", {
+    method: "POST",
+    json: data,
   });
-  revalidatePath("/activities");
+  revalidatePath("/dashboard");
   if (data.contactId) {
     revalidatePath(`/contacts/${data.contactId}`);
   }
 }
 
 export async function completeActivity(id: string) {
-  const tenantId = await getActiveTenantId();
-  const existing = await prisma.activity.findFirst({
-    where: { id, tenantId },
-    select: { contactId: true },
-  });
-  await prisma.activity.updateMany({
-    where: { id, tenantId },
-    data: { completedAt: new Date() },
-  });
-  revalidatePath("/activities");
-  if (existing?.contactId) {
-    revalidatePath(`/contacts/${existing.contactId}`);
-  }
+  await apiServer(`/activities/${id}/complete`, { method: "PATCH" });
+  revalidatePath("/dashboard");
+  revalidatePath("/contacts", "layout");
 }

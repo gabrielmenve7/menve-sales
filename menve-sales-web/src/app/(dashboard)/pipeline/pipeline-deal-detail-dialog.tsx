@@ -53,6 +53,7 @@ import {
   removeTagFromContact,
 } from "@/actions/tags";
 import { CreateCustomFieldTrigger } from "@/components/custom-fields/create-custom-field-dialog";
+import { UserAvatar } from "@/components/user/user-avatar";
 import { CustomFieldsInlineTable } from "@/components/custom-fields/custom-fields-inline-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ import {
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { CUSTOM_FIELD_ENTITY } from "@/lib/custom-field-entity";
+import { stageSolidPillStyle } from "@/lib/stage-pill-style";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { parseMenveActivityMeta } from "@/lib/deal-activity-meta";
 import { parseMoneyBrlFromInput } from "@/lib/custom-field-value-helpers";
@@ -108,7 +110,12 @@ export type DealDetailPayload = {
     stage: Stage;
     pipeline: Pipeline & { stages: Stage[] };
     dealTags: { tag: Tag }[];
-    assignedTo: { id: string; name: string | null; email: string } | null;
+    assignedTo: {
+      id: string;
+      name: string | null;
+      email: string;
+      image?: string | null;
+    } | null;
   };
   activities: DealActivityRow[];
   contactCustomFields?: CustomField[];
@@ -316,6 +323,9 @@ type DealDetailLayoutMode = "central" | "lateral" | "fullscreen";
 const sectionLabelClass =
   "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
 
+/** Duplica a origem da campanha do contato (linha com ícone de globo no card). */
+const REDUNDANT_DEAL_ORIGIN_FIELD_KEYS = new Set(["origem", "origin"]);
+
 const contactInputClass =
   "w-full min-w-0 border-0 bg-transparent p-0 text-sm text-foreground shadow-none outline-none ring-0 placeholder:text-muted-foreground/80 placeholder:italic focus-visible:ring-0 disabled:opacity-50";
 
@@ -490,6 +500,15 @@ export function PipelineDealDetailDialog({
     if (!Array.isArray(raw)) return [];
     return raw as Tag[];
   }, [remote?.allTags]);
+
+  const visibleDealCustomFields = useMemo(
+    () =>
+      dealCustomFieldDefs.filter(
+        (f) =>
+          !REDUNDANT_DEAL_ORIGIN_FIELD_KEYS.has(f.key.trim().toLowerCase()),
+      ),
+    [dealCustomFieldDefs],
+  );
 
   const campaignSources = useMemo((): CampaignSource[] => {
     const raw = remote?.campaignSources;
@@ -723,25 +742,15 @@ export function PipelineDealDetailDialog({
       {d.status === "OPEN" && stageList.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
+            <button
               type="button"
-              variant="secondary"
-              size="sm"
               disabled={headerBusy}
-              className="h-7 gap-1.5 rounded-full border-0 bg-muted/70 px-2.5 text-xs font-medium shadow-none hover:bg-muted dark:bg-muted/50"
+              className="inline-flex h-7 max-w-[min(100%,14rem)] shrink-0 items-center gap-1.5 rounded-md px-2.5 text-left text-xs font-bold uppercase tracking-wide shadow-none outline-none ring-offset-background hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+              style={stageSolidPillStyle(d.stage.color)}
             >
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{
-                  backgroundColor:
-                    d.stage.color && /^#[0-9A-Fa-f]{6}$/.test(d.stage.color)
-                      ? d.stage.color
-                      : "hsl(262 83% 58%)",
-                }}
-              />
-              <span className="max-w-[10rem] truncate">{d.stage.name}</span>
-              <ChevronDown className="size-3.5 shrink-0 opacity-50" />
-            </Button>
+              <span className="min-w-0 flex-1 truncate">{d.stage.name}</span>
+              <ChevronDown className="size-3.5 shrink-0 opacity-80" />
+            </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
             {stageList.map((s) => (
@@ -749,32 +758,30 @@ export function PipelineDealDetailDialog({
                 key={s.id}
                 disabled={s.id === d.stageId || headerBusy}
                 onClick={() => void onStagePick(s.id)}
+                className="cursor-pointer gap-2"
               >
                 <span
-                  className="mr-2 size-2 shrink-0 rounded-full"
-                  style={{
-                    backgroundColor:
-                      s.color && /^#[0-9A-Fa-f]{6}$/.test(s.color)
-                        ? s.color
-                        : "hsl(262 83% 58%)",
-                  }}
-                />
-                {s.name}
+                  className="inline-flex min-w-0 max-w-[11rem] truncate rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                  style={stageSolidPillStyle(s.color)}
+                >
+                  {s.name}
+                </span>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/30 px-2.5 py-0.5 text-xs font-medium dark:border-border/40">
-          <span
-            className="size-2 shrink-0 rounded-full"
-            style={{
-              backgroundColor:
-                d.stage.color && /^#[0-9A-Fa-f]{6}$/.test(d.stage.color)
-                  ? d.stage.color
-                  : "hsl(262 83% 58%)",
-            }}
-          />
+        <span
+          className="inline-flex max-w-[min(100%,14rem)] items-center truncate rounded-md px-2.5 py-1 text-xs font-bold uppercase tracking-wide"
+          style={
+            d.status === "OPEN"
+              ? stageSolidPillStyle(d.stage.color)
+              : {
+                  backgroundColor: "var(--muted)",
+                  color: "var(--foreground)",
+                }
+          }
+        >
           {d.status === "OPEN"
             ? d.stage.name
             : d.status === "WON"
@@ -953,12 +960,14 @@ export function PipelineDealDetailDialog({
                         >
                           {d.assignedTo ? (
                             <>
-                              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-medium text-white">
-                                {(
-                                  assigneePickLabel(d.assignedTo).slice(0, 1) ||
-                                  "?"
-                                ).toUpperCase()}
-                              </span>
+                              <UserAvatar
+                                user={{
+                                  name: d.assignedTo.name,
+                                  email: d.assignedTo.email ?? "",
+                                  image: d.assignedTo.image,
+                                }}
+                                size="md"
+                              />
                               <span className="truncate text-foreground">
                                 {assigneePickLabel(d.assignedTo)}
                               </span>
@@ -991,11 +1000,15 @@ export function PipelineDealDetailDialog({
                             onClick={() => void onAssigneePick(m.id)}
                             className="gap-2"
                           >
-                            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground">
-                              {(
-                                assigneePickLabel(m).slice(0, 1) || "?"
-                              ).toUpperCase()}
-                            </span>
+                            <UserAvatar
+                              user={{
+                                name: m.name,
+                                email: m.email,
+                                image: m.image,
+                              }}
+                              size="sm"
+                              mutedFallback
+                            />
                             <span className="truncate">
                               {assigneePickLabel(m) || m.email}
                             </span>
@@ -1003,12 +1016,22 @@ export function PipelineDealDetailDialog({
                         ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  ) : (
-                    <span className="text-sm">
-                      {assigneePickLabel(d.assignedTo) || (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                  ) : d.assignedTo ? (
+                    <span className="flex items-center gap-2.5 text-sm">
+                      <UserAvatar
+                        user={{
+                          name: d.assignedTo.name,
+                          email: d.assignedTo.email ?? "",
+                          image: d.assignedTo.image,
+                        }}
+                        size="md"
+                      />
+                      <span className="truncate text-foreground">
+                        {assigneePickLabel(d.assignedTo)}
+                      </span>
                     </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
                   )}
                 </div>
               </div>
@@ -1171,11 +1194,11 @@ export function PipelineDealDetailDialog({
                 </span>
               </div>
 
-              {dealCustomFieldDefs.length > 0 ? (
+              {visibleDealCustomFields.length > 0 ? (
                 <CustomFieldsInlineTable
                   embedded
                   variant="minimal"
-                  fields={dealCustomFieldDefs}
+                  fields={visibleDealCustomFields}
                   customData={d.customData}
                   idPrefix={`pd-d-${d.id}`}
                   members={tenantMembers}

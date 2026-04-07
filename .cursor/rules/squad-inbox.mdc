@@ -5,6 +5,11 @@ globs:
   - menve-sales-web/src/app/api/inbox/**
   - menve-sales-web/src/components/inbox/**
   - menve-sales-web/src/lib/inbox/**
+  - menve-sales-web/src/actions/inbox-fetch.ts
+  - menve-sales-web/src/actions/messages.ts
+  - menve-sales-web/src/actions/conversation-notes.ts
+  - menve-sales-web/src/actions/channels.ts
+  - menve-sales-api/src/whatsapp/**
 alwaysApply: false
 ---
 
@@ -20,19 +25,24 @@ alwaysApply: false
 
 ### Pode alterar
 
-- `menve-sales-web/src/app/(dashboard)/inbox/`
-- `menve-sales-web/src/app/api/inbox/`
-- `menve-sales-web/src/components/inbox/` (criar se nao existir)
-- `menve-sales-web/src/lib/inbox/` (criar se nao existir)
-- Schemas Prisma relacionados a conversas, mensagens, tags, notificacoes do inbox
+- `menve-sales-web/src/app/(dashboard)/inbox/` -- pagina e client component do inbox
+- `menve-sales-web/src/app/api/inbox/` -- route handler SSR
+- `menve-sales-web/src/components/inbox/` -- componentes decompostos do inbox (ja existem)
+- `menve-sales-web/src/actions/inbox-fetch.ts` -- server action de fetch de conversas
+- `menve-sales-web/src/actions/messages.ts` -- server action de envio de mensagens
+- `menve-sales-web/src/actions/conversation-notes.ts` -- server action de notas internas
+- `menve-sales-web/src/actions/channels.ts` -- server actions de criacao de canais (Meta, Instagram)
+- `menve-sales-api/src/whatsapp/` -- providers de canal (Evolution, Meta, Instagram)
+- `menve-sales-api/src/whatsapp-connections/` -- controller e service de conexoes
+- Schemas Prisma relacionados a conversas, mensagens, conexoes WhatsApp, tags
 - Testes unitarios, de integracao e E2E do dominio inbox
 
 ### Fora de escopo
 
-- Configuracoes globais de auth, tenant, sessao
-- Logica de pipeline, deals, analytics
-- Providers de WhatsApp/email em `src/lib/whatsapp/` (pertence ao squad-whatsapp; consumir via interface, nao alterar)
+- Configuracoes globais de auth, tenant, sessao (`src/auth.ts`, `src/lib/tenant.ts`)
+- Logica de pipeline, deals, dashboard
 - Componentes UI genericos em `src/components/ui/` (solicitar ao time de design system)
+- Settings de tenant (`src/app/(dashboard)/settings/`) -- pertence ao squad de configuracoes
 - Infraestrutura de deploy, CI/CD
 
 ---
@@ -121,18 +131,26 @@ squad-inbox (15 pessoas)
 
 **Dominio**: lista de conversas, thread view, sincronizacao em tempo real, estado da conversa.
 
+**Layout**: 2 colunas -- sidebar estreita com lista de conversas + area principal de chat. Notas internas como toggle dentro do chat panel (nao coluna separada).
+
 **Caminhos principais**:
-- `menve-sales-web/src/app/(dashboard)/inbox/inbox-client.tsx`
-- `menve-sales-web/src/app/(dashboard)/inbox/page.tsx`
-- `menve-sales-web/src/app/api/inbox/route.ts`
+- `menve-sales-web/src/app/(dashboard)/inbox/page.tsx` -- server component (SSR)
+- `menve-sales-web/src/components/inbox/conversation-list.tsx` -- lista de conversas com busca
+- `menve-sales-web/src/components/inbox/conversation-item.tsx` -- item individual (foto, nome, preview, timestamp relativo, badge de canal)
+- `menve-sales-web/src/components/inbox/chat-panel.tsx` -- area de chat + notas + quick replies
+- `menve-sales-web/src/components/inbox/message-bubble.tsx` -- bolha de mensagem (direcao, timestamp)
+- `menve-sales-web/src/components/inbox/chat-empty-state.tsx` -- estado vazio
+- `menve-sales-web/src/components/inbox/inbox-types.ts` -- tipos (NoteRow, InboxConversation)
+- `menve-sales-web/src/components/inbox/inbox-utils.ts` -- utilitarios (getContactPhotoUrl, initials, relativeTime)
+- `menve-sales-web/src/actions/inbox-fetch.ts` -- server action de fetch
 
 ### Lucas Ferreira -- Senior Frontend Dev
 
 - **Funcao**: lider tecnico de frontend do time core.
 - **Responsabilidades**:
-  - Implementar e otimizar a UI da lista de conversas (virtual scrolling, skeleton loading).
-  - Construir o componente de thread view com renderizacao incremental.
-  - Integrar websocket client para atualizacoes em tempo real.
+  - Manter e otimizar `conversation-list.tsx` e `conversation-item.tsx` (virtual scrolling, skeleton loading).
+  - Evoluir `chat-panel.tsx` e `message-bubble.tsx` (thread view com renderizacao incremental).
+  - Integrar websocket client para atualizacoes em tempo real (substituir polling atual por React Query).
   - Garantir performance de renderizacao (<16ms por frame, LCP <2.5s).
   - Code review de PRs de frontend dos outros times.
 - **Entradas**: specs de UX de Thiago, contrato de API de Mariana.
@@ -162,11 +180,11 @@ squad-inbox (15 pessoas)
 
 - **Funcao**: especialista em estado e sincronizacao client-server.
 - **Responsabilidades**:
-  - Implementar cache local de conversas (React Query / SWR).
+  - Manter e evoluir cache local de conversas via React Query (polling atual em `conversation-list.tsx`).
   - Construir paginacao cursor-based com infinite scroll.
-  - Implementar optimistic updates para acoes do usuario.
+  - Implementar optimistic updates para acoes do usuario (envio de msg, notas).
   - Garantir reconciliacao de estado apos reconexao de websocket.
-  - Tratar edge cases de concorrencia (duas abas, multiplos dispositivos).
+  - Manter server actions (`inbox-fetch.ts`, `messages.ts`, `conversation-notes.ts`).
 - **Entradas**: contrato de API de Mariana, componentes de Lucas.
 - **Saidas**: hooks de estado, logica de cache, testes de integracao client-server.
 - **Criterios de qualidade**:
@@ -178,21 +196,30 @@ squad-inbox (15 pessoas)
 
 ## Time Composicao & Canais (3 pessoas)
 
-**Dominio**: envio de mensagens, templates, anexos, adaptadores multicanal (WhatsApp, email, etc.).
+**Dominio**: envio de mensagens, templates, anexos, adaptadores multicanal.
+
+**Canais suportados**:
+- **Evolution API** (WhatsApp nao-oficial) -- `menve-sales-api/src/whatsapp/evolution-provider.ts`
+- **Meta Cloud API** (WhatsApp oficial) -- `menve-sales-api/src/whatsapp/meta-provider.ts`
+- **Instagram API** (Messenger) -- `menve-sales-api/src/whatsapp/instagram-provider.ts`
+
+**Provider factory**: `menve-sales-api/src/whatsapp/factory.ts` -- `createWhatsAppProvider()` seleciona o provider correto pelo enum `WhatsAppProvider` (`EVOLUTION | META | INSTAGRAM`).
 
 **Caminhos principais**:
-- `menve-sales-web/src/components/inbox/compose/` (criar)
-- `menve-sales-web/src/lib/inbox/channels/` (criar)
-- `menve-sales-web/src/app/api/inbox/` (endpoints de envio)
+- `menve-sales-web/src/components/inbox/chat-panel.tsx` -- area de composicao e envio
+- `menve-sales-web/src/actions/messages.ts` -- server action de envio
+- `menve-sales-web/src/actions/channels.ts` -- server actions de criacao de canais Meta e Instagram
+- `menve-sales-api/src/whatsapp/` -- providers e factory
+- `menve-sales-api/src/whatsapp-connections/` -- CRUD de conexoes
 
 ### Juliana Ribeiro -- Frontend Dev
 
 - **Funcao**: dona da UI de composicao de mensagens.
 - **Responsabilidades**:
-  - Construir editor de mensagens com suporte a rich text e markdown.
+  - Construir e manter o `chat-panel.tsx` (area de composicao, quick replies, toggle de notas internas).
   - Implementar seletor de templates com preview e variaveis.
   - Criar UI de upload e preview de anexos (imagem, documento, audio).
-  - Implementar seletor de canal (WhatsApp, email) com feedback visual.
+  - Implementar feedback visual de canal (badges de Evolution/Meta/Instagram no `conversation-item.tsx`).
   - Construir funcionalidade de rascunho com auto-save local.
 - **Entradas**: specs de UX de Thiago, endpoints de Pedro Henrique.
 - **Saidas**: componentes de composicao reutilizaveis, testes de componente.
@@ -221,15 +248,15 @@ squad-inbox (15 pessoas)
 
 - **Funcao**: especialista em integracao multicanal.
 - **Responsabilidades**:
-  - Implementar adapter pattern para normalizar canais (WhatsApp, email).
-  - Construir channel router que direciona mensagem para o provider correto.
-  - Normalizar payloads inbound/outbound entre canais.
+  - Manter e evoluir o `IWhatsAppProvider` interface (`provider.interface.ts`) e a factory (`factory.ts`).
+  - Implementar novos providers seguindo o adapter pattern (ex: Instagram provider como stub atual, expandir).
+  - Normalizar payloads inbound/outbound entre canais (Evolution, Meta, Instagram).
   - Implementar fallback entre canais quando provider primario falha.
-  - Consumir interfaces do squad-whatsapp sem alterar codigo do provider.
-- **Entradas**: interfaces de provider (`src/lib/whatsapp/provider.interface.ts`), specs de canal.
+  - Manter `whatsapp-connections.controller.ts` e `whatsapp-connections.service.ts` para CRUD de conexoes.
+- **Entradas**: interfaces de provider (`menve-sales-api/src/whatsapp/provider.interface.ts`), specs de canal.
 - **Saidas**: adapters tipados, channel router, testes de integracao por canal.
 - **Criterios de qualidade**:
-  - Novo canal adicionado sem alterar logica de envio existente.
+  - Novo canal adicionado sem alterar logica de envio existente (Open/Closed Principle).
   - Payload normalizado identico independente do canal de origem.
   - Fallback funcional com log de auditoria.
 
@@ -239,10 +266,13 @@ squad-inbox (15 pessoas)
 
 **Dominio**: motor de busca, filtros compostos, tags, status, prioridade, acoes em lote.
 
+**Estado atual**: busca por texto ja implementada em `conversation-list.tsx` (filtro client-side). Filtro por canal (badge) visual presente, mas filtragem server-side e filtros compostos sao proximos passos.
+
 **Caminhos principais**:
-- `menve-sales-web/src/components/inbox/filters/` (criar)
-- `menve-sales-web/src/components/inbox/tags/` (criar)
-- `menve-sales-web/src/lib/inbox/search/` (criar)
+- `menve-sales-web/src/components/inbox/conversation-list.tsx` -- busca existente
+- `menve-sales-web/src/components/inbox/filters/` (criar -- filtros compostos)
+- `menve-sales-web/src/components/inbox/tags/` (criar -- UI de tags inline)
+- `menve-sales-web/src/actions/tags.ts` -- server actions de tags (ja existe)
 
 ### Diego Martins -- Backend Dev
 
@@ -298,9 +328,11 @@ squad-inbox (15 pessoas)
 
 **Dominio**: sistema de notificacoes, contadores de nao-lidos, observabilidade e qualidade de software do inbox.
 
+**Estado atual**: tab "Notificacoes" em configuracoes e placeholder ("Em breve"). Sistema de notificacoes in-app ainda nao implementado.
+
 **Caminhos principais**:
-- `menve-sales-web/src/lib/inbox/notifications/` (criar)
 - `menve-sales-web/src/components/inbox/notifications/` (criar)
+- `menve-sales-web/src/app/(dashboard)/settings/settings-notifications.tsx` -- placeholder atual
 - CI/CD pipelines e dashboards de monitoramento
 
 ### Carolina Mendes -- Backend Dev
@@ -436,13 +468,13 @@ Dev do time
 
 ## Dependencias com outros squads
 
-| Dependencia                        | Squad responsavel | Tipo de interacao                    |
-|------------------------------------|-------------------|--------------------------------------|
-| Providers WhatsApp/email           | squad-whatsapp    | consumir via interface, nao alterar  |
-| Componentes UI genericos           | design-system     | solicitar mudancas, nao alterar      |
-| Auth, sessao, tenant               | squad-auth        | consumir helpers, nao alterar        |
-| Schema global do banco             | squad de dados    | propor migration, review cruzado     |
-| Pipeline, deals                    | squad-pipeline    | nenhuma dependencia direta           |
+| Dependencia                        | Squad responsavel | Tipo de interacao                                  |
+|------------------------------------|-------------------|----------------------------------------------------|
+| Componentes UI genericos           | design-system     | solicitar mudancas, nao alterar `src/components/ui/`|
+| Auth, sessao, tenant               | squad-auth        | consumir `auth()`, `getTenantFromRequest()`, `apiServer()` |
+| Schema global do banco (Prisma)    | squad de dados    | propor migration, review cruzado                   |
+| Pipeline, deals                    | squad-pipeline    | nenhuma dependencia direta                         |
+| Settings / Canais UI               | squad-settings    | UI de criacao de canais em `settings-channels.tsx`  |
 
 ---
 
@@ -454,22 +486,70 @@ menve-sales-web/
     app/
       (dashboard)/
         inbox/
-          page.tsx .................. pagina principal do inbox
-          inbox-client.tsx .......... componente client do inbox
+          page.tsx ........................ server component (SSR, fetch inicial)
+        settings/
+          settings-channels.tsx ........... UI de canais (Evolution, Meta, Instagram)
       api/
         inbox/
-          route.ts .................. API principal do inbox
+          route.ts ........................ API route handler do inbox
     components/
-      inbox/ ....................... (criar) componentes especificos do inbox
-        compose/ ................... editor, templates, anexos
-        filters/ ................... componentes de filtro
-        tags/ ...................... UI de tags
-        notifications/ ............. badges, toasts, lista
-    lib/
-      inbox/ ....................... (criar) logica de negocio do inbox
-        channels/ .................. adapters multicanal
-        search/ .................... motor de busca
-        notifications/ ............. logica de notificacoes
+      inbox/
+        conversation-list.tsx ............. lista de conversas com busca
+        conversation-item.tsx ............. item individual (foto, preview, badge)
+        chat-panel.tsx .................... area de chat, composicao, notas, quick replies
+        message-bubble.tsx ................ bolha de mensagem (direcao, timestamp)
+        chat-empty-state.tsx .............. empty state (nenhuma conversa selecionada)
+        inbox-types.ts .................... tipos (NoteRow, InboxConversation)
+        inbox-utils.ts .................... utilitarios (initials, relativeTime, photoUrl)
+    actions/
+      inbox-fetch.ts ...................... server action: fetch conversas
+      messages.ts ......................... server action: envio de mensagens
+      conversation-notes.ts ............... server action: notas internas
+      channels.ts ......................... server action: criar canal Meta/Instagram
+    types/
+      domain.ts ........................... WhatsAppProvider = "EVOLUTION" | "META" | "INSTAGRAM"
+
+menve-sales-api/
+  src/
+    whatsapp/
+      provider.interface.ts ............... IWhatsAppProvider (contrato)
+      factory.ts .......................... createWhatsAppProvider() + providerLabel()
+      evolution-provider.ts ............... adapter Evolution API (nao-oficial)
+      evolution-admin.ts .................. admin ops Evolution
+      meta-provider.ts .................... adapter Meta Cloud API (oficial)
+      instagram-provider.ts ............... adapter Instagram Messenger API (stub)
+      message-processing.service.ts ....... processamento de mensagens inbound
+    whatsapp-connections/
+      whatsapp-connections.controller.ts .. endpoints: pair, create-meta, create-instagram, delete
+      whatsapp-connections.service.ts ...... logica de negocio de conexoes
+  prisma/
+    schema.prisma ......................... enum WhatsAppProvider { EVOLUTION META INSTAGRAM }
+```
+
+## Arquitetura do Inbox (resumo)
+
+```
+[Browser]
+  |
+  |-- page.tsx (SSR) --> apiServer("/inbox") --> NestJS API (porta 4000)
+  |                                              |
+  |-- conversation-list.tsx (React Query polling) |-- InboxController
+  |     |-- conversation-item.tsx                 |-- AppAuthGuard (x-api-key + x-tenant-id)
+  |                                              |
+  |-- chat-panel.tsx                             |-- ConversationsController
+  |     |-- message-bubble.tsx                   |     |-- POST /:id/messages (envio)
+  |     |-- notas internas (toggle)              |     |-- POST /:id/notes
+  |     |-- quick replies                        |
+  |                                              |-- WhatsappConnectionsController
+  |-- server actions (Next.js)                   |     |-- POST /pair (Evolution QR)
+        |-- inbox-fetch.ts                       |     |-- POST /create-meta
+        |-- messages.ts                          |     |-- POST /create-instagram
+        |-- conversation-notes.ts                |     |-- DELETE /:id
+        |-- channels.ts                          |
+                                                 |-- factory.ts --> IWhatsAppProvider
+                                                       |-- EvolutionProvider
+                                                       |-- MetaProvider
+                                                       |-- InstagramProvider (stub)
 ```
 
 ---

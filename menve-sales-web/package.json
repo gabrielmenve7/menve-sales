@@ -1,0 +1,10 @@
+{
+  "name": "menve-sales-web",
+  "private": true,
+  "scripts": {
+    "start:dev": "node --max-http-header-size=262144 ../node_modules/next/dist/bin/next dev --turbopack . -p 3000",
+    "start:dev:3001": "node --max-http-header-size=262144 ../node_modules/next/dist/bin/next dev --turbopack . -p 3001",
+    "build": "node ../node_modules/next/dist/bin/next build .",
+    "start": "node --max-http-header-size=262144 ../node_modules/next/dist/bin/next start . -p 3000"
+  }
+}

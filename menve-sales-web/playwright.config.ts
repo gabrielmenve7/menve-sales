@@ -10,9 +10,9 @@ export default defineConfig({
     baseURL,
   },
   webServer: {
-    command: "npm run start",
+    command: "npm run start:e2e",
     url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 180_000,
   },
 });

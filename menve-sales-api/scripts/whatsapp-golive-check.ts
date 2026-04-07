@@ -1,27 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import "./load-api-env";
 
 type CheckResult = {
   name: string;
   ok: boolean;
   detail: string;
 };
-
-function loadDotEnvIfAvailable() {
-  const envPath = resolve(process.cwd(), ".env");
-  if (!existsSync(envPath)) return;
-  const content = readFileSync(envPath, "utf8");
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const raw = trimmed.slice(eq + 1).trim();
-    const value = raw.replace(/^['"]|['"]$/g, "");
-    if (!process.env[key]) process.env[key] = value;
-  }
-}
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -35,23 +18,21 @@ function optionalEnv(name: string): string | null {
 }
 
 async function checkHealth(appUrl: string): Promise<CheckResult> {
-  try {
-    const res = await fetch(`${appUrl.replace(/\/$/, "")}/api/health`);
-    if (!res.ok) {
-      return {
-        name: "health",
-        ok: false,
-        detail: `HTTP ${res.status}`,
-      };
+  const u = appUrl.replace(/\/$/, "");
+  const candidates = [`${u}/health`, `${u}/api/health`];
+  let lastErr = "unreachable";
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        return { name: "health", ok: true, detail: `ok (${url})` };
+      }
+      lastErr = `HTTP ${res.status} (${url})`;
+    } catch (error) {
+      lastErr = error instanceof Error ? error.message : String(error);
     }
-    return { name: "health", ok: true, detail: "ok" };
-  } catch (error) {
-    return {
-      name: "health",
-      ok: false,
-      detail: error instanceof Error ? error.message : String(error),
-    };
   }
+  return { name: "health", ok: false, detail: lastErr };
 }
 
 async function checkWebhookAuth(args: {
@@ -59,7 +40,7 @@ async function checkWebhookAuth(args: {
   connectionId: string;
   webhookSecret: string;
 }): Promise<CheckResult> {
-  const webhookUrl = `${args.appUrl.replace(/\/$/, "")}/api/webhooks/whatsapp/evolution/${args.connectionId}`;
+  const webhookUrl = `${args.appUrl.replace(/\/$/, "")}/webhooks/whatsapp/evolution/${args.connectionId}`;
   const payload = {
     data: {
       messages: [
@@ -121,9 +102,13 @@ async function checkWebhookAuth(args: {
 }
 
 async function main() {
-  loadDotEnvIfAvailable();
 
-  const appUrl = requiredEnv("NEXT_PUBLIC_APP_URL");
+  const appUrl = (
+    optionalEnv("PUBLIC_APP_URL") ||
+    optionalEnv("INTERNAL_API_URL") ||
+    optionalEnv("NEXT_PUBLIC_APP_URL") ||
+    "http://127.0.0.1:4000"
+  ).replace(/\/$/, "");
   requiredEnv("EVOLUTION_BASE_URL");
   requiredEnv("EVOLUTION_API_KEY");
 

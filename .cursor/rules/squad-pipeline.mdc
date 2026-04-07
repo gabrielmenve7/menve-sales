@@ -1,0 +1,248 @@
+---
+description: Squad PIPELINE - time de engenharia dedicado ao Kanban de vendas do Menve Sales
+globs:
+  - menve-sales-web/src/app/(dashboard)/pipeline/**
+  - menve-sales-web/src/actions/pipelines.ts
+  - menve-sales-web/src/actions/pipeline-stages.ts
+  - menve-sales-web/src/actions/deals.ts
+  - menve-sales-web/src/app/(dashboard)/settings/settings-pipeline-stages.tsx
+  - menve-sales-api/src/pipelines/**
+  - menve-sales-api/src/deals/**
+alwaysApply: false
+---
+
+# Squad PIPELINE
+
+## Identidade
+
+- **Squad**: squad-pipeline
+- **Dominio**: Pipeline (funis de venda, estagios, deals, Kanban board)
+- **Missao**: construir, evoluir e manter toda a experiencia de pipeline do Menve Sales -- visualizacao Kanban com drag-and-drop, gestao de funis e estagios, criacao e movimentacao de deals, metricas de funil -- garantindo fluidez de interacao, consistencia de dados e escalabilidade.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/pipeline/` -- pagina, board, view e dialogs
+- `menve-sales-web/src/actions/pipelines.ts` -- server actions de funis
+- `menve-sales-web/src/actions/pipeline-stages.ts` -- server actions de estagios
+- `menve-sales-web/src/actions/deals.ts` -- server actions de deals
+- `menve-sales-web/src/app/(dashboard)/settings/settings-pipeline-stages.tsx` -- config de funis/estagios
+- `menve-sales-api/src/pipelines/` -- controller, service e module de pipelines e stages
+- `menve-sales-api/src/deals/` -- controller, service e module de deals
+- Schemas Prisma: `Pipeline`, `Stage`, `Deal`, `DealTag`, `DealStatus`
+
+### Fora de escopo
+
+- Contatos (apenas consome `GET /contacts/for-pipeline` para picker de deals)
+- Dashboard (apenas fornece dados via agregacao)
+- Auth, sessao, tenant
+- Componentes UI genericos em `src/components/ui/`
+
+---
+
+## Organograma
+
+```
+squad-pipeline (8 pessoas)
+|
+|-- LIDERANCA (2)
+|   |-- Ricardo Fonseca ............ Squad Lead / Tech Lead
+|   |-- Natalia Barros ............. Product Designer
+|
+|-- TIME KANBAN (3)
+|   |-- Eduardo Mendes ............. Senior Frontend Dev
+|   |-- Aline Rocha ................ Backend Dev
+|   |-- Marcos Pereira ............. Fullstack Dev
+|
+|-- TIME CONFIGURACAO & QUALIDADE (3)
+|   |-- Daniela Cunha .............. Frontend Dev
+|   |-- Roberto Leal ............... Backend Dev
+|   |-- Tatiane Moraes ............. QA Engineer
+```
+
+---
+
+## Lideranca (2 pessoas)
+
+### Ricardo Fonseca -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura tecnica do pipeline.
+- **Responsabilidades**:
+  - Definir arquitetura do Kanban (drag-and-drop, estado otimistico, sincronizacao).
+  - Aprovar RFCs e code review final.
+  - Garantir performance do board com muitos deals (>500 por funil).
+  - Interface com squad-contatos para integracao de picker.
+- **Entradas**: requisitos priorizados, specs de Natalia.
+- **Saidas**: ADRs, diretrizes de implementacao.
+
+### Natalia Barros -- Product Designer
+
+- **Funcao**: dona da experiencia visual do pipeline.
+- **Responsabilidades**:
+  - Projetar layout do Kanban board e cards de deal.
+  - Especificar interacoes de drag-and-drop e feedback visual.
+  - Definir estados (vazio, carregando, erro, sucesso) para cada acao.
+  - Projetar dialogs de criacao de deal, won/lost.
+
+---
+
+## Time Kanban (3 pessoas)
+
+### Eduardo Mendes -- Senior Frontend Dev
+
+- **Funcao**: lider de frontend do board Kanban.
+- **Responsabilidades**:
+  - Manter `pipeline-board.tsx` (Kanban com `@dnd-kit` drag-and-drop).
+  - Evoluir `pipeline-view.tsx` (seletor de funil, busca, stats strip).
+  - Otimizar renderizacao com muitos deals por coluna.
+  - Implementar `pipeline-new-deal.tsx` (dialog de criacao).
+- **Criterios de qualidade**:
+  - Drag-and-drop fluido sem lag visual.
+  - Board renderiza <100ms com 500 deals.
+  - Feedback visual imediato (optimistic update).
+
+### Aline Rocha -- Backend Dev
+
+- **Funcao**: dona dos endpoints de pipeline e deals.
+- **Responsabilidades**:
+  - Manter `PipelinesService` (CRUD funis, estagios, reorder, default, getPipelineDeals).
+  - Manter `DealsService` (create, moveStage, markWon, markLost com validacao Zod).
+  - Otimizar query `getPipelineDeals` (deals OPEN com contact + stage + stats).
+  - Garantir integridade: stage pertence ao pipeline do deal ao mover.
+- **Criterios de qualidade**:
+  - Latencia p95 de `GET /pipelines/:id/deals` <200ms.
+  - Validacao rigorosa de moves cross-pipeline bloqueados.
+
+### Marcos Pereira -- Fullstack Dev
+
+- **Funcao**: integracao ponta a ponta e server actions.
+- **Responsabilidades**:
+  - Manter server actions (`pipelines.ts`, `pipeline-stages.ts`, `deals.ts`).
+  - Garantir revalidacao correta: `CRM_PATHS = ["/pipeline", "/dashboard", "/settings"]`.
+  - Implementar optimistic updates no board.
+  - Integrar picker de contatos via `GET /contacts/for-pipeline`.
+- **Criterios de qualidade**:
+  - Revalidacao funciona em todas as rotas afetadas.
+  - Zero estado inconsistente apos drag-and-drop + reconexao.
+
+---
+
+## Time Configuracao & Qualidade (3 pessoas)
+
+### Daniela Cunha -- Frontend Dev
+
+- **Funcao**: dona da UI de configuracao de funis e estagios.
+- **Responsabilidades**:
+  - Manter `settings-pipeline-stages.tsx` (CRUD de funis e estagios nas configuracoes).
+  - Implementar reorder de estagios com drag-and-drop.
+  - Integrar cores de estagio no Kanban board.
+- **Criterios de qualidade**:
+  - Configuracoes refletem imediatamente no board apos save.
+  - Reorder persiste corretamente.
+
+### Roberto Leal -- Backend Dev
+
+- **Funcao**: regras de negocio de funis e estagios.
+- **Responsabilidades**:
+  - Manter `PipelinesController` e `StagesController` no NestJS.
+  - Implementar regras de negocio (funil default, limites de estagios, reorder seguro).
+  - Criar migrations Prisma para evolucoes do schema.
+- **Criterios de qualidade**:
+  - Nao e possivel deletar estagio com deals ativos.
+  - Reorder atomico (sem estado parcial).
+
+### Tatiane Moraes -- QA Engineer
+
+- **Funcao**: qualidade do pipeline.
+- **Responsabilidades**:
+  - Testes E2E de drag-and-drop, criacao de deal, won/lost.
+  - Testes de regressao apos mudancas em funis/estagios.
+  - Testes de carga com muitos deals.
+- **Criterios de qualidade**:
+  - Board funciona corretamente em Chrome, Firefox, Safari.
+  - Zero deals perdidos apos drag-and-drop.
+
+---
+
+## Protocolo operacional
+
+### Definition of Done
+
+- [ ] Code review aprovado por Ricardo.
+- [ ] Testes verdes no CI (unit + E2E de drag-and-drop).
+- [ ] Validacao de UX por Natalia.
+- [ ] Board funcional com 500+ deals sem degradacao.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                            |
+|-----------------------------|-------------------|----------------------------------------------|
+| Picker de contatos          | squad-contatos    | consumir `GET /contacts/for-pipeline`        |
+| Dashboard stats             | squad-dashboard   | fornecer dados via `Deal` Prisma             |
+| Auth, sessao, tenant        | squad-auth        | consumir `auth()`, `apiServer()`             |
+| Config de funis na settings | squad-pipeline    | proprio squad (settings-pipeline-stages.tsx)  |
+| Tags de deal                | squad-tags        | consumir `DealTag` Prisma                    |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/(dashboard)/
+      pipeline/
+        page.tsx ........................ server component (SSR, fetch pipelines + deals)
+        pipeline-view.tsx ............... seletor de funil, busca, stats strip
+        pipeline-board.tsx .............. Kanban board (@dnd-kit drag-and-drop)
+        pipeline-new-deal.tsx ........... dialog de criacao de deal
+      settings/
+        settings-pipeline-stages.tsx .... config de funis e estagios
+    actions/
+      pipelines.ts ...................... server actions: CRUD funis
+      pipeline-stages.ts ................ server actions: CRUD estagios
+      deals.ts .......................... server actions: create, move, won, lost
+
+menve-sales-api/
+  src/
+    pipelines/
+      pipelines.controller.ts ........... PipelinesController + StagesController
+      pipelines.service.ts .............. logica de negocio de funis/estagios/deals
+      pipelines.module.ts ............... modulo NestJS
+    deals/
+      deals.controller.ts ............... POST /deals, PATCH move/won/lost
+      deals.service.ts .................. create, moveStage, markWon, markLost (Zod)
+      deals.module.ts ................... modulo NestJS
+  prisma/
+    schema.prisma ....................... Pipeline, Stage, Deal, DealTag, DealStatus
+```
+
+## Arquitetura do Pipeline (resumo)
+
+```
+[Browser]
+  |
+  |-- pipeline/page.tsx (SSR)
+  |     |-- apiServer("/pipelines") ---------> PipelinesController.list
+  |     |-- apiServer("/pipelines/:id/deals")-> PipelinesService.getPipelineDeals
+  |     |-- apiServer("/contacts/for-pipeline")-> ContactsService.listForPipeline
+  |
+  |-- pipeline-view.tsx (client)
+  |     |-- pipeline-board.tsx (@dnd-kit)
+  |     |     |-- moveDealStage -> PATCH /deals/:id/stage
+  |     |     |-- markDealWon   -> PATCH /deals/:id/won
+  |     |     |-- markDealLost  -> PATCH /deals/:id/lost
+  |     |
+  |     |-- pipeline-new-deal.tsx
+  |           |-- createDeal -> POST /deals
+  |
+  |-- server actions (Next.js)
+        |-- pipelines.ts (CRUD funis)
+        |-- pipeline-stages.ts (CRUD estagios)
+        |-- deals.ts (create, move, won, lost)
+```
+
+---
