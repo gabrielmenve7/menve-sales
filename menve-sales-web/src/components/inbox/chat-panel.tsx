@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, FileText, Loader2, Mic, Paperclip, Send } from "lucide-react";
+import { FileText, Loader2, Mic, Paperclip, Send } from "lucide-react";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { addConversationNote } from "@/actions/conversation-notes";
 import {
@@ -12,9 +12,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -332,50 +329,43 @@ export function ChatPanel({
           {/* Quick replies + composer: fixos na base; só as mensagens rolam acima */}
           <div className="shrink-0 border-t border-border/20 bg-card dark:border-border/30">
             {showQuickReplies ? (
-              <div className="flex items-center gap-2 px-3 py-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-7 border-0 bg-muted/70 text-xs shadow-none hover:bg-muted dark:bg-muted/50"
-                    >
-                      Respostas rápidas
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    className="max-h-[min(70vh,22rem)] w-[min(100vw-2rem,16rem)] overflow-y-auto"
-                  >
-                    {quickReplyCategories.map((cat) =>
-                      cat.replies.length === 0 ? null : (
-                        <DropdownMenuSub key={cat.id}>
-                          <DropdownMenuSubTrigger className="gap-2 text-sm">
-                            <span className="truncate">{cat.name}</span>
-                            <ChevronRight className="ml-auto size-4 shrink-0 opacity-60" />
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent className="max-h-[min(60vh,18rem)] overflow-y-auto">
-                            {cat.replies.map((q) => (
-                              <DropdownMenuItem
-                                key={q.id}
-                                className="cursor-pointer flex-col items-start gap-0.5 py-2"
-                                onSelect={() =>
-                                  setText((t) => (t ? `${t}\n${q.body}` : q.body))
-                                }
-                              >
-                                <span className="font-medium">{q.title}</span>
-                                <span className="line-clamp-2 text-xs font-normal text-muted-foreground">
-                                  {q.body}
-                                </span>
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                      ),
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+              <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+                {quickReplyCategories.map((cat) =>
+                  cat.replies.length === 0 ? null : (
+                    <DropdownMenu key={cat.id}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-7 max-w-[11rem] shrink-0 border-0 bg-muted/70 text-xs shadow-none hover:bg-muted dark:bg-muted/50"
+                          title={cat.name}
+                        >
+                          <span className="truncate">{cat.name}</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="start"
+                        className="max-h-[min(60vh,18rem)] w-[min(100vw-2rem,18rem)] overflow-y-auto"
+                      >
+                        {cat.replies.map((q) => (
+                          <DropdownMenuItem
+                            key={q.id}
+                            className="cursor-pointer flex-col items-start gap-0.5 py-2"
+                            onSelect={() =>
+                              setText((t) => (t ? `${t}\n${q.body}` : q.body))
+                            }
+                          >
+                            <span className="font-medium">{q.title}</span>
+                            <span className="line-clamp-2 text-xs font-normal text-muted-foreground">
+                              {q.body}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ),
+                )}
               </div>
             ) : null}
             {mediaError ? (
