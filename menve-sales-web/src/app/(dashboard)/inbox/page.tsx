@@ -13,12 +13,14 @@ export default async function InboxPage({
   const { contact: contactQuery } = await searchParams;
   const initialContactId = contactQuery?.trim() || null;
 
+  let initialConversationId: string | null = null;
   if (initialContactId) {
     try {
-      await apiServer<{ conversationId: string; created: boolean }>(
+      const ensured = await apiServer<{ conversationId: string; created: boolean }>(
         "/inbox/ensure-conversation",
         { method: "POST", json: { contactId: initialContactId } },
       );
+      initialConversationId = ensured.conversationId;
     } catch {
       /* Contato sem telefone, sem canal WhatsApp ativo, ou contato inválido — segue com a lista atual */
     }
@@ -51,6 +53,7 @@ export default async function InboxPage({
         quickReplies={quickReplies as never}
         initialConversations={conversations as never}
         initialContactId={initialContactId}
+        initialConversationId={initialConversationId}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={tenantMembers}
         canManageConnections={canManageConnections}
