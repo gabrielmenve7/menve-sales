@@ -766,6 +766,7 @@ function PipelineViewBody({
             contacts={contacts}
             dealCustomFieldDefs={dealCustomFieldDefs}
             tenantMembers={tenantMembers}
+            tenantTags={tenantTags}
           />
         )}
       </div>

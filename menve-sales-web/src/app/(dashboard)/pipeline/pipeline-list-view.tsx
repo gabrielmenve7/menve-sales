@@ -29,41 +29,12 @@ import { stageSolidPillStyle } from "@/lib/stage-pill-style";
 import { cn } from "@/lib/utils";
 import { PipelineDealDetailDialog } from "./pipeline-deal-detail-dialog";
 import { PipelineNewDeal } from "./pipeline-new-deal";
+import { PipelineListBulkToolbar } from "./pipeline-list-bulk-toolbar";
 import { stageAccentHex } from "./pipeline-stage-visual";
 import type { DealRow } from "./pipeline-types";
 
 const ROW_TRANSITION_MS = 100;
 const STAGE_CHEVRON_MS = 100;
-
-function startOfLocalDay(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-function formatListDate(iso: Date | string | null | undefined): string {
-  if (iso == null) return "—";
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  if (Number.isNaN(d.getTime())) return "—";
-  const now = new Date();
-  const t0 = startOfLocalDay(now);
-  const t1 = startOfLocalDay(d);
-  const diffDays = Math.round((t0 - t1) / 86_400_000);
-  if (diffDays === 0) return "Hoje";
-  if (diffDays === 1) return "Ontem";
-  if (diffDays === 2) return "Anteontem";
-  return d.toLocaleDateString("pt-BR", {
-    day: "numeric",
-    month: "numeric",
-    year: "2-digit",
-  });
-}
-
-function isOverdue(expectedClose: Date | string | null | undefined): boolean {
-  if (!expectedClose) return false;
-  const d =
-    typeof expectedClose === "string" ? new Date(expectedClose) : expectedClose;
-  if (Number.isNaN(d.getTime())) return false;
-  return startOfLocalDay(d) < startOfLocalDay(new Date());
-}
 
 function LeadAssigneeAvatar({
   assignedTo,
@@ -179,7 +150,6 @@ function DealListRow({
     id: deal.id,
   });
 
-  const dueOver = isOverdue(deal.expectedClose);
   const phone = deal.contact.phone?.trim();
 
   return (
@@ -269,25 +239,11 @@ function DealListRow({
             {stage.name}
           </span>
         </td>
-        <td className="cursor-pointer px-3 py-2" onClick={onOpenDetail}>
+        <td
+          className="cursor-pointer px-3 py-2 pr-2 sm:pr-4"
+          onClick={onOpenDetail}
+        >
           <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
-        </td>
-        <td
-          className="cursor-pointer px-3 py-2.5 tabular-nums text-muted-foreground"
-          onClick={onOpenDetail}
-        >
-          {formatListDate(deal.createdAt)}
-        </td>
-        <td
-          className={cn(
-            "cursor-pointer px-3 py-2.5 pr-2 tabular-nums sm:pr-4",
-            dueOver
-              ? "font-semibold text-rose-600 dark:text-rose-400"
-              : "text-muted-foreground",
-          )}
-          onClick={onOpenDetail}
-        >
-          {formatListDate(deal.expectedClose)}
         </td>
       </tr>
       <tr aria-hidden={!expanded}>
@@ -337,7 +293,7 @@ function DealListRow({
   );
 }
 
-const COL_COUNT = 8;
+const COL_COUNT = 6;
 
 function ListStageSection({
   stage,
@@ -443,7 +399,7 @@ function ListStageSection({
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[44rem] border-collapse text-[13px]">
+                <table className="w-full min-w-[34rem] border-collapse text-[13px]">
                   <thead>
                     <tr className="border-b border-border/15 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                       <th className="w-10 py-2 pl-2 pr-1 sm:pl-4">
@@ -468,14 +424,8 @@ function ListStageSection({
                       <th className="px-3 py-2 font-semibold" scope="col">
                         Status
                       </th>
-                      <th className="px-3 py-2 font-semibold" scope="col">
+                      <th className="px-3 py-2 pr-2 font-semibold sm:pr-4" scope="col">
                         Responsável
-                      </th>
-                      <th className="px-3 py-2 font-semibold" scope="col">
-                        Data inicial
-                      </th>
-                      <th className="py-2 pl-3 pr-2 font-semibold sm:pr-4" scope="col">
-                        Vencimento
                       </th>
                     </tr>
                   </thead>
@@ -533,12 +483,14 @@ export function PipelineListView({
   contacts,
   dealCustomFieldDefs,
   tenantMembers = [],
+  tenantTags = [],
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   deals: DealRow[];
   contacts: { id: string; name: string; phone: string | null }[];
   dealCustomFieldDefs: CustomField[];
   tenantMembers?: TenantMemberOption[];
+  tenantTags?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [detailDeal, setDetailDeal] = useState<DealRow | null>(null);
@@ -570,6 +522,11 @@ export function PipelineListView({
       return sid ? { ...d, stageId: sid } : d;
     });
   }, [deals, optimisticStageByDealId]);
+
+  const selectedDeals = useMemo(
+    () => displayedDeals.filter((d) => selectedIds.has(d.id)),
+    [displayedDeals, selectedIds],
+  );
 
   const byStage = useMemo(() => {
     const map = new Map<string, DealRow[]>();
@@ -660,24 +617,12 @@ export function PipelineListView({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-1">
-      {selectedIds.size > 0 ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-3 px-4 py-2 text-[13px] sm:px-8">
-          <span className="text-muted-foreground">
-            {selectedIds.size === 1
-              ? "1 lead selecionado"
-              : `${selectedIds.size} leads selecionados`}
-          </span>
-          <button
-            type="button"
-            className="font-medium text-foreground underline-offset-4 hover:underline"
-            onClick={() => setSelectedIds(new Set())}
-          >
-            Limpar seleção
-          </button>
-        </div>
-      ) : null}
-
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-1",
+        selectedIds.size > 0 && "pb-24",
+      )}
+    >
       <DndContext
         sensors={sensors}
         onDragStart={handleDragStart}
@@ -707,6 +652,18 @@ export function PipelineListView({
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {selectedIds.size > 0 ? (
+        <PipelineListBulkToolbar
+          selectedDeals={selectedDeals}
+          pipeline={pipeline}
+          sortedStages={sortedStages}
+          tenantMembers={tenantMembers}
+          tenantTags={tenantTags}
+          dealCustomFieldDefs={dealCustomFieldDefs}
+          onClearSelection={() => setSelectedIds(new Set())}
+        />
+      ) : null}
 
       <PipelineDealDetailDialog
         deal={detailDeal}
