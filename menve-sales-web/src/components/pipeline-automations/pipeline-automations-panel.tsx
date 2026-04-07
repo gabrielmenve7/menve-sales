@@ -367,6 +367,43 @@ function stageName(stages: Stage[], id: string) {
   return stages.find((s) => s.id === id)?.name ?? id.slice(0, 8);
 }
 
+function previewTriggerLabel(steps: AutomationTriggerStepRow[]): string {
+  if (steps.length === 1) {
+    return PIPELINE_AUTOMATION_TRIGGER_LABELS[steps[0].triggerType];
+  }
+  if (steps.length > 1) {
+    return `${steps.length} gatilhos · uma regra para cada`;
+  }
+  return "…";
+}
+
+function previewActionLabel(steps: AutomationActionStepRow[]): string {
+  if (steps.length === 1) {
+    return pipelineAutomationActionKindLabel(steps[0].actionKindType);
+  }
+  if (steps.length > 1) {
+    return steps
+      .map((s) => pipelineAutomationActionKindLabel(s.actionKindType))
+      .join(" · ");
+  }
+  return "…";
+}
+
+function previewMoveStageChain(
+  actionSteps: AutomationActionStepRow[],
+  stages: Stage[],
+): string | null {
+  const names = actionSteps
+    .filter(
+      (s) =>
+        s.actionKindType === "DEAL_STAGE_TRANSITION" &&
+        s.actionStageToId.trim(),
+    )
+    .map((s) => stageName(stages, s.actionStageToId.trim()));
+  if (names.length === 0) return null;
+  return names.join(" → ");
+}
+
 function parseOptionalAutomationValue(raw: string): unknown | undefined {
   const s = raw.trim();
   if (!s) return undefined;
@@ -1390,6 +1427,23 @@ export function PipelineAutomationsPanel({
     ? "text-[11px] font-medium text-zinc-500"
     : fieldLabelClass;
 
+  const previewTriggerText = useMemo(
+    () => previewTriggerLabel(triggerSteps),
+    [triggerSteps],
+  );
+  const previewActionText = useMemo(
+    () => previewActionLabel(actionSteps),
+    [actionSteps],
+  );
+  const previewMoveChain = useMemo(
+    () => previewMoveStageChain(actionSteps, stages),
+    [actionSteps, stages],
+  );
+
+  const previewPillClass = isDialog
+    ? "max-w-full truncate rounded-md border border-zinc-600/90 bg-zinc-950/55 px-2.5 py-1 text-left text-xs font-medium text-zinc-100"
+    : "max-w-full truncate rounded-md border border-border/80 bg-background px-2.5 py-1 text-left text-xs font-medium text-foreground shadow-sm";
+
   return (
     <div
       className={cn(
@@ -2114,6 +2168,82 @@ export function PipelineAutomationsPanel({
                 </button>
               </div>
             </div>
+          </div>
+
+          <div
+            aria-live="polite"
+            className={cn(
+              "mt-6 rounded-lg border px-4 py-3",
+              isDialog
+                ? "border-zinc-700/80 bg-zinc-950/40"
+                : "border-border/60 bg-muted/15",
+            )}
+          >
+            <p
+              className={cn(
+                "flex flex-wrap items-center gap-x-1.5 gap-y-2 text-[13px] leading-snug",
+                isDialog ? "text-zinc-300" : "text-foreground",
+              )}
+            >
+              <span
+                className={isDialog ? "text-zinc-500" : "text-muted-foreground"}
+              >
+                Quando
+              </span>
+              <span className={previewPillClass} title={previewTriggerText}>
+                {previewTriggerText}
+              </span>
+              <span
+                className={isDialog ? "text-zinc-500" : "text-muted-foreground"}
+              >
+                então
+              </span>
+              <span className={previewPillClass} title={previewActionText}>
+                {previewActionText}
+              </span>
+            </p>
+            {previewMoveChain ? (
+              <p
+                className={cn(
+                  "mt-2 text-[11px] leading-snug",
+                  isDialog ? "text-zinc-500" : "text-muted-foreground",
+                )}
+              >
+                <span
+                  className={cn(
+                    "font-medium",
+                    isDialog ? "text-zinc-400" : "text-foreground/80",
+                  )}
+                >
+                  Movimentação:
+                </span>{" "}
+                {previewMoveChain}
+              </p>
+            ) : null}
+            <p
+              className={cn(
+                "mt-2 text-[11px]",
+                isDialog ? "text-zinc-600" : "text-muted-foreground/90",
+              )}
+            >
+              {name.trim() ? (
+                <>
+                  <span
+                    className={cn(
+                      "font-medium",
+                      isDialog ? "text-zinc-500" : "text-muted-foreground",
+                    )}
+                  >
+                    Nome:
+                  </span>{" "}
+                  {name.trim()}
+                </>
+              ) : (
+                <span className="italic opacity-90">
+                  Dê um nome à automação no campo acima.
+                </span>
+              )}
+            </p>
           </div>
 
           {formError ? (
