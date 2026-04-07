@@ -317,14 +317,60 @@ function buildTriggerFilterFromStep(
   return Object.keys(out).length ? out : null;
 }
 
-function buildMoveActionsFromSteps(
+function buildAutomationActionsFromSteps(
   steps: AutomationActionStepRow[],
+  dealCustomFieldDefs: CustomField[],
 ): PipelineAutomationAction[] {
   const out: PipelineAutomationAction[] = [];
   for (const s of steps) {
-    if (s.actionKindType !== "DEAL_STAGE_TRANSITION") continue;
-    const sid = s.actionStageToId.trim();
-    if (sid) out.push({ type: "MOVE_TO_STAGE", stageId: sid });
+    if (s.actionKindType === "DEAL_STAGE_TRANSITION") {
+      const sid = s.actionStageToId.trim();
+      if (sid) out.push({ type: "MOVE_TO_STAGE", stageId: sid });
+      continue;
+    }
+    if (s.actionKindType === "DEAL_CUSTOM_FIELD_CHANGED") {
+      const key = s.actionCustomFieldKey.trim();
+      if (!key) continue;
+      const def = dealCustomFieldDefs.find((d) => d.key === key);
+      if (def?.fieldType === "DATE" && s.actionDatePreset) {
+        const preset = s.actionDatePreset;
+        const base: PipelineAutomationAction = {
+          type: "SET_DEAL_CUSTOM_FIELD",
+          fieldKey: key,
+          datePreset: preset,
+        };
+        if (preset === "DAYS_AFTER_TRIGGER") {
+          const n = parseInt(s.actionDateDaysAfter.trim(), 10);
+          if (Number.isFinite(n) && n >= 0) {
+            out.push({ ...base, daysAfter: n });
+          }
+          continue;
+        }
+        if (preset === "PICK_DATE" && s.actionDatePick.trim()) {
+          out.push({ ...base, pickDate: s.actionDatePick.trim() });
+          continue;
+        }
+        if (
+          preset === "ON_TRIGGER_DATE" ||
+          preset === "ON_TRIGGER_DATETIME" ||
+          preset === "TRIGGER_FIELDS" ||
+          preset === "REMOVE_DATE"
+        ) {
+          out.push(base);
+        }
+        continue;
+      }
+      if (def && def.fieldType !== "DATE") {
+        const v = parseOptionalAutomationValue(s.actionToCustomStr);
+        if (v !== undefined) {
+          out.push({
+            type: "SET_DEAL_CUSTOM_FIELD",
+            fieldKey: key,
+            staticValue: v,
+          });
+        }
+      }
+    }
   }
   return out;
 }
@@ -368,6 +414,11 @@ function validateActionStep(
       }
       if (step.actionDatePreset === "PICK_DATE" && !step.actionDatePick.trim()) {
         return `Ação ${n}: escolha uma data.`;
+      }
+    } else if (af) {
+      const v = parseOptionalAutomationValue(step.actionToCustomStr);
+      if (v === undefined) {
+        return `Ação ${n}: informe o novo valor do campo.`;
       }
     }
   }
@@ -577,15 +628,26 @@ function describeTriggerFilter(
   );
 }
 
-function summarizeRule(r: PipelineAutomationRuleRow, stages: Stage[]) {
+function summarizeRule(
+  r: PipelineAutomationRuleRow,
+  stages: Stage[],
+  dealFields: CustomField[],
+) {
   const acts = r.actions;
   if (acts.length === 0) {
-    return "Sem mover etapa";
+    return "Sem ações";
   }
-  const first = acts[0];
-  if (first?.type === "MOVE_TO_STAGE") {
-    return `Mover para “${stageName(stages, first.stageId)}”`;
+  const parts: string[] = [];
+  for (const a of acts) {
+    if (a.type === "MOVE_TO_STAGE") {
+      parts.push(`Mover para “${stageName(stages, a.stageId)}”`);
+    } else if (a.type === "SET_DEAL_CUSTOM_FIELD") {
+      const fn =
+        dealFields.find((d) => d.key === a.fieldKey)?.name ?? a.fieldKey;
+      parts.push(`Definir “${fn}”`);
+    }
   }
+  if (parts.length > 0) return parts.join(" · ");
   return JSON.stringify(acts);
 }
 
@@ -603,6 +665,28 @@ function parseRulesFromApi(raw: unknown): PipelineAutomationRuleRow[] {
       const ao = a as Record<string, unknown>;
       if (ao.type === "MOVE_TO_STAGE" && typeof ao.stageId === "string") {
         actions.push({ type: "MOVE_TO_STAGE", stageId: ao.stageId });
+      } else if (
+        ao.type === "SET_DEAL_CUSTOM_FIELD" &&
+        typeof ao.fieldKey === "string"
+      ) {
+        const setAct: PipelineAutomationAction = {
+          type: "SET_DEAL_CUSTOM_FIELD",
+          fieldKey: ao.fieldKey,
+        };
+        const dp = ao.datePreset;
+        if (
+          typeof dp === "string" &&
+          Object.prototype.hasOwnProperty.call(
+            PIPELINE_AUTOMATION_ACTION_DATE_PRESET_LABELS,
+            dp,
+          )
+        ) {
+          setAct.datePreset = dp as PipelineAutomationActionDatePreset;
+        }
+        if (typeof ao.daysAfter === "number") setAct.daysAfter = ao.daysAfter;
+        if (typeof ao.pickDate === "string") setAct.pickDate = ao.pickDate;
+        if ("staticValue" in ao) setAct.staticValue = ao.staticValue;
+        actions.push(setAct);
       }
     }
     let triggerFilter = parseAutomationTriggerFilter(o.triggerFilter);
@@ -693,6 +777,20 @@ function ruleRowToFormState(rule: PipelineAutomationRuleRow): {
       const row = createActionStepRow();
       row.actionKindType = "DEAL_STAGE_TRANSITION";
       row.actionStageToId = a.stageId;
+      actionSteps.push(row);
+    } else if (a.type === "SET_DEAL_CUSTOM_FIELD") {
+      const row = createActionStepRow();
+      row.actionKindType = "DEAL_CUSTOM_FIELD_CHANGED";
+      row.actionCustomFieldKey = a.fieldKey;
+      if (a.datePreset) {
+        row.actionDatePreset = a.datePreset;
+        if (a.daysAfter !== undefined) {
+          row.actionDateDaysAfter = String(a.daysAfter);
+        }
+        if (a.pickDate) row.actionDatePick = a.pickDate;
+      } else if (a.staticValue !== undefined) {
+        row.actionToCustomStr = automationValueToFormString(a.staticValue);
+      }
       actionSteps.push(row);
     }
   }
@@ -1613,10 +1711,13 @@ export function PipelineAutomationsPanel({
         return;
       }
     }
-    const actions = buildMoveActionsFromSteps(actionSteps);
+    const actions = buildAutomationActionsFromSteps(
+      actionSteps,
+      dealCustomFieldDefs,
+    );
     if (actions.length > MAX_GROUPED_ACTIONS) {
       setFormError(
-        `No máximo ${MAX_GROUPED_ACTIONS} movimentações de etapa por automação.`,
+        `No máximo ${MAX_GROUPED_ACTIONS} ações por automação.`,
       );
       return;
     }
@@ -2901,7 +3002,7 @@ export function PipelineAutomationsPanel({
                       })()}
                     </p>
                     <p className="text-[13px] text-foreground/90">
-                      {summarizeRule(r, stages)}
+                      {summarizeRule(r, stages, dealCustomFieldDefs)}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">

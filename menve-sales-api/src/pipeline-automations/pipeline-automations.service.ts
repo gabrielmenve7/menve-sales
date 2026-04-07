@@ -14,7 +14,7 @@ import { assertCanConfigureTenant } from "../common/rbac";
 import {
   automationActionsSchema,
   createPipelineAutomationRuleSchema,
-  triggerFilterSchema,
+  parseCompositeTriggerFilter,
   updatePipelineAutomationRuleSchema,
 } from "./pipeline-automation.dto";
 
@@ -49,15 +49,35 @@ export class PipelineAutomationsService {
     }
   }
 
+  private pushStageIdsFromLegacyFilter(
+    ids: string[],
+    f: Record<string, unknown> | null | undefined,
+  ) {
+    if (!f) return;
+    if (typeof f.toStageId === "string" && f.toStageId)
+      ids.push(f.toStageId);
+    if (typeof f.fromStageId === "string" && f.fromStageId)
+      ids.push(f.fromStageId);
+  }
+
   private collectStageIdsFromRule(
     triggerFilter: unknown,
-    actions: Prisma.JsonValue,
+    actions: unknown,
   ): string[] {
     const ids: string[] = [];
-    const tf = triggerFilterSchema.safeParse(triggerFilter);
-    if (tf.success && tf.data) {
-      if (tf.data.toStageId) ids.push(tf.data.toStageId);
-      if (tf.data.fromStageId) ids.push(tf.data.fromStageId);
+    const comp = parseCompositeTriggerFilter(triggerFilter);
+    if (comp) {
+      for (const c of comp.clauses) {
+        this.pushStageIdsFromLegacyFilter(
+          ids,
+          c.triggerFilter as Record<string, unknown> | null | undefined,
+        );
+      }
+    } else if (triggerFilter && typeof triggerFilter === "object") {
+      this.pushStageIdsFromLegacyFilter(
+        ids,
+        triggerFilter as Record<string, unknown>,
+      );
     }
     const parsed = automationActionsSchema.safeParse(actions);
     if (parsed.success) {
@@ -68,16 +88,44 @@ export class PipelineAutomationsService {
     return ids;
   }
 
+  private collectCampaignSourceIdsFromLegacy(f: unknown): string[] {
+    if (!f || typeof f !== "object") return [];
+    const o = f as Record<string, unknown>;
+    const raw = o.campaignSourceIds;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((x): x is string => typeof x === "string");
+  }
+
   private collectCampaignSourceIdsFromFilter(triggerFilter: unknown): string[] {
-    const tf = triggerFilterSchema.safeParse(triggerFilter);
-    if (!tf.success || !tf.data?.campaignSourceIds?.length) return [];
-    return [...new Set(tf.data.campaignSourceIds)];
+    const comp = parseCompositeTriggerFilter(triggerFilter);
+    if (comp) {
+      const all: string[] = [];
+      for (const c of comp.clauses) {
+        all.push(...this.collectCampaignSourceIdsFromLegacy(c.triggerFilter));
+      }
+      return [...new Set(all)];
+    }
+    return [...new Set(this.collectCampaignSourceIdsFromLegacy(triggerFilter))];
   }
 
   private collectTagIdsFromFilter(triggerFilter: unknown): string[] {
-    const tf = triggerFilterSchema.safeParse(triggerFilter);
-    if (!tf.success || !tf.data?.tagId) return [];
-    return [tf.data.tagId];
+    const comp = parseCompositeTriggerFilter(triggerFilter);
+    if (comp) {
+      const all: string[] = [];
+      for (const c of comp.clauses) {
+        const f = c.triggerFilter;
+        if (f && typeof f === "object") {
+          const t = (f as Record<string, unknown>).tagId;
+          if (typeof t === "string" && t) all.push(t);
+        }
+      }
+      return [...new Set(all)];
+    }
+    if (triggerFilter && typeof triggerFilter === "object") {
+      const t = (triggerFilter as Record<string, unknown>).tagId;
+      if (typeof t === "string" && t) return [t];
+    }
+    return [];
   }
 
   private async assertCampaignSourcesInTenant(
@@ -113,18 +161,20 @@ export class PipelineAutomationsService {
     if (!f) throw new BadRequestException("Campo personalizado inválido");
   }
 
-  private async assertTriggerFilterRefs(
+  private async assertTriggerFilterRefsSingleClause(
     tenantId: string,
     triggerType: PipelineAutomationTriggerType,
     triggerFilter: unknown,
   ) {
-    const tf = triggerFilterSchema.safeParse(triggerFilter);
-    const f = tf.success ? tf.data : undefined;
+    const f =
+      triggerFilter && typeof triggerFilter === "object"
+        ? (triggerFilter as Record<string, unknown>)
+        : undefined;
     if (
       triggerType === PipelineAutomationTriggerType.DEAL_CUSTOM_FIELD_CHANGED
     ) {
       const k = f?.customFieldKey;
-      if (!k) {
+      if (typeof k !== "string" || !k) {
         throw new BadRequestException(
           "Selecione o campo personalizado para este gatilho",
         );
@@ -133,11 +183,36 @@ export class PipelineAutomationsService {
     }
     await this.assertCampaignSourcesInTenant(
       tenantId,
-      this.collectCampaignSourceIdsFromFilter(triggerFilter),
+      this.collectCampaignSourceIdsFromLegacy(triggerFilter),
     );
-    await this.assertTagsInTenant(
+    const tagIds: string[] = [];
+    if (f && typeof f.tagId === "string" && f.tagId) tagIds.push(f.tagId);
+    await this.assertTagsInTenant(tenantId, tagIds);
+  }
+
+  private async assertTriggerFilterRefs(
+    tenantId: string,
+    triggerType: PipelineAutomationTriggerType,
+    triggerFilter: unknown,
+  ) {
+    if (triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+      const comp = parseCompositeTriggerFilter(triggerFilter);
+      if (!comp) {
+        throw new BadRequestException("Gatilho composto inválido");
+      }
+      for (const c of comp.clauses) {
+        await this.assertTriggerFilterRefsSingleClause(
+          tenantId,
+          c.triggerType,
+          c.triggerFilter ?? null,
+        );
+      }
+      return;
+    }
+    await this.assertTriggerFilterRefsSingleClause(
       tenantId,
-      this.collectTagIdsFromFilter(triggerFilter),
+      triggerType,
+      triggerFilter,
     );
   }
 
@@ -225,7 +300,9 @@ export class PipelineAutomationsService {
     const nextTriggerType =
       patch.triggerType ?? existing.triggerType;
     await this.assertTriggerFilterRefs(u.tenantId, nextTriggerType, nextFilter);
-    return this.prisma.pipelineAutomationRule.update({
+    const structChanged =
+      patch.triggerFilter !== undefined || patch.triggerType !== undefined;
+    const updated = await this.prisma.pipelineAutomationRule.update({
       where: { id: ruleId },
       data: {
         ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
@@ -247,6 +324,12 @@ export class PipelineAutomationsService {
           : {}),
       },
     });
+    if (structChanged) {
+      await this.prisma.pipelineAutomationAndProgress.deleteMany({
+        where: { ruleId },
+      });
+    }
+    return updated;
   }
 
   async remove(u: RequestUser, pipelineId: string, ruleId: string) {

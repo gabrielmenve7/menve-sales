@@ -129,6 +129,7 @@ export class DealsService {
     actorUserId: string,
     dealId: string,
     values: Record<string, unknown>,
+    opts?: { automationDepth?: number },
   ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, tenantId },
@@ -238,6 +239,7 @@ export class DealsService {
       });
     }
 
+    const autoDepth = opts?.automationDepth ?? 0;
     if (this.pipelineAutomationEngine && automationChanges.length > 0) {
       for (const ch of automationChanges) {
         try {
@@ -249,7 +251,7 @@ export class DealsService {
             fieldKey: ch.fieldKey,
             fromValue: ch.fromValue,
             toValue: ch.toValue,
-            depth: 0,
+            depth: autoDepth,
           });
         } catch {
           /* ignore */

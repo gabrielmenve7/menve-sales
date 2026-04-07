@@ -9,14 +9,30 @@ export type PipelineAutomationTriggerType =
   | "CONTACT_TAG_ADDED"
   | "CONTACT_TAG_REMOVED"
   | "DEAL_MARKED_WON"
-  | "DEAL_MARKED_LOST";
+  | "DEAL_MARKED_LOST"
+  | "COMPOSITE";
 
 export type PipelineAutomationRunStatus = "SUCCESS" | "FAILED" | "SKIPPED";
 
-export type PipelineAutomationAction = {
-  type: "MOVE_TO_STAGE";
-  stageId: string;
-};
+/** Presets de valor para campo personalizado tipo data (ação). */
+export type PipelineAutomationActionDatePreset =
+  | "DAYS_AFTER_TRIGGER"
+  | "ON_TRIGGER_DATE"
+  | "ON_TRIGGER_DATETIME"
+  | "TRIGGER_FIELDS"
+  | "PICK_DATE"
+  | "REMOVE_DATE";
+
+export type PipelineAutomationAction =
+  | { type: "MOVE_TO_STAGE"; stageId: string }
+  | {
+      type: "SET_DEAL_CUSTOM_FIELD";
+      fieldKey: string;
+      datePreset?: PipelineAutomationActionDatePreset;
+      daysAfter?: number;
+      pickDate?: string;
+      staticValue?: unknown;
+    };
 
 export type PipelineAutomationTriggerFilter = {
   toStageId?: string;
@@ -28,6 +44,11 @@ export type PipelineAutomationTriggerFilter = {
   tagId?: string;
 };
 
+export type PipelineAutomationCompositeClause = {
+  triggerType: Exclude<PipelineAutomationTriggerType, "COMPOSITE">;
+  triggerFilter: PipelineAutomationTriggerFilter | null;
+};
+
 export type PipelineAutomationRuleRow = {
   id: string;
   tenantId: string;
@@ -37,6 +58,11 @@ export type PipelineAutomationRuleRow = {
   sortOrder: number;
   triggerType: PipelineAutomationTriggerType;
   triggerFilter: PipelineAutomationTriggerFilter | null;
+  /** Quando triggerType === COMPOSITE */
+  composite?: {
+    op: "AND" | "OR";
+    clauses: PipelineAutomationCompositeClause[];
+  };
   actions: PipelineAutomationAction[];
   createdAt: string;
   updatedAt: string;
@@ -66,6 +92,7 @@ export const PIPELINE_AUTOMATION_TRIGGER_LABELS: Record<
   CONTACT_TAG_REMOVED: "Tag removida do contato",
   DEAL_MARKED_WON: "Marcada como ganha",
   DEAL_MARKED_LOST: "Marcada como perdida",
+  COMPOSITE: "Gatilho composto (E/OU)",
 };
 
 /** Só na coluna Ação: unifica “definir” e “remover” responsável em uma opção. */
@@ -74,7 +101,9 @@ export type PipelineAutomationActionOnlyKind = "DEAL_ALTER_ASSIGNEES";
 export type PipelineAutomationActionKindType =
   | Exclude<
       PipelineAutomationTriggerType,
-      "DEAL_ASSIGNEE_ASSIGNED" | "DEAL_ASSIGNEE_REMOVED"
+      | "DEAL_ASSIGNEE_ASSIGNED"
+      | "DEAL_ASSIGNEE_REMOVED"
+      | "COMPOSITE"
     >
   | PipelineAutomationActionOnlyKind;
 
@@ -86,15 +115,6 @@ export function pipelineAutomationActionKindLabel(
   if (k === "DEAL_CUSTOM_FIELD_CHANGED") return "Definir campo personalizado";
   return PIPELINE_AUTOMATION_TRIGGER_LABELS[k];
 }
-
-/** Presets de valor para campo personalizado tipo data (ação). */
-export type PipelineAutomationActionDatePreset =
-  | "DAYS_AFTER_TRIGGER"
-  | "ON_TRIGGER_DATE"
-  | "ON_TRIGGER_DATETIME"
-  | "TRIGGER_FIELDS"
-  | "PICK_DATE"
-  | "REMOVE_DATE";
 
 export const PIPELINE_AUTOMATION_ACTION_DATE_PRESET_LABELS: Record<
   PipelineAutomationActionDatePreset,

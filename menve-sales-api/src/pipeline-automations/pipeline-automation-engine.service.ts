@@ -65,6 +65,20 @@ function automationFilterValueMatches(
   return JSON.stringify(expected) === JSON.stringify(actual);
 }
 
+function todayUtcIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysUtcIsoDate(isoDate: string, days: number): string {
+  const parts = isoDate.split("-").map((x) => parseInt(x, 10));
+  const y = parts[0] ?? 1970;
+  const m = parts[1] ?? 1;
+  const d = parts[2] ?? 1;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
 @Injectable()
 export class PipelineAutomationEngineService {
   private readonly log = new Logger(PipelineAutomationEngineService.name);
@@ -74,6 +88,48 @@ export class PipelineAutomationEngineService {
     @Inject(forwardRef(() => DealsService))
     private readonly dealsService: DealsService,
   ) {}
+
+  private resolveSetDealCustomFieldPayload(action: {
+    type: "SET_DEAL_CUSTOM_FIELD";
+    fieldKey: string;
+    datePreset?:
+      | "DAYS_AFTER_TRIGGER"
+      | "ON_TRIGGER_DATE"
+      | "ON_TRIGGER_DATETIME"
+      | "TRIGGER_FIELDS"
+      | "PICK_DATE"
+      | "REMOVE_DATE";
+    daysAfter?: number;
+    pickDate?: string;
+    staticValue?: unknown;
+  }): unknown {
+    if (action.staticValue !== undefined) {
+      return action.staticValue;
+    }
+    const p = action.datePreset;
+    if (!p) {
+      throw new Error("SET_DEAL_CUSTOM_FIELD sem valor");
+    }
+    if (p === "REMOVE_DATE") {
+      return null;
+    }
+    if (p === "ON_TRIGGER_DATE" || p === "TRIGGER_FIELDS") {
+      return todayUtcIsoDate();
+    }
+    if (p === "ON_TRIGGER_DATETIME") {
+      return new Date().toISOString();
+    }
+    if (p === "DAYS_AFTER_TRIGGER") {
+      const n = action.daysAfter ?? 0;
+      return addDaysUtcIsoDate(todayUtcIsoDate(), n);
+    }
+    if (p === "PICK_DATE") {
+      const s = (action.pickDate ?? "").trim();
+      if (!s) throw new Error("pickDate vazio");
+      return s;
+    }
+    throw new Error(`Preset de data não suportado: ${String(p)}`);
+  }
 
   private async loadEnabledRules(tenantId: string, pipelineId: string) {
     return this.prisma.pipelineAutomationRule.findMany({
@@ -343,6 +399,20 @@ export class PipelineAutomationEngineService {
             select: { stageId: true },
           });
           if (refreshed) currentStageId = refreshed.stageId;
+        } else if (action.type === "SET_DEAL_CUSTOM_FIELD") {
+          const payload = this.resolveSetDealCustomFieldPayload(action);
+          await this.dealsService.updateCustomData(
+            rule.tenantId,
+            actorUserId,
+            dealId,
+            { [action.fieldKey]: payload },
+            { automationDepth: depth },
+          );
+          executed.push({
+            type: action.type,
+            fieldKey: action.fieldKey,
+            result: "set",
+          });
         }
       }
 
