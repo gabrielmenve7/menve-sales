@@ -2,6 +2,11 @@
 
 import { apiServer } from "@/lib/api-server";
 import { assertCanConfigureTenant } from "@/lib/session";
+
+/** Lista regras do funil (leitura para qualquer usuário do tenant autenticado). */
+export async function fetchPipelineAutomations(pipelineId: string) {
+  return apiServer<unknown>(`/pipelines/${pipelineId}/automations`);
+}
 import type {
   PipelineAutomationAction,
   PipelineAutomationTriggerType,

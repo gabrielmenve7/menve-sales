@@ -15,7 +15,7 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,7 +36,7 @@ import {
   pipelineSelectClass,
 } from "@/lib/pipeline-ui-tokens";
 import { cn } from "@/lib/utils";
-import { PipelineAutomationsPanel } from "@/components/pipeline-automations/pipeline-automations-panel";
+import { PipelineAutomationsDialog } from "@/components/pipeline-automations/pipeline-automations-dialog";
 import { PipelineBoard } from "./pipeline-board";
 import {
   createEmptyFilterGroup,
@@ -69,8 +69,7 @@ export function PipelineView({
   dealCustomFieldDefs,
   tenantMembers,
   campaignSources,
-  viewTab = "board",
-  automationRulesRaw,
+  openAutomationsFromUrl = false,
   canConfigureAutomations,
 }: {
   pipelines: Pipeline[];
@@ -86,12 +85,22 @@ export function PipelineView({
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   campaignSources: { id: string; name: string }[];
-  viewTab?: "board" | "automations";
-  automationRulesRaw?: unknown;
+  /** Abre o modal de automações uma vez (ex.: link com `?tab=automations`). */
+  openAutomationsFromUrl?: boolean;
   canConfigureAutomations?: boolean;
 }) {
   const router = useRouter();
+  const [automationsOpen, setAutomationsOpen] = useState(false);
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!openAutomationsFromUrl) return;
+    setAutomationsOpen(true);
+    router.replace(
+      `/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}`,
+      { scroll: false },
+    );
+  }, [openAutomationsFromUrl, activePipeline.id, router]);
   const [filterGroups, setFilterGroups] = useState<PipelineFilterGroupState[]>(
     createInitialFilterGroups,
   );
@@ -357,12 +366,8 @@ export function PipelineView({
                       key={p.id}
                       className="flex cursor-pointer gap-2 rounded-xl px-2.5 py-2.5 focus:bg-muted/80 data-[highlighted]:bg-muted/80"
                       onSelect={() => {
-                        const tabQ =
-                          viewTab === "automations"
-                            ? `&tab=automations`
-                            : "";
                         router.push(
-                          `/pipeline?pipelineId=${encodeURIComponent(p.id)}${tabQ}`,
+                          `/pipeline?pipelineId=${encodeURIComponent(p.id)}`,
                         );
                       }}
                     >
@@ -399,16 +404,6 @@ export function PipelineView({
             >
               <Settings className="size-[18px]" strokeWidth={1.75} />
             </Link>
-            {viewTab === "automations" ? (
-              <Link
-                href={`/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}`}
-                className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/35 bg-primary/10 text-primary shadow-sm transition-colors hover:bg-primary/15"
-                aria-label="Voltar ao quadro"
-                title="Voltar ao quadro"
-              >
-                <Zap className="size-[18px]" strokeWidth={2} fill="currentColor" />
-              </Link>
-            ) : null}
           </div>
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px] leading-snug">
             <span className="text-muted-foreground">
@@ -425,20 +420,16 @@ export function PipelineView({
             </span>
           </div>
         </div>
-        <div
-          className={cn(
-            "flex w-full gap-2 lg:w-auto lg:max-w-md lg:shrink-0",
-            viewTab === "automations" && "hidden",
-          )}
-        >
-          <Link
-            href={`/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}&tab=automations`}
+        <div className="flex w-full gap-2 lg:w-auto lg:max-w-md lg:shrink-0">
+          <button
+            type="button"
+            onClick={() => setAutomationsOpen(true)}
             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-muted/40 hover:text-foreground"
             aria-label="Automações do funil"
             title="Automações"
           >
             <Zap className="size-[18px]" strokeWidth={2} />
-          </Link>
+          </button>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -600,30 +591,27 @@ export function PipelineView({
         </div>
       </header>
 
-      {viewTab === "board" ? (
-        <p className="shrink-0 text-[12px] text-muted-foreground">
-          Arraste o card para mudar de etapa. Clique no card para abrir o detalhe
-          (ganho, perda e demais ações).
-        </p>
-      ) : null}
+      <p className="shrink-0 text-[12px] text-muted-foreground">
+        Arraste o card para mudar de etapa. Clique no card para abrir o detalhe
+        (ganho, perda e demais ações).
+      </p>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {viewTab === "board" ? (
-          <PipelineBoard
-            pipeline={activePipeline}
-            deals={filteredDeals}
-            contacts={contacts}
-            dealCustomFieldDefs={dealCustomFieldDefs}
-            tenantMembers={tenantMembers}
-          />
-        ) : (
-          <PipelineAutomationsPanel
-            pipeline={activePipeline}
-            rulesRaw={automationRulesRaw ?? []}
-            canConfigure={canConfigureAutomations ?? false}
-          />
-        )}
+        <PipelineBoard
+          pipeline={activePipeline}
+          deals={filteredDeals}
+          contacts={contacts}
+          dealCustomFieldDefs={dealCustomFieldDefs}
+          tenantMembers={tenantMembers}
+        />
       </div>
+
+      <PipelineAutomationsDialog
+        open={automationsOpen}
+        onOpenChange={setAutomationsOpen}
+        pipeline={activePipeline}
+        canConfigure={canConfigureAutomations ?? false}
+      />
     </div>
   );
 }

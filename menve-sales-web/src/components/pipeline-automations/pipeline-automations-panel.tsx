@@ -127,10 +127,16 @@ export function PipelineAutomationsPanel({
   pipeline,
   rulesRaw,
   canConfigure,
+  variant = "page",
+  onRulesChanged,
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   rulesRaw: unknown;
   canConfigure: boolean;
+  /** No modal central, omitir linha duplicada do nome do funil. */
+  variant?: "page" | "dialog";
+  /** Chamado após criar, excluir ou alternar regra (ex.: refetch no pai). */
+  onRulesChanged?: () => void;
 }) {
   const stages = useMemo(
     () => [...pipeline.stages].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -187,6 +193,7 @@ export function PipelineAutomationsPanel({
           triggerFilter: buildTriggerFilter(),
           actions: [{ type: "MOVE_TO_STAGE", stageId: targetStageId }],
         });
+        onRulesChanged?.();
         setName("");
         setTriggerType("DEAL_CREATED");
         setFilterStageId("");
@@ -224,11 +231,17 @@ export function PipelineAutomationsPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col space-y-6">
-      <p className="text-[12px] text-muted-foreground">
-        Funil:{" "}
-        <span className="font-medium text-foreground">{pipeline.name}</span>
-        . As regras são avaliadas na ordem abaixo quando o evento ocorre.
-      </p>
+      {variant === "dialog" ? (
+        <p className="text-[12px] text-muted-foreground">
+          As regras são avaliadas na ordem abaixo quando o evento ocorre.
+        </p>
+      ) : (
+        <p className="text-[12px] text-muted-foreground">
+          Funil:{" "}
+          <span className="font-medium text-foreground">{pipeline.name}</span>
+          . As regras são avaliadas na ordem abaixo quando o evento ocorre.
+        </p>
+      )}
 
       {canConfigure ? (
         <form
@@ -391,13 +404,16 @@ export function PipelineAutomationsPanel({
                             type="checkbox"
                             checked={r.enabled}
                             onChange={(e) => {
-                              startTransition(() =>
-                                togglePipelineAutomationRule({
-                                  pipelineId: pipeline.id,
-                                  ruleId: r.id,
-                                  enabled: e.target.checked,
-                                }),
-                              );
+                              startTransition(() => {
+                                void (async () => {
+                                  await togglePipelineAutomationRule({
+                                    pipelineId: pipeline.id,
+                                    ruleId: r.id,
+                                    enabled: e.target.checked,
+                                  });
+                                  onRulesChanged?.();
+                                })();
+                              });
                             }}
                             className="rounded border-input"
                           />
@@ -423,19 +439,22 @@ export function PipelineAutomationsPanel({
                           size="icon"
                           className="size-9 text-muted-foreground hover:text-destructive"
                           aria-label="Excluir regra"
-                          onClick={() => {
+                            onClick={() => {
                             if (
                               !confirm(
                                 `Excluir a automação “${r.name}”?`,
                               )
                             )
                               return;
-                            startTransition(() =>
-                              deletePipelineAutomationRule({
-                                pipelineId: pipeline.id,
-                                ruleId: r.id,
-                              }),
-                            );
+                            startTransition(() => {
+                              void (async () => {
+                                await deletePipelineAutomationRule({
+                                  pipelineId: pipeline.id,
+                                  ruleId: r.id,
+                                });
+                                onRulesChanged?.();
+                              })();
+                            });
                           }}
                         >
                           <Trash2 className="size-4" strokeWidth={2} />

@@ -26,8 +26,7 @@ export default async function PipelinePage({
   searchParams: Promise<{ pipelineId?: string; tab?: string }>;
 }) {
   const { pipelineId: queryPipelineId, tab: tabParam } = await searchParams;
-  const viewTab =
-    tabParam === "automations" ? ("automations" as const) : ("board" as const);
+  const openAutomationsFromUrl = tabParam === "automations";
 
   const [contacts, pipelines] = await Promise.all([
     apiServer<{ id: string; name: string; phone: string | null }[]>(
@@ -51,31 +50,20 @@ export default async function PipelinePage({
     pipelines.find((p) => p.isDefault) ??
     pipelines[0];
 
-  const [
-    dealsResult,
-    dealCustomFieldDefs,
-    members,
-    campaignSources,
-    canConfigureAutomations,
-    automationRulesRaw,
-  ] = await Promise.all([
-    apiServer<PipelineDealsPayload>(`/pipelines/${activePipeline!.id}/deals`),
-    apiServer<unknown>("/custom-fields?entity=DEAL")
-      .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
-      .catch(() => [] as CustomField[]),
-    apiServer<TenantMemberOption[]>("/settings/members").catch(
-      () => [] as TenantMemberOption[],
-    ),
-    apiServer<{ id: string; name: string }[]>("/contacts/campaign-sources").catch(
-      () => [] as { id: string; name: string }[],
-    ),
-    canConfigureTenant(),
-    viewTab === "automations"
-      ? apiServer<unknown>(`/pipelines/${activePipeline!.id}/automations`).catch(
-          () => [],
-        )
-      : Promise.resolve([]),
-  ]);
+  const [dealsResult, dealCustomFieldDefs, members, campaignSources, canConfigureAutomations] =
+    await Promise.all([
+      apiServer<PipelineDealsPayload>(`/pipelines/${activePipeline!.id}/deals`),
+      apiServer<unknown>("/custom-fields?entity=DEAL")
+        .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
+        .catch(() => [] as CustomField[]),
+      apiServer<TenantMemberOption[]>("/settings/members").catch(
+        () => [] as TenantMemberOption[],
+      ),
+      apiServer<{ id: string; name: string }[]>("/contacts/campaign-sources").catch(
+        () => [] as { id: string; name: string }[],
+      ),
+      canConfigureTenant(),
+    ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
@@ -88,8 +76,7 @@ export default async function PipelinePage({
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={members}
         campaignSources={campaignSources}
-        viewTab={viewTab}
-        automationRulesRaw={automationRulesRaw}
+        openAutomationsFromUrl={openAutomationsFromUrl}
         canConfigureAutomations={canConfigureAutomations}
       />
     </div>
