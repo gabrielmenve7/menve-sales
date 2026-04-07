@@ -70,6 +70,8 @@ export function ChatPanel({
   const [isRecording, setIsRecording] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [openQuickReplyCategoryId, setOpenQuickReplyCategoryId] = useState<
     string | null
   >(null);
@@ -203,16 +205,27 @@ export function ChatPanel({
 
   async function onSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!text.trim() || !conn) return;
-    if (!phone) return;
-    await sendWhatsAppMessage({
-      conversationId: conversation.id,
-      connectionId: conn.id,
-      toPhone: phone,
-      text: text.trim(),
-    });
+    const trimmed = text.trim();
+    if (!trimmed || !conn || !phone) return;
+    setSendError(null);
     setText("");
-    onRefetch();
+    setSendBusy(true);
+    try {
+      await sendWhatsAppMessage({
+        conversationId: conversation.id,
+        connectionId: conn.id,
+        toPhone: phone,
+        text: trimmed,
+      });
+      onRefetch();
+    } catch (err) {
+      setText(trimmed);
+      setSendError(
+        err instanceof Error ? err.message : "Não foi possível enviar a mensagem.",
+      );
+    } finally {
+      setSendBusy(false);
+    }
   }
 
   async function onAddNote(e: React.FormEvent) {
@@ -410,6 +423,9 @@ export function ChatPanel({
             {mediaError ? (
               <p className="px-3 pb-0 text-xs text-destructive">{mediaError}</p>
             ) : null}
+            {sendError ? (
+              <p className="px-3 pb-0 text-xs text-destructive">{sendError}</p>
+            ) : null}
             <form
               onSubmit={onSend}
               className={cn(
@@ -431,7 +447,7 @@ export function ChatPanel({
                 variant="ghost"
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || mediaBusy}
+                disabled={!conn?.isActive || mediaBusy || sendBusy}
                 title="Anexar imagem ou PDF"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -442,7 +458,7 @@ export function ChatPanel({
                 variant={isRecording ? "destructive" : "ghost"}
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || mediaBusy}
+                disabled={!conn?.isActive || mediaBusy || sendBusy}
                 title={
                   isRecording ? "Parar e enviar áudio" : "Gravar áudio"
                 }
@@ -457,22 +473,32 @@ export function ChatPanel({
               </Button>
               <Input
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setSendError(null);
+                  setText(e.target.value);
+                }}
                 placeholder={
                   conn?.isActive
                     ? "Digite uma mensagem…"
                     : "Conecte o canal para enviar"
                 }
-                disabled={!conn?.isActive || mediaBusy}
+                disabled={!conn?.isActive || mediaBusy || sendBusy}
                 className="h-9 min-w-0 flex-1 text-sm"
               />
               <Button
                 type="submit"
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || !text.trim() || mediaBusy}
+                disabled={
+                  !conn?.isActive || !text.trim() || mediaBusy || sendBusy
+                }
+                aria-busy={sendBusy}
               >
-                <Send className="size-4" />
+                {sendBusy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
               </Button>
             </form>
           </div>

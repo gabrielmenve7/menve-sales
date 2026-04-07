@@ -2,6 +2,14 @@
 
 import { apiServer } from "@/lib/api-server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+
+function scheduleInboxRevalidation() {
+  after(() => {
+    revalidatePath("/inbox");
+    revalidatePath("/contacts", "layout");
+  });
+}
 
 export async function sendWhatsAppMessage(input: {
   conversationId: string;
@@ -17,8 +25,7 @@ export async function sendWhatsAppMessage(input: {
       text: input.text,
     },
   });
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  scheduleInboxRevalidation();
 }
 
 export async function sendWhatsAppMediaMessage(input: {
@@ -41,6 +48,5 @@ export async function sendWhatsAppMediaMessage(input: {
       caption: input.caption,
     },
   });
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  scheduleInboxRevalidation();
 }
