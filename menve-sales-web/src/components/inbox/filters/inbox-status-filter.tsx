@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Check,
+  CircleOff,
   Hourglass,
   Kanban,
   List,
@@ -21,7 +22,11 @@ import { cn } from "@/lib/utils";
 import type { InboxConversation } from "@/components/inbox/inbox-types";
 
 /** Um filtro ativo por vez; `null` = Todos. */
-export type InboxFilterId = "UNREAD" | "WAITING" | "PIPELINE";
+export type InboxFilterId =
+  | "UNREAD"
+  | "WAITING"
+  | "PIPELINE"
+  | "NO_PIPELINE";
 
 type FilterRow = {
   id: InboxFilterId;
@@ -45,6 +50,11 @@ const FILTER_ROWS: FilterRow[] = [
     label: "Oportunidade",
     icon: Kanban,
   },
+  {
+    id: "NO_PIPELINE",
+    label: "Fora do pipeline",
+    icon: CircleOff,
+  },
 ];
 
 /** Última mensagem da thread é do cliente → precisa atenção (proxy de “não lida”). */
@@ -65,6 +75,7 @@ export function conversationMatchesInboxFilter(
   if (filter === null) return true;
   if (filter === "WAITING") return c.status === "WAITING";
   if (filter === "PIPELINE") return contactHasOpenDealInPipeline(c);
+  if (filter === "NO_PIPELINE") return !contactHasOpenDealInPipeline(c);
   if (filter === "UNREAD") return conversationLooksUnread(c);
   return true;
 }
