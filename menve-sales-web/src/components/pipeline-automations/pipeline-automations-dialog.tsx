@@ -67,7 +67,7 @@ export function PipelineAutomationsDialog({
         overlayClassName="bg-black/30 backdrop-blur-md"
         className={centralDialogClass}
       >
-        <DialogHeader className="space-y-1 border-b border-zinc-800/80 bg-[#111] px-6 pb-4 pt-6 text-left">
+        <DialogHeader className="space-y-1 border-b border-zinc-800/80 bg-[#111] px-[3.75rem] pb-4 pt-6 text-left">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <DialogTitle className="text-2xl font-semibold tracking-tight text-zinc-50">
@@ -90,7 +90,7 @@ export function PipelineAutomationsDialog({
             </DialogClose>
           </div>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#0e0e0e] px-6 pb-6 pt-5">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[#0e0e0e] px-[3.75rem] pb-6 pt-5">
           {loading ? (
             <p className="text-sm text-zinc-500">Carregando…</p>
           ) : (
