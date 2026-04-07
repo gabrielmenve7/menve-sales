@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Info, Plus, Trash2, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { Filter, Info, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,9 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   Aggregation,
+  BarTimePreset,
+  BarXGroupBy,
   DataMeasure,
   DealCustomFieldDef,
   DealStatusCode,
@@ -23,8 +26,11 @@ import type {
   PipelineListItem,
   TagListItem,
   WidgetQuerySpec,
+  WidgetFilterGroupSaved,
+  WidgetFilterRowSaved,
   WidgetType,
 } from "@/lib/dashboard-builder-types";
+import { defaultBarChartConfig } from "@/lib/dashboard-builder-types";
 import { cn } from "@/lib/utils";
 
 const DIMENSION_OPTIONS: {
@@ -35,6 +41,87 @@ const DIMENSION_OPTIONS: {
   { value: "BY_STATUS", label: "Por status" },
   { value: "BY_DAY", label: "Por dia (linha do tempo)" },
 ];
+
+/** Rótulos do eixo X no modo gráfico de barras (alinhado ao protótipo). */
+const BAR_X_DIMENSION_OPTIONS: {
+  value: NonNullable<WidgetQuerySpec["dimension"]> | "";
+  label: string;
+}[] = [
+  { value: "BY_STAGE", label: "Estágio" },
+  { value: "BY_STATUS", label: "Status" },
+  { value: "BY_DAY", label: "Linha do tempo" },
+];
+
+const BAR_TIME_PRESET_OPTIONS: { value: BarTimePreset; label: string }[] = [
+  { value: "THIS_MONTH", label: "Este mês" },
+  { value: "LAST_7_DAYS", label: "Últimos 7 dias" },
+  { value: "LAST_30_DAYS", label: "Últimos 30 dias" },
+  { value: "LAST_90_DAYS", label: "Últimos 90 dias" },
+  { value: "CUSTOM", label: "Personalizado" },
+];
+
+const BAR_X_GROUP_OPTIONS: { value: BarXGroupBy; label: string }[] = [
+  { value: "DAY", label: "Dias" },
+  { value: "WEEK", label: "Semanas" },
+  { value: "MONTH", label: "Meses" },
+];
+
+function firstDayOfMonthIsoLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function inferBarTimePreset(spec: WidgetQuerySpec): BarTimePreset {
+  if (spec.timelineStart) {
+    return spec.timelineStart === firstDayOfMonthIsoLocal()
+      ? "THIS_MONTH"
+      : "CUSTOM";
+  }
+  const d = spec.days ?? 30;
+  if (d === 7) return "LAST_7_DAYS";
+  if (d === 30) return "LAST_30_DAYS";
+  if (d === 90) return "LAST_90_DAYS";
+  return "CUSTOM";
+}
+
+function BarConfigToggle({
+  checked,
+  onCheckedChange,
+  id,
+  label,
+}: {
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+  id: string;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <Label htmlFor={id} className="text-sm font-normal text-foreground">
+        {label}
+      </Label>
+      <button
+        type="button"
+        id={id}
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onCheckedChange(!checked)}
+        className={cn(
+          "relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          checked ? "bg-primary" : "bg-muted",
+        )}
+      >
+        <span
+          className={cn(
+            "pointer-events-none absolute top-0.5 block size-5 rounded-full bg-background shadow-sm transition-transform",
+            checked ? "translate-x-[1.125rem]" : "translate-x-0.5",
+          )}
+          aria-hidden
+        />
+      </button>
+    </div>
+  );
+}
 
 const STATUS_META: { code: DealStatusCode; label: string }[] = [
   { code: "OPEN", label: "Aberto" },
@@ -75,7 +162,7 @@ const selectClass = cn(
 );
 
 const fieldSelectClass = cn(
-  "min-w-[13.5rem] shrink-0 rounded-md border border-input bg-background px-2 py-2 text-sm shadow-sm",
+  "min-w-[15rem] shrink-0 rounded-md border border-input bg-background px-2 py-2 text-sm shadow-sm",
   "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 );
 
@@ -84,10 +171,23 @@ const opSelectClass = cn(
   "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 );
 
+const rowJoinSelectClass = cn(
+  "h-10 w-[3.25rem] shrink-0 rounded-md border border-input bg-background px-1.5 text-center text-sm shadow-sm",
+  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+);
+
+const groupJoinSelectClass = cn(
+  "h-9 w-[3.5rem] shrink-0 rounded-md border border-input bg-background px-1.5 text-center text-sm shadow-sm",
+  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+);
+
 type DashFilterField = "status" | "tags" | "createdAt" | "customField";
 
 /** é = um valor / todas as tags; ou = vários status ou qualquer tag. */
 type DashFilterOp = "IS" | "OR";
+
+type DashRowJoin = "AND" | "OR";
+type DashGroupJoin = "AND" | "OR";
 
 const DASH_FIELD_LABELS: Record<DashFilterField, string> = {
   status: "Status",
@@ -97,10 +197,43 @@ const DASH_FIELD_LABELS: Record<DashFilterField, string> = {
 };
 
 type DashFilterRow =
-  | { id: string; field: "status"; op: DashFilterOp; statusCodes: DealStatusCode[] }
-  | { id: string; field: "tags"; op: DashFilterOp; tagIds: string[] }
-  | { id: string; field: "createdAt"; op: "IS"; createdFrom: string; createdTo: string }
-  | { id: string; field: "customField"; op: "IS"; key: string; value: string };
+  | {
+      id: string;
+      rowJoin?: DashRowJoin;
+      field: "status";
+      op: DashFilterOp;
+      statusCodes: DealStatusCode[];
+    }
+  | {
+      id: string;
+      rowJoin?: DashRowJoin;
+      field: "tags";
+      op: DashFilterOp;
+      tagIds: string[];
+    }
+  | {
+      id: string;
+      rowJoin?: DashRowJoin;
+      field: "createdAt";
+      op: "IS";
+      createdFrom: string;
+      createdTo: string;
+    }
+  | {
+      id: string;
+      rowJoin?: DashRowJoin;
+      field: "customField";
+      op: "IS";
+      key: string;
+      value: string;
+    };
+
+type DashFilterGroupState = {
+  id: string;
+  /** Liga este grupo ao anterior (índice ≥ 1). */
+  groupJoin?: DashGroupJoin;
+  rows: DashFilterRow[];
+};
 
 function newRowId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -139,7 +272,7 @@ function createDashFilterRowWithId(
   }
 }
 
-function specToFilterRows(spec: WidgetQuerySpec): DashFilterRow[] {
+function legacyFlatRowsFromSpec(spec: WidgetQuerySpec): DashFilterRow[] {
   const { op: stOp, codes: stCodes } = statusOpAndCodesFromSpec(spec);
   const rows: DashFilterRow[] = [
     {
@@ -181,6 +314,112 @@ function specToFilterRows(spec: WidgetQuerySpec): DashFilterRow[] {
   return rows;
 }
 
+function savedRowToDashRow(id: string, r: WidgetFilterRowSaved): DashFilterRow {
+  switch (r.field) {
+    case "status":
+      return {
+        id,
+        field: "status",
+        op: (r.op as DashFilterOp) ?? "IS",
+        statusCodes:
+          r.statusCodes && r.statusCodes.length > 0 ? r.statusCodes : ["OPEN"],
+      };
+    case "tags":
+      return {
+        id,
+        field: "tags",
+        op: r.op === "OR" || r.filterTagMatch === "ANY" ? "OR" : "IS",
+        tagIds: r.tagIds ? [...r.tagIds] : [],
+      };
+    case "createdAt":
+      return {
+        id,
+        field: "createdAt",
+        op: "IS",
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+      };
+    case "customField":
+      return {
+        id,
+        field: "customField",
+        op: "IS",
+        key: r.customKey ?? "",
+        value:
+          r.customValue === undefined || r.customValue === null
+            ? ""
+            : String(r.customValue),
+      };
+  }
+}
+
+function dashRowToSaved(row: DashFilterRow): WidgetFilterRowSaved {
+  const rowJoin = row.rowJoin;
+  switch (row.field) {
+    case "status":
+      return {
+        rowJoin,
+        field: "status",
+        op: row.op,
+        statusCodes: row.statusCodes,
+      };
+    case "tags":
+      return {
+        rowJoin,
+        field: "tags",
+        op: row.op,
+        tagIds: row.tagIds,
+        filterTagMatch: row.op === "OR" ? "ANY" : "ALL",
+      };
+    case "createdAt":
+      return {
+        rowJoin,
+        field: "createdAt",
+        op: "IS",
+        createdFrom: row.createdFrom || undefined,
+        createdTo: row.createdTo || undefined,
+      };
+    case "customField":
+      return {
+        rowJoin,
+        field: "customField",
+        op: "IS",
+        customKey: row.key || undefined,
+        customValue: row.value || undefined,
+      };
+  }
+}
+
+function specToFilterGroups(spec: WidgetQuerySpec): DashFilterGroupState[] {
+  if (spec.filterGroups && spec.filterGroups.length > 0) {
+    return spec.filterGroups.map((g, gi) => ({
+      id: newRowId(),
+      groupJoin: gi === 0 ? undefined : g.groupJoin ?? "OR",
+      rows: g.rows.map((r, ri) => {
+        const id = newRowId();
+        const dr = savedRowToDashRow(id, r);
+        return ri === 0 ? dr : { ...dr, rowJoin: r.rowJoin ?? "AND" };
+      }),
+    }));
+  }
+  const flat = legacyFlatRowsFromSpec(spec);
+  return [
+    {
+      id: newRowId(),
+      rows: flat.map((r, ri) =>
+        ri === 0 ? r : { ...r, rowJoin: "AND" as const },
+      ),
+    },
+  ];
+}
+
+function defaultFilterGroup(): DashFilterGroupState {
+  return {
+    id: newRowId(),
+    rows: [createDashFilterRow("status")],
+  };
+}
+
 function fieldsTakenByOthers(
   rows: DashFilterRow[],
   exceptId: string,
@@ -204,7 +443,7 @@ function nextFieldToAdd(rows: DashFilterRow[]): DashFilterField | null {
 /** Estilos alinhados ao tema (light/dark via tokens do app). */
 const panel = {
   shell:
-    "max-w-lg gap-0 overflow-hidden border-border bg-popover p-0 text-popover-foreground shadow-2xl sm:max-w-lg",
+    "w-[min(42rem,calc(100vw-1.5rem))] max-w-none gap-0 overflow-hidden border-border bg-popover p-0 text-popover-foreground shadow-2xl sm:max-w-3xl",
   control:
     "h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/40",
   divider: "border-border",
@@ -238,14 +477,25 @@ export function DashboardWidgetConfigDialog({
     NonNullable<WidgetQuerySpec["dimension"]> | ""
   >("");
   const [days, setDays] = useState(30);
-  const [filterRows, setFilterRows] = useState<DashFilterRow[]>(() => [
-    createDashFilterRow("status"),
+  const [dialogTab, setDialogTab] = useState("config");
+  const [barShowAverage, setBarShowAverage] = useState(true);
+  const [barShowLabels, setBarShowLabels] = useState(true);
+  const [barShowLegend, setBarShowLegend] = useState(false);
+  const [barTimePreset, setBarTimePreset] = useState<BarTimePreset>("LAST_30_DAYS");
+  const [barCustomDays, setBarCustomDays] = useState(30);
+  const [barXGroupBy, setBarXGroupBy] = useState<BarXGroupBy>("DAY");
+  const [filterGroups, setFilterGroups] = useState<DashFilterGroupState[]>(() => [
+    defaultFilterGroup(),
   ]);
 
   const numericCustomFields = useMemo(
     () => dealCustomFields.filter(numericFieldTypes),
     [dealCustomFields],
   );
+
+  useEffect(() => {
+    if (open) setDialogTab("config");
+  }, [open]);
 
   useEffect(() => {
     if (!widget || !open) return;
@@ -266,23 +516,40 @@ export function DashboardWidgetConfigDialog({
       s.dimension === null || s.dimension === undefined ? "" : s.dimension,
     );
     setDays(s.days ?? 30);
-    setFilterRows(specToFilterRows(s));
+    setFilterGroups(specToFilterGroups(s));
+    if (widget.type === "BAR") {
+      const bc = { ...defaultBarChartConfig(), ...widget.barChart };
+      setBarShowAverage(bc.showAverageLine ?? true);
+      setBarShowLabels(bc.showDataLabels ?? true);
+      setBarShowLegend(bc.showLegend ?? false);
+      setBarTimePreset(bc.timePreset ?? inferBarTimePreset(s));
+      setBarXGroupBy(bc.xGroupBy ?? "DAY");
+      setBarCustomDays(s.days ?? 30);
+    }
   }, [widget, open]);
 
   const filtersAreDefault = useMemo(() => {
-    if (filterRows.length !== 1) return false;
-    const r = filterRows[0];
+    if (filterGroups.length !== 1) return false;
+    const rows = filterGroups[0]?.rows ?? [];
+    if (rows.length !== 1) return false;
+    const r = rows[0];
     if (r?.field !== "status") return false;
     return (
       r.op === "IS" &&
       r.statusCodes.length === 1 &&
       r.statusCodes[0] === "OPEN"
     );
-  }, [filterRows]);
+  }, [filterGroups]);
+
+  const dataTabBadgeCount = useMemo(() => {
+    if (filtersAreDefault) return 0;
+    return filterGroups.reduce((n, g) => n + g.rows.length, 0);
+  }, [filterGroups, filtersAreDefault]);
 
   if (!widget) return null;
 
   const isMetric = widget.type === "METRIC";
+  const isBar = widget.type === "BAR";
 
   function coerceFilterValue(
     key: string,
@@ -299,9 +566,12 @@ export function DashboardWidgetConfigDialog({
     return raw;
   }
 
-  function selectableFieldsForRow(rowId: string): DashFilterField[] {
-    const taken = fieldsTakenByOthers(filterRows, rowId);
-    const current = filterRows.find((r) => r.id === rowId)?.field;
+  function selectableFieldsForRow(
+    groupRows: DashFilterRow[],
+    rowId: string,
+  ): DashFilterField[] {
+    const taken = fieldsTakenByOthers(groupRows, rowId);
+    const current = groupRows.find((r) => r.id === rowId)?.field;
     const all: DashFilterField[] = [
       "status",
       "tags",
@@ -315,80 +585,160 @@ export function DashboardWidgetConfigDialog({
     });
   }
 
-  function removeFilterRow(rowId: string) {
-    setFilterRows((prev) => prev.filter((r) => r.id !== rowId));
+  function removeFilterRow(groupId: string, rowId: string) {
+    setFilterGroups((prev) => {
+      const next = prev
+        .map((g) => {
+          if (g.id !== groupId) return g;
+          const rows = g.rows.filter((r) => r.id !== rowId);
+          return {
+            ...g,
+            rows:
+              rows.length > 0 ? rows : [createDashFilterRow("status")],
+          };
+        })
+        .filter((g) => g.rows.length > 0);
+      return next.length > 0 ? next : [defaultFilterGroup()];
+    });
   }
 
-  function onDashRowFieldChange(rowId: string, field: DashFilterField) {
-    setFilterRows((prev) =>
-      prev.map((r) =>
-        r.id === rowId ? createDashFilterRowWithId(rowId, field) : r,
-      ),
-    );
-  }
-
-  function onDashRowOpChange(rowId: string, op: DashFilterOp) {
-    setFilterRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== rowId) return r;
-        if (r.field === "status") {
-          if (op === "IS") {
-            const first = r.statusCodes[0] ?? "OPEN";
-            return { ...r, op, statusCodes: [first] };
-          }
-          return { ...r, op };
-        }
-        if (r.field === "tags") {
-          return { ...r, op };
-        }
-        return r;
+  function onDashRowFieldChange(
+    groupId: string,
+    rowId: string,
+    field: DashFilterField,
+  ) {
+    setFilterGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        return {
+          ...g,
+          rows: g.rows.map((r) => {
+            if (r.id !== rowId) return r;
+            const next = createDashFilterRowWithId(rowId, field);
+            return r.rowJoin ? { ...next, rowJoin: r.rowJoin } : next;
+          }),
+        };
       }),
     );
   }
 
-  function addDashFilterRow() {
-    const next = nextFieldToAdd(filterRows);
-    if (!next) return;
-    setFilterRows((prev) => [...prev, createDashFilterRow(next)]);
+  function onDashRowOpChange(
+    groupId: string,
+    rowId: string,
+    op: DashFilterOp,
+  ) {
+    setFilterGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        return {
+          ...g,
+          rows: g.rows.map((r) => {
+            if (r.id !== rowId) return r;
+            if (r.field === "status") {
+              if (op === "IS") {
+                const first = r.statusCodes[0] ?? "OPEN";
+                return { ...r, op, statusCodes: [first] };
+              }
+              return { ...r, op };
+            }
+            if (r.field === "tags") {
+              return { ...r, op };
+            }
+            return r;
+          }),
+        };
+      }),
+    );
+  }
+
+  function onRowJoinChange(
+    groupId: string,
+    rowId: string,
+    join: DashRowJoin,
+  ) {
+    setFilterGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        return {
+          ...g,
+          rows: g.rows.map((r) =>
+            r.id === rowId ? { ...r, rowJoin: join } : r,
+          ),
+        };
+      }),
+    );
+  }
+
+  function onGroupJoinChange(groupId: string, join: DashGroupJoin) {
+    setFilterGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId ? { ...g, groupJoin: join } : g,
+      ),
+    );
+  }
+
+  function addRowToGroup(groupId: string) {
+    setFilterGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        const next = nextFieldToAdd(g.rows);
+        if (!next) return g;
+        return {
+          ...g,
+          rows: [
+            ...g.rows,
+            { ...createDashFilterRow(next), rowJoin: "AND" as const },
+          ],
+        };
+      }),
+    );
+  }
+
+  function addRowToLastGroup() {
+    const last = filterGroups[filterGroups.length - 1];
+    if (last) addRowToGroup(last.id);
+  }
+
+  function addGroupedFilterAfter(groupId: string) {
+    setFilterGroups((prev) => {
+      const idx = prev.findIndex((g) => g.id === groupId);
+      if (idx < 0) return prev;
+      const insert: DashFilterGroupState = {
+        id: newRowId(),
+        groupJoin: "OR",
+        rows: [createDashFilterRow("status")],
+      };
+      return [...prev.slice(0, idx + 1), insert, ...prev.slice(idx + 1)];
+    });
+  }
+
+  function removeGroup(groupId: string) {
+    setFilterGroups((prev) => {
+      const next = prev.filter((g) => g.id !== groupId);
+      return next.length > 0 ? next : [defaultFilterGroup()];
+    });
   }
 
   function clearDashFilters() {
-    setFilterRows([createDashFilterRow("status")]);
+    setFilterGroups([defaultFilterGroup()]);
   }
 
   function handleSave() {
     if (!widget) return;
 
-    const statusRow = filterRows.find((r) => r.field === "status");
-    const statusCodes =
-      statusRow?.field === "status" && statusRow.statusCodes.length > 0
-        ? statusRow.statusCodes
-        : (["OPEN"] as DealStatusCode[]);
-    const filterStatuses = statusCodes;
-
-    const tagsRow = filterRows.find((r) => r.field === "tags");
-    const tagIds =
-      tagsRow?.field === "tags" ? tagsRow.tagIds : [];
-    const filterTagMatch =
-      tagsRow?.field === "tags" && tagsRow.op === "OR" ? "ANY" : undefined;
-
-    const createdRow = filterRows.find((r) => r.field === "createdAt");
-    const createdFrom =
-      createdRow?.field === "createdAt" ? createdRow.createdFrom : "";
-    const createdTo =
-      createdRow?.field === "createdAt" ? createdRow.createdTo : "";
-
-    const extraFromRows = filterRows.filter(
-      (r): r is Extract<DashFilterRow, { field: "customField" }> =>
-        r.field === "customField",
+    const filterGroupsPayload: WidgetFilterGroupSaved[] = filterGroups.map(
+      (g, gi) => ({
+        groupJoin: gi === 0 ? undefined : g.groupJoin ?? "OR",
+        rows: g.rows.map((r, ri) => {
+          const s = dashRowToSaved(r);
+          if (ri === 0) {
+            const { rowJoin: _rj, ...rest } = s;
+            return rest;
+          }
+          return s;
+        }),
+      }),
     );
-    const filterCustomFields =
-      extraFromRows
-        .filter((r) => r.key.trim() && r.value.trim() !== "")
-        .map((r) => ({
-          key: r.key.trim(),
-          value: coerceFilterValue(r.key.trim(), r.value.trim()),
-        })) ?? undefined;
 
     const spec: WidgetQuerySpec = {
       source: "DEALS",
@@ -397,26 +747,46 @@ export function DashboardWidgetConfigDialog({
       aggregation: dataMeasure === "QUANTITY" ? "SUM" : aggregation,
       customFieldKey:
         dataMeasure === "CUSTOM_NUMBER" ? customFieldKey || undefined : undefined,
-      filterStatuses,
-      filterTagMatch,
-      filterTagIds: tagIds.length > 0 ? tagIds : undefined,
-      filterCreatedFrom: createdFrom.trim() || undefined,
-      filterCreatedTo: createdTo.trim() || undefined,
-      filterCustomFields:
-        filterCustomFields && filterCustomFields.length > 0
-          ? filterCustomFields
-          : undefined,
+      filterGroups: filterGroupsPayload,
     };
 
     if (isMetric) {
       spec.dimension = null;
+      delete spec.timelineStart;
+      delete spec.days;
+    } else if (isBar) {
+      spec.dimension = (dimension || "BY_STAGE") as NonNullable<
+        WidgetQuerySpec["dimension"]
+      >;
+      if (spec.dimension === "BY_DAY") {
+        if (barTimePreset === "THIS_MONTH") {
+          spec.timelineStart = firstDayOfMonthIsoLocal();
+          delete spec.days;
+        } else if (barTimePreset === "LAST_7_DAYS") {
+          delete spec.timelineStart;
+          spec.days = 7;
+        } else if (barTimePreset === "LAST_30_DAYS") {
+          delete spec.timelineStart;
+          spec.days = 30;
+        } else if (barTimePreset === "LAST_90_DAYS") {
+          delete spec.timelineStart;
+          spec.days = 90;
+        } else {
+          delete spec.timelineStart;
+          spec.days = Math.min(366, Math.max(1, barCustomDays));
+        }
+      } else {
+        delete spec.timelineStart;
+        delete spec.days;
+      }
     } else {
       spec.dimension = (dimension || "BY_STAGE") as NonNullable<
         WidgetQuerySpec["dimension"]
       >;
-    }
-    if (spec.dimension === "BY_DAY") {
-      spec.days = Math.min(366, Math.max(1, days));
+      delete spec.timelineStart;
+      if (spec.dimension === "BY_DAY") {
+        spec.days = Math.min(366, Math.max(1, days));
+      }
     }
 
     const next: LayoutWidget = {
@@ -426,6 +796,16 @@ export function DashboardWidgetConfigDialog({
       title: title.trim() || undefined,
       querySpec: spec,
     };
+    if (isBar) {
+      next.barChart = {
+        showAverageLine: barShowAverage,
+        showDataLabels: barShowLabels,
+        showLegend: barShowLegend,
+        timePreset: barTimePreset,
+        xGroupBy: spec.dimension === "BY_DAY" ? barXGroupBy : "DAY",
+        yGroupBy: "NONE",
+      };
+    }
     onSave(next);
     onOpenChange(false);
   }
@@ -434,7 +814,10 @@ export function DashboardWidgetConfigDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideClose
-        className={`flex max-h-[90vh] flex-col ${panel.shell}`}
+        className={cn(
+          "flex max-h-[90vh] flex-col !max-w-none sm:!max-w-3xl",
+          panel.shell,
+        )}
       >
         <DialogHeader
           className={`relative border-b px-6 py-4 pr-14 text-left ${panel.divider}`}
@@ -642,41 +1025,103 @@ export function DashboardWidgetConfigDialog({
             value="filters"
             className="mt-0 flex-1 overflow-y-auto px-6 pb-4 pt-4 focus-visible:outline-none"
           >
-            <div className="mb-3 flex items-center gap-2">
-              <p className="text-sm font-semibold text-foreground">Filtros</p>
-              <span
-                className="inline-flex text-muted-foreground"
-                title="Cada linha é um critério combinado com E. Em Status, «ou» = qualquer um dos status. Em Tags, «é» = todas as tags; «ou» = pelo menos uma."
-              >
-                <Info className="size-3.5" strokeWidth={2} aria-hidden />
-              </span>
-            </div>
-
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 dark:bg-muted/10">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Grupo 1
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-foreground">
+                  Filtros de cartões
+                </p>
+                <span
+                  className="inline-flex text-muted-foreground"
+                  title="Dentro do grupo: «Onde» inicia; «E»/«Ou» liga cada linha seguinte (filtro duplo). Entre grupos: «E»/«Ou» define como combinar grupos (filtro agrupado)."
+                >
+                  <Info className="size-3.5" strokeWidth={2} aria-hidden />
                 </span>
               </div>
-              <div className="space-y-2">
-                {filterRows.map((row) => (
+            </div>
+
+            {filterGroups.map((group, gi) => (
+              <Fragment key={group.id}>
+                {gi > 0 ? (
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <select
+                      className={groupJoinSelectClass}
+                      value={group.groupJoin ?? "OR"}
+                      onChange={(e) =>
+                        onGroupJoinChange(
+                          group.id,
+                          e.target.value as DashGroupJoin,
+                        )
+                      }
+                      aria-label="Combinar com grupo anterior"
+                    >
+                      <option value="AND">E</option>
+                      <option value="OR">Ou</option>
+                    </select>
+                    <span className="text-xs text-muted-foreground">
+                      entre grupos
+                    </span>
+                  </div>
+                ) : null}
+                <div className="mb-4 rounded-lg border border-border/60 bg-muted/20 p-3 dark:bg-muted/10">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-foreground">
+                      Grupo {gi + 1}
+                    </span>
+                    {filterGroups.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground"
+                        onClick={() => removeGroup(group.id)}
+                      >
+                        Remover grupo
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="space-y-2">
+                    {group.rows.map((row, ri) => (
                   <div
                     key={row.id}
                     className="flex flex-col gap-2 border-b border-border/30 pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:flex-wrap sm:items-center"
                   >
+                    <div className="flex w-full shrink-0 items-center justify-end sm:w-[4.75rem] sm:justify-center">
+                      {ri === 0 ? (
+                        <span className="text-sm font-medium text-muted-foreground">
+                          Onde
+                        </span>
+                      ) : (
+                        <select
+                          className={rowJoinSelectClass}
+                          value={row.rowJoin ?? "AND"}
+                          onChange={(e) =>
+                            onRowJoinChange(
+                              group.id,
+                              row.id,
+                              e.target.value as DashRowJoin,
+                            )
+                          }
+                          aria-label="Combinar com linha anterior"
+                        >
+                          <option value="AND">E</option>
+                          <option value="OR">Ou</option>
+                        </select>
+                      )}
+                    </div>
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                       <select
                         className={fieldSelectClass}
                         value={row.field}
                         onChange={(e) =>
                           onDashRowFieldChange(
+                            group.id,
                             row.id,
                             e.target.value as DashFilterField,
                           )
                         }
                         aria-label="Categoria do filtro"
                       >
-                        {selectableFieldsForRow(row.id).map((f) => (
+                        {selectableFieldsForRow(group.rows, row.id).map((f) => (
                           <option
                             key={f}
                             value={f}
@@ -692,6 +1137,7 @@ export function DashboardWidgetConfigDialog({
                           value={row.op}
                           onChange={(e) =>
                             onDashRowOpChange(
+                              group.id,
                               row.id,
                               e.target.value as DashFilterOp,
                             )
@@ -718,15 +1164,21 @@ export function DashboardWidgetConfigDialog({
                             value={row.statusCodes[0] ?? ""}
                             onChange={(e) => {
                               const v = e.target.value as DealStatusCode;
-                              setFilterRows((prev) =>
-                                prev.map((r) =>
-                                  r.id === row.id && r.field === "status"
-                                    ? {
-                                        ...r,
-                                        statusCodes: v ? [v] : [],
-                                      }
-                                    : r,
-                                ),
+                              setFilterGroups((prev) =>
+                                prev.map((g) => {
+                                  if (g.id !== group.id) return g;
+                                  return {
+                                    ...g,
+                                    rows: g.rows.map((r) =>
+                                      r.id === row.id && r.field === "status"
+                                        ? {
+                                            ...r,
+                                            statusCodes: v ? [v] : [],
+                                          }
+                                        : r,
+                                    ),
+                                  };
+                                }),
                               );
                             }}
                             aria-label="Valor do status"
@@ -752,12 +1204,18 @@ export function DashboardWidgetConfigDialog({
                                 e.target.selectedOptions,
                                 (o) => o.value,
                               ) as DealStatusCode[];
-                              setFilterRows((prev) =>
-                                prev.map((r) =>
-                                  r.id === row.id && r.field === "status"
-                                    ? { ...r, statusCodes: v }
-                                    : r,
-                                ),
+                              setFilterGroups((prev) =>
+                                prev.map((g) => {
+                                  if (g.id !== group.id) return g;
+                                  return {
+                                    ...g,
+                                    rows: g.rows.map((r) =>
+                                      r.id === row.id && r.field === "status"
+                                        ? { ...r, statusCodes: v }
+                                        : r,
+                                    ),
+                                  };
+                                }),
                               );
                             }}
                             aria-label="Status (um ou mais)"
@@ -793,12 +1251,18 @@ export function DashboardWidgetConfigDialog({
                                   e.target.selectedOptions,
                                   (o) => o.value,
                                 );
-                                setFilterRows((prev) =>
-                                  prev.map((r) =>
-                                    r.id === row.id && r.field === "tags"
-                                      ? { ...r, tagIds: v }
-                                      : r,
-                                  ),
+                                setFilterGroups((prev) =>
+                                  prev.map((g) => {
+                                    if (g.id !== group.id) return g;
+                                    return {
+                                      ...g,
+                                      rows: g.rows.map((r) =>
+                                        r.id === row.id && r.field === "tags"
+                                          ? { ...r, tagIds: v }
+                                          : r,
+                                      ),
+                                    };
+                                  }),
                                 );
                               }}
                               aria-label="Tags"
@@ -834,15 +1298,22 @@ export function DashboardWidgetConfigDialog({
                               type="date"
                               value={row.createdFrom}
                               onChange={(e) =>
-                                setFilterRows((prev) =>
-                                  prev.map((r) =>
-                                    r.id === row.id && r.field === "createdAt"
-                                      ? {
-                                          ...r,
-                                          createdFrom: e.target.value,
-                                        }
-                                      : r,
-                                  ),
+                                setFilterGroups((prev) =>
+                                  prev.map((g) => {
+                                    if (g.id !== group.id) return g;
+                                    return {
+                                      ...g,
+                                      rows: g.rows.map((r) =>
+                                        r.id === row.id &&
+                                        r.field === "createdAt"
+                                          ? {
+                                              ...r,
+                                              createdFrom: e.target.value,
+                                            }
+                                          : r,
+                                      ),
+                                    };
+                                  }),
                                 )
                               }
                               className="h-9 text-xs"
@@ -856,15 +1327,22 @@ export function DashboardWidgetConfigDialog({
                               type="date"
                               value={row.createdTo}
                               onChange={(e) =>
-                                setFilterRows((prev) =>
-                                  prev.map((r) =>
-                                    r.id === row.id && r.field === "createdAt"
-                                      ? {
-                                          ...r,
-                                          createdTo: e.target.value,
-                                        }
-                                      : r,
-                                  ),
+                                setFilterGroups((prev) =>
+                                  prev.map((g) => {
+                                    if (g.id !== group.id) return g;
+                                    return {
+                                      ...g,
+                                      rows: g.rows.map((r) =>
+                                        r.id === row.id &&
+                                        r.field === "createdAt"
+                                          ? {
+                                              ...r,
+                                              createdTo: e.target.value,
+                                            }
+                                          : r,
+                                      ),
+                                    };
+                                  }),
                                 )
                               }
                               className="h-9 text-xs"
@@ -878,12 +1356,19 @@ export function DashboardWidgetConfigDialog({
                             className={cn(selectClass, "min-w-[10rem]")}
                             value={row.key}
                             onChange={(e) =>
-                              setFilterRows((prev) =>
-                                prev.map((r) =>
-                                  r.id === row.id && r.field === "customField"
-                                    ? { ...r, key: e.target.value }
-                                    : r,
-                                ),
+                              setFilterGroups((prev) =>
+                                prev.map((g) => {
+                                  if (g.id !== group.id) return g;
+                                  return {
+                                    ...g,
+                                    rows: g.rows.map((r) =>
+                                      r.id === row.id &&
+                                      r.field === "customField"
+                                        ? { ...r, key: e.target.value }
+                                        : r,
+                                    ),
+                                  };
+                                }),
                               )
                             }
                             aria-label="Campo customizado"
@@ -908,12 +1393,19 @@ export function DashboardWidgetConfigDialog({
                             className={cn(selectClass, "min-w-[8rem]")}
                             value={row.value}
                             onChange={(e) =>
-                              setFilterRows((prev) =>
-                                prev.map((r) =>
-                                  r.id === row.id && r.field === "customField"
-                                    ? { ...r, value: e.target.value }
-                                    : r,
-                                ),
+                              setFilterGroups((prev) =>
+                                prev.map((g) => {
+                                  if (g.id !== group.id) return g;
+                                  return {
+                                    ...g,
+                                    rows: g.rows.map((r) =>
+                                      r.id === row.id &&
+                                      r.field === "customField"
+                                        ? { ...r, value: e.target.value }
+                                        : r,
+                                    ),
+                                  };
+                                }),
                               )
                             }
                             placeholder="Valor no deal"
@@ -928,23 +1420,34 @@ export function DashboardWidgetConfigDialog({
                       size="icon"
                       className="size-10 shrink-0 self-end text-muted-foreground hover:text-destructive sm:self-start"
                       aria-label="Remover filtro"
-                      onClick={() => removeFilterRow(row.id)}
+                      onClick={() => removeFilterRow(group.id, row.id)}
                     >
                       <Trash2 className="size-4" strokeWidth={2} />
                     </Button>
                   </div>
-                ))}
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="mt-2 h-8 w-full text-xs text-muted-foreground"
-                onClick={addDashFilterRow}
-              >
-                Adicionar filtro neste grupo
-              </Button>
-            </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 h-8 w-full text-xs text-muted-foreground"
+                    onClick={() => addRowToGroup(group.id)}
+                  >
+                    Adicionar filtro neste grupo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-full text-xs text-muted-foreground"
+                    onClick={() => addGroupedFilterAfter(group.id)}
+                  >
+                    Adicionar filtro agrupado
+                  </Button>
+                </div>
+              </Fragment>
+            ))}
 
             <div className="mt-3 flex flex-col gap-2 border-t border-border/40 pt-3">
               <Button
@@ -952,7 +1455,7 @@ export function DashboardWidgetConfigDialog({
                 variant="outline"
                 size="sm"
                 className="w-full justify-center gap-1.5"
-                onClick={addDashFilterRow}
+                onClick={addRowToLastGroup}
               >
                 <Plus className="size-4" strokeWidth={2} />
                 Adicionar filtro

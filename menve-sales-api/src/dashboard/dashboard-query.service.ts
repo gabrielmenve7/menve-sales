@@ -9,6 +9,7 @@ import {
   resolveWidgetQuerySpec,
   widgetQuerySpecSchema,
   type ResolvedWidgetQuerySpec,
+  type WidgetFilterRowInput,
 } from "./dashboard-widget-spec.zod";
 
 export type ScalarResult = { kind: "scalar"; value: number };
@@ -100,50 +101,137 @@ export class DashboardQueryService {
     tenantId: string,
     spec: ResolvedWidgetQuerySpec,
   ): Prisma.DealWhereInput {
-    const and: Prisma.DealWhereInput[] = [
-      { tenantId },
-      { pipelineId: spec.pipelineId },
-      { status: { in: spec.filterStatuses } },
-    ];
+    const and: Prisma.DealWhereInput[] = [{ tenantId }, { pipelineId: spec.pipelineId }];
 
-    if (spec.filterTagIds && spec.filterTagIds.length > 0) {
-      const byTag = (tid: string) => ({
-        dealTags: { some: { tagId: tid } },
-      });
-      if (spec.filterTagMatch === "ANY") {
-        and.push({
-          OR: spec.filterTagIds.map((tid) => byTag(tid)),
-        });
-      } else {
-        and.push({
-          AND: spec.filterTagIds.map((tid) => byTag(tid)),
-        });
-      }
-    }
+    if (spec.filterGroups && spec.filterGroups.length > 0) {
+      const grouped = this.buildWhereFromFilterGroups(spec.filterGroups);
+      and.push(grouped);
+    } else {
+      and.push({ status: { in: spec.filterStatuses } });
 
-    if (spec.filterCreatedFrom || spec.filterCreatedTo) {
-      const range: Prisma.DateTimeFilter = {};
-      if (spec.filterCreatedFrom) {
-        range.gte = startOfDayUtc(spec.filterCreatedFrom);
-      }
-      if (spec.filterCreatedTo) {
-        range.lte = endOfDayUtc(spec.filterCreatedTo);
-      }
-      and.push({ createdAt: range });
-    }
-
-    if (spec.filterCustomFields && spec.filterCustomFields.length > 0) {
-      for (const f of spec.filterCustomFields) {
-        and.push({
-          customData: {
-            path: [f.key],
-            equals: f.value as Prisma.InputJsonValue,
-          },
+      if (spec.filterTagIds && spec.filterTagIds.length > 0) {
+        const byTag = (tid: string) => ({
+          dealTags: { some: { tagId: tid } },
         });
+        if (spec.filterTagMatch === "ANY") {
+          and.push({
+            OR: spec.filterTagIds.map((tid) => byTag(tid)),
+          });
+        } else {
+          and.push({
+            AND: spec.filterTagIds.map((tid) => byTag(tid)),
+          });
+        }
+      }
+
+      if (spec.filterCreatedFrom || spec.filterCreatedTo) {
+        const range: Prisma.DateTimeFilter = {};
+        if (spec.filterCreatedFrom) {
+          range.gte = startOfDayUtc(spec.filterCreatedFrom);
+        }
+        if (spec.filterCreatedTo) {
+          range.lte = endOfDayUtc(spec.filterCreatedTo);
+        }
+        and.push({ createdAt: range });
+      }
+
+      if (spec.filterCustomFields && spec.filterCustomFields.length > 0) {
+        for (const f of spec.filterCustomFields) {
+          and.push({
+            customData: {
+              path: [f.key],
+              equals: f.value as Prisma.InputJsonValue,
+            },
+          });
+        }
       }
     }
 
     return { AND: and };
+  }
+
+  /** E/Ou entre linhas (esquerda-associativo); E/Ou entre grupos. */
+  private buildWhereFromFilterGroups(
+    groups: NonNullable<ResolvedWidgetQuerySpec["filterGroups"]>,
+  ): Prisma.DealWhereInput {
+    const foldedGroups: Prisma.DealWhereInput[] = [];
+    for (const g of groups) {
+      const w = this.foldGroupRows(g.rows);
+      foldedGroups.push(
+        w ?? { status: { in: [DealStatus.OPEN, DealStatus.WON, DealStatus.LOST, DealStatus.ARCHIVED] } },
+      );
+    }
+    let acc: Prisma.DealWhereInput = foldedGroups[0]!;
+    for (let i = 1; i < foldedGroups.length; i++) {
+      const join = groups[i]!.groupJoin ?? "OR";
+      const next = foldedGroups[i]!;
+      acc =
+        join === "AND"
+          ? { AND: [acc, next] }
+          : { OR: [acc, next] };
+    }
+    return acc;
+  }
+
+  private foldGroupRows(rows: WidgetFilterRowInput[]): Prisma.DealWhereInput | null {
+    let acc: Prisma.DealWhereInput | null = null;
+    for (let i = 0; i < rows.length; i++) {
+      const w = this.rowToWhereFragment(rows[i]!);
+      if (w == null) continue;
+      if (acc == null) {
+        acc = w;
+        continue;
+      }
+      const join = rows[i]!.rowJoin ?? "AND";
+      acc = join === "AND" ? { AND: [acc, w] } : { OR: [acc, w] };
+    }
+    return acc;
+  }
+
+  private rowToWhereFragment(row: WidgetFilterRowInput): Prisma.DealWhereInput | null {
+    switch (row.field) {
+      case "status": {
+        const codes =
+          row.statusCodes && row.statusCodes.length > 0
+            ? row.statusCodes
+            : [DealStatus.OPEN];
+        return { status: { in: codes as DealStatus[] } };
+      }
+      case "tags": {
+        if (!row.tagIds || row.tagIds.length === 0) return null;
+        const byTag = (tid: string) => ({
+          dealTags: { some: { tagId: tid } },
+        });
+        const any =
+          row.filterTagMatch === "ANY" || row.op === "OR";
+        return any
+          ? { OR: row.tagIds.map((tid) => byTag(tid)) }
+          : { AND: row.tagIds.map((tid) => byTag(tid)) };
+      }
+      case "createdAt": {
+        if (!row.createdFrom?.trim() && !row.createdTo?.trim()) return null;
+        const range: Prisma.DateTimeFilter = {};
+        if (row.createdFrom?.trim()) {
+          range.gte = startOfDayUtc(row.createdFrom.trim());
+        }
+        if (row.createdTo?.trim()) {
+          range.lte = endOfDayUtc(row.createdTo.trim());
+        }
+        return { createdAt: range };
+      }
+      case "customField": {
+        const k = row.customKey?.trim();
+        if (!k || row.customValue === undefined || row.customValue === "") return null;
+        return {
+          customData: {
+            path: [k],
+            equals: row.customValue as Prisma.InputJsonValue,
+          },
+        };
+      }
+      default:
+        return null;
+    }
   }
 
   private async runQuery(
@@ -371,12 +459,38 @@ export class DashboardQueryService {
     tenantId: string,
     spec: ResolvedWidgetQuerySpec,
   ): Promise<SeriesResult> {
-    const days = spec.days ?? 30;
-    const since = new Date();
-    since.setDate(since.getDate() - days);
-    since.setUTCHours(0, 0, 0, 0);
-
     const baseWhere = this.buildWhere(tenantId, spec);
+
+    let since: Date;
+    let dateKeys: string[];
+
+    if (spec.timelineStart?.trim()) {
+      since = startOfDayUtc(spec.timelineStart.trim());
+      const end = new Date();
+      end.setUTCHours(23, 59, 59, 999);
+      dateKeys = [];
+      for (
+        let d = new Date(since.getTime());
+        d.getTime() <= end.getTime();
+        d.setUTCDate(d.getUTCDate() + 1)
+      ) {
+        dateKeys.push(d.toISOString().slice(0, 10));
+        if (dateKeys.length > 366) break;
+      }
+    } else {
+      const days = Math.min(366, Math.max(1, spec.days ?? 30));
+      const rollingSince = new Date();
+      rollingSince.setDate(rollingSince.getDate() - days);
+      rollingSince.setUTCHours(0, 0, 0, 0);
+      since = rollingSince;
+      dateKeys = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const dt = new Date();
+        dt.setDate(dt.getDate() - i);
+        dateKeys.push(dt.toISOString().slice(0, 10));
+      }
+    }
+
     const where: Prisma.DealWhereInput = {
       AND: [baseWhere, { createdAt: { gte: since } }],
     };
@@ -406,10 +520,7 @@ export class DashboardQueryService {
     }
 
     const series: { label: string; value: number }[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const dt = new Date();
-      dt.setDate(dt.getDate() - i);
-      const dkey = dt.toISOString().slice(0, 10);
+    for (const dkey of dateKeys) {
       const arr = map.get(dkey) ?? [];
       let value: number;
       if (spec.dataMeasure === "QUANTITY") {
