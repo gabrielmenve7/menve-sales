@@ -3,6 +3,7 @@
 import type { CustomField } from "@prisma/client";
 import type { Pipeline, Stage } from "@prisma/client";
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   CircleDot,
@@ -19,12 +20,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { Dispatch, SetStateAction } from "react";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import {
   createPipelineAutomationRule,
   deletePipelineAutomationRule,
   listPipelineAutomationRuns,
   togglePipelineAutomationRule,
+  updatePipelineAutomationRule,
 } from "@/actions/pipeline-automations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -515,6 +517,72 @@ function parseRulesFromApi(raw: unknown): PipelineAutomationRuleRow[] {
     });
   }
   return out;
+}
+
+function automationValueToFormString(v: unknown): string {
+  if (v === undefined || v === null) return "";
+  if (typeof v === "string") return v;
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+/** Preenche o builder a partir de uma regra persistida (uma regra = um gatilho). */
+function ruleRowToFormState(rule: PipelineAutomationRuleRow): {
+  name: string;
+  triggerSteps: AutomationTriggerStepRow[];
+  actionSteps: AutomationActionStepRow[];
+} {
+  const step = createTriggerStepRow();
+  step.triggerType = rule.triggerType;
+  const f = rule.triggerFilter;
+  if (f) {
+    switch (rule.triggerType) {
+      case "DEAL_STAGE_TRANSITION":
+        if (f.fromStageId) step.stageFromId = f.fromStageId;
+        if (f.toStageId) step.stageToId = f.toStageId;
+        break;
+      case "DEAL_ENTERED_STAGE":
+        if (f.toStageId) step.legacyStageFilterId = f.toStageId;
+        break;
+      case "DEAL_LEFT_STAGE":
+        if (f.fromStageId) step.legacyStageFilterId = f.fromStageId;
+        break;
+      case "DEAL_CREATED":
+        if (f.campaignSourceIds?.length)
+          step.selectedCampaignIds = [...f.campaignSourceIds];
+        break;
+      case "DEAL_CUSTOM_FIELD_CHANGED":
+        if (f.customFieldKey) step.customFieldKey = f.customFieldKey;
+        step.fromCustomStr = automationValueToFormString(f.fromCustomValue);
+        step.toCustomStr = automationValueToFormString(f.toCustomValue);
+        break;
+      case "CONTACT_TAG_ADDED":
+      case "CONTACT_TAG_REMOVED":
+        if (f.tagId) step.tagFilterId = f.tagId;
+        break;
+      default:
+        break;
+    }
+  }
+
+  const actionSteps: AutomationActionStepRow[] = [];
+  for (const a of rule.actions) {
+    if (a.type === "MOVE_TO_STAGE") {
+      const row = createActionStepRow();
+      row.actionKindType = "DEAL_STAGE_TRANSITION";
+      row.actionStageToId = a.stageId;
+      actionSteps.push(row);
+    }
+  }
+
+  return {
+    name: rule.name,
+    triggerSteps: [step],
+    actionSteps,
+  };
 }
 
 function parseRuns(raw: unknown): PipelineAutomationRunRow[] {
@@ -1164,6 +1232,7 @@ export function PipelineAutomationsPanel({
   tenantTags = [],
   tenantMembers = [],
   dialogAppearance,
+  automationDialogMode,
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   rulesRaw: unknown;
@@ -1171,6 +1240,8 @@ export function PipelineAutomationsPanel({
   variant?: "page" | "dialog";
   /** Modal: aparência do cromado (claro = tema do app). */
   dialogAppearance?: "light" | "dark";
+  /** Modal: fluxo lista+edição ou só criar (sem lista de regras). */
+  automationDialogMode?: "manage" | "create";
   onRulesChanged?: () => void;
   /** Modal: fecha sem salvar (botão Cancelar). */
   onCancel?: () => void;
@@ -1219,6 +1290,12 @@ export function PipelineAutomationsPanel({
     Record<string, PipelineAutomationRunRow[]>
   >({});
   const [runsLoading, setRunsLoading] = useState<string | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<"list" | "form">(() =>
+    variant === "dialog" && automationDialogMode === "create"
+      ? "form"
+      : "list",
+  );
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
 
   const filteredTriggerGroups = useMemo(() => {
     const q = triggerSearch.trim().toLowerCase();
@@ -1241,6 +1318,46 @@ export function PipelineAutomationsPanel({
       ),
     })).filter((g) => g.types.length > 0);
   }, [actionSearch]);
+
+  const resetFormToEmpty = useCallback(() => {
+    setName("");
+    setTriggerSteps([createTriggerStepRow()]);
+    setActionSteps([createActionStepRow()]);
+    setFormError(null);
+    setOpenTriggerMenuId(null);
+    setOpenActionMenuId(null);
+    setTriggerSearch("");
+    setActionSearch("");
+  }, []);
+
+  const backToRulesList = useCallback(() => {
+    resetFormToEmpty();
+    setEditingRuleId(null);
+    setWorkspaceView("list");
+  }, [resetFormToEmpty]);
+
+  const beginEditRule = useCallback(
+    (ruleId: string) => {
+      const r = rules.find((x) => x.id === ruleId);
+      if (!r) return;
+      const mapped = ruleRowToFormState(r);
+      setName(mapped.name);
+      setTriggerSteps(mapped.triggerSteps);
+      setActionSteps(
+        mapped.actionSteps.length ? mapped.actionSteps : [createActionStepRow()],
+      );
+      setEditingRuleId(ruleId);
+      setWorkspaceView("form");
+      setFormError(null);
+    },
+    [rules],
+  );
+
+  const beginCreateForm = useCallback(() => {
+    resetFormToEmpty();
+    setEditingRuleId(null);
+    setWorkspaceView("form");
+  }, [resetFormToEmpty]);
 
   function patchTriggerStep(
     id: string,
@@ -1360,9 +1477,26 @@ export function PipelineAutomationsPanel({
       );
       return;
     }
+    if (editingRuleId && triggerSteps.length !== 1) {
+      setFormError("Na edição use apenas um gatilho.");
+      return;
+    }
     const baseName = name.trim();
     startTransition(async () => {
       try {
+        if (editingRuleId) {
+          await updatePipelineAutomationRule({
+            pipelineId: pipeline.id,
+            ruleId: editingRuleId,
+            name: baseName,
+            triggerType: triggerSteps[0].triggerType,
+            triggerFilter: buildTriggerFilterFromStep(triggerSteps[0]),
+            actions,
+          });
+          onRulesChanged?.();
+          backToRulesList();
+          return;
+        }
         for (let i = 0; i < triggerSteps.length; i++) {
           const step = triggerSteps[i];
           const ruleName =
@@ -1428,6 +1562,34 @@ export function PipelineAutomationsPanel({
     ? "text-[11px] font-medium text-zinc-500"
     : fieldLabelClass;
 
+  const automationDialogModeManaged =
+    isDialogLayout &&
+    (automationDialogMode === "manage" || automationDialogMode === "create")
+      ? automationDialogMode
+      : null;
+
+  const showLegacyPageLayout =
+    !isDialogLayout || automationDialogModeManaged === null;
+
+  const showRulesSection =
+    showLegacyPageLayout ||
+    (automationDialogModeManaged === "manage" && workspaceView === "list");
+
+  const showBuilderForm =
+    showLegacyPageLayout || workspaceView === "form";
+
+  const showPermissionDeny =
+    !canConfigure &&
+    (variant === "page" ||
+      (isDialogLayout &&
+        automationDialogModeManaged === "create" &&
+        workspaceView === "form"));
+
+  const manageListInteractive =
+    canConfigure &&
+    automationDialogModeManaged === "manage" &&
+    workspaceView === "list";
+
   const previewTriggerText = useMemo(
     () => previewTriggerLabel(triggerSteps),
     [triggerSteps],
@@ -1452,7 +1614,14 @@ export function PipelineAutomationsPanel({
         dialogChromeDark && "text-zinc-100",
       )}
     >
-      {variant === "dialog" ? (
+      {variant === "page" ? (
+        <p className="text-[12px] text-muted-foreground">
+          Funil:{" "}
+          <span className="font-medium text-foreground">{pipeline.name}</span>
+          . As regras são avaliadas na ordem abaixo quando o evento ocorre.
+        </p>
+      ) : automationDialogModeManaged === "manage" &&
+        workspaceView === "list" ? (
         <p
           className={cn(
             "text-[12px]",
@@ -1461,15 +1630,52 @@ export function PipelineAutomationsPanel({
         >
           As regras são avaliadas na ordem abaixo quando o evento ocorre.
         </p>
+      ) : automationDialogModeManaged === "manage" &&
+        workspaceView === "form" ? (
+        <p
+          className={cn(
+            "text-[12px]",
+            dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
+          )}
+        >
+          Edite gatilho, ações e nome. Salve para aplicar à regra.
+        </p>
+      ) : automationDialogModeManaged === "create" ? (
+        <p
+          className={cn(
+            "text-[12px]",
+            dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
+          )}
+        >
+          Configure gatilho e ações para uma nova automação.
+        </p>
       ) : (
-        <p className="text-[12px] text-muted-foreground">
-          Funil:{" "}
-          <span className="font-medium text-foreground">{pipeline.name}</span>
-          . As regras são avaliadas na ordem abaixo quando o evento ocorre.
+        <p
+          className={cn(
+            "text-[12px]",
+            dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
+          )}
+        >
+          As regras são avaliadas na ordem abaixo quando o evento ocorre.
         </p>
       )}
 
-      {canConfigure ? (
+      {isDialogLayout &&
+      automationDialogModeManaged === "manage" &&
+      workspaceView === "form" ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 w-fit gap-1.5 px-2"
+          onClick={backToRulesList}
+        >
+          <ArrowLeft className="size-4 shrink-0" strokeWidth={2} />
+          Voltar às regras
+        </Button>
+      ) : null}
+
+      {canConfigure && showBuilderForm ? (
         <form
           id={isDialogLayout ? "pipeline-automation-form" : undefined}
           onSubmit={onSubmit}
@@ -1790,7 +1996,10 @@ export function PipelineAutomationsPanel({
               <div className="flex justify-center">
                 <button
                   type="button"
-                  disabled={triggerSteps.length >= MAX_GROUPED_TRIGGERS}
+                  disabled={
+                    !!editingRuleId ||
+                    triggerSteps.length >= MAX_GROUPED_TRIGGERS
+                  }
                   className={cn(
                     "flex size-8 items-center justify-center rounded-lg border border-dashed transition-colors",
                     dialogChromeDark
@@ -2158,7 +2367,10 @@ export function PipelineAutomationsPanel({
               <div className="flex justify-center">
                 <button
                   type="button"
-                  disabled={actionSteps.length >= MAX_GROUPED_ACTIONS}
+                  disabled={
+                    !!editingRuleId ||
+                    actionSteps.length >= MAX_GROUPED_ACTIONS
+                  }
                   className={cn(
                     "flex size-8 items-center justify-center rounded-lg border border-dashed transition-colors",
                     dialogChromeDark
@@ -2302,11 +2514,15 @@ export function PipelineAutomationsPanel({
                   "bg-zinc-100 text-zinc-950 hover:bg-white dark:bg-zinc-200",
               )}
             >
-              {pending ? "Salvando…" : "Salvar automação"}
+              {pending
+                ? "Salvando…"
+                : editingRuleId
+                  ? "Salvar alterações"
+                  : "Salvar automação"}
             </Button>
           </div>
         </form>
-      ) : (
+      ) : showPermissionDeny ? (
         <div
           className={cn(
             "rounded-lg border px-4 py-3 text-sm",
@@ -2328,20 +2544,34 @@ export function PipelineAutomationsPanel({
             Configurações
           </Link>
         </div>
-      )}
+      ) : null}
 
+      {showRulesSection ? (
       <div
         id="pipeline-automation-rules"
         className="min-h-0 flex-1 space-y-3 scroll-mt-4"
       >
-        <p
-          className={cn(
-            "text-sm font-semibold",
-            dialogChromeDark ? "text-zinc-200" : "text-foreground",
-          )}
-        >
-          Regras ativas
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p
+            className={cn(
+              "text-sm font-semibold",
+              dialogChromeDark ? "text-zinc-200" : "text-foreground",
+            )}
+          >
+            Regras ativas
+          </p>
+          {manageListInteractive ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={beginCreateForm}
+            >
+              Criar automação
+            </Button>
+          ) : null}
+        </div>
         {rules.length === 0 ? (
           <p
             className={cn(
@@ -2349,18 +2579,56 @@ export function PipelineAutomationsPanel({
               dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
             )}
           >
-            Nenhuma automação ainda. {canConfigure ? "Crie uma regra acima." : ""}
+            Nenhuma automação ainda.{" "}
+            {canConfigure && manageListInteractive
+              ? "Use “Criar automação” para adicionar."
+              : canConfigure && showLegacyPageLayout
+                ? "Crie uma regra acima."
+                : ""}
           </p>
         ) : (
           <ul className="space-y-2">
             {rules.map((r) => (
               <li
                 key={r.id}
+                role={manageListInteractive ? "button" : undefined}
+                tabIndex={manageListInteractive ? 0 : undefined}
+                onClick={
+                  manageListInteractive
+                    ? (e) => {
+                        if (
+                          (e.target as HTMLElement).closest(
+                            "[data-automation-row-interactive]",
+                          )
+                        )
+                          return;
+                        beginEditRule(r.id);
+                      }
+                    : undefined
+                }
+                onKeyDown={
+                  manageListInteractive
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          if (
+                            (e.target as HTMLElement).closest(
+                              "[data-automation-row-interactive]",
+                            )
+                          )
+                            return;
+                          beginEditRule(r.id);
+                        }
+                      }
+                    : undefined
+                }
                 className={cn(
                   "rounded-lg border p-3",
                   dialogChromeDark
                     ? "border-zinc-800 bg-zinc-900/35"
                     : "border-border/60 bg-muted/15 dark:bg-muted/10",
+                  manageListInteractive &&
+                    "cursor-pointer transition-colors hover:bg-muted/25 dark:hover:bg-muted/20",
                 )}
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -2383,7 +2651,10 @@ export function PipelineAutomationsPanel({
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {canConfigure ? (
                       <>
-                        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                        <label
+                          className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+                          data-automation-row-interactive
+                        >
                           <input
                             type="checkbox"
                             checked={r.enabled}
@@ -2408,6 +2679,7 @@ export function PipelineAutomationsPanel({
                           variant="ghost"
                           size="sm"
                           className="h-8 gap-1 text-xs text-muted-foreground"
+                          data-automation-row-interactive
                           onClick={() => loadRuns(r.id)}
                         >
                           {openRunsId === r.id ? (
@@ -2423,6 +2695,7 @@ export function PipelineAutomationsPanel({
                           size="icon"
                           className="size-9 text-muted-foreground hover:text-destructive"
                           aria-label="Excluir regra"
+                          data-automation-row-interactive
                           onClick={() => {
                             if (
                               !confirm(
@@ -2450,6 +2723,7 @@ export function PipelineAutomationsPanel({
                         variant="ghost"
                         size="sm"
                         className="h-8 gap-1 text-xs text-muted-foreground"
+                        data-automation-row-interactive
                         onClick={() => loadRuns(r.id)}
                       >
                         {openRunsId === r.id ? (
@@ -2463,7 +2737,10 @@ export function PipelineAutomationsPanel({
                   </div>
                 </div>
                 {openRunsId === r.id ? (
-                  <div className="mt-3 border-t border-border/40 pt-3">
+                  <div
+                    className="mt-3 border-t border-border/40 pt-3"
+                    data-automation-row-interactive
+                  >
                     {runsLoading === r.id ? (
                       <p className="text-xs text-muted-foreground">
                         Carregando…
@@ -2499,6 +2776,7 @@ export function PipelineAutomationsPanel({
           </ul>
         )}
       </div>
+      ) : null}
     </div>
   );
 }

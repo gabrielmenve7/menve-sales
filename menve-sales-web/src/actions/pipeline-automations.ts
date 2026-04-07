@@ -36,6 +36,30 @@ export async function createPipelineAutomationRule(input: {
   revalidatePath("/pipeline");
 }
 
+export async function updatePipelineAutomationRule(input: {
+  pipelineId: string;
+  ruleId: string;
+  name: string;
+  triggerType: PipelineAutomationTriggerType;
+  triggerFilter: PipelineAutomationTriggerFilter | null;
+  actions: PipelineAutomationAction[];
+}) {
+  await assertCanConfigureTenant();
+  await apiServer(
+    `/pipelines/${input.pipelineId}/automations/${input.ruleId}`,
+    {
+      method: "PATCH",
+      json: {
+        name: input.name,
+        triggerType: input.triggerType,
+        triggerFilter: input.triggerFilter,
+        actions: input.actions,
+      },
+    },
+  );
+  revalidatePath("/pipeline");
+}
+
 export async function deletePipelineAutomationRule(input: {
   pipelineId: string;
   ruleId: string;

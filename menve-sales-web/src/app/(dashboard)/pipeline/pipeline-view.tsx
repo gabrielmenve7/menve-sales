@@ -112,7 +112,7 @@ export function PipelineView({
   const router = useRouter();
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [automationMenuOpen, setAutomationMenuOpen] = useState(false);
-  const [automationScrollSection, setAutomationScrollSection] = useState<
+  const [automationDialogMode, setAutomationDialogMode] = useState<
     "create" | "manage"
   >("create");
   const [activeAutomationCount, setActiveAutomationCount] = useState<
@@ -135,7 +135,7 @@ export function PipelineView({
 
   useEffect(() => {
     if (!openAutomationsFromUrl) return;
-    setAutomationScrollSection("create");
+    setAutomationDialogMode("create");
     setAutomationsOpen(true);
     router.replace(
       `/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}`,
@@ -498,7 +498,7 @@ export function PipelineView({
                   size="sm"
                   className="w-full justify-start gap-2"
                   onClick={() => {
-                    setAutomationScrollSection("manage");
+                    setAutomationDialogMode("manage");
                     setAutomationsOpen(true);
                     setAutomationMenuOpen(false);
                   }}
@@ -512,7 +512,7 @@ export function PipelineView({
                   size="sm"
                   className="w-full justify-start gap-2"
                   onClick={() => {
-                    setAutomationScrollSection("create");
+                    setAutomationDialogMode("create");
                     setAutomationsOpen(true);
                     setAutomationMenuOpen(false);
                   }}
@@ -705,7 +705,7 @@ export function PipelineView({
           setAutomationsOpen(open);
           if (!open) void refreshActiveAutomationCount();
         }}
-        initialScrollSection={automationScrollSection}
+        automationDialogMode={automationDialogMode}
         pipeline={activePipeline}
         canConfigure={canConfigureAutomations ?? false}
         dealCustomFieldDefs={dealCustomFieldDefs}
