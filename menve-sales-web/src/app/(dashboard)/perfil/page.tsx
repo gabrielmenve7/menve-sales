@@ -8,7 +8,7 @@ export default async function PerfilPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4 md:px-6 md:py-6">
-      <div className="mx-auto w-full max-w-lg rounded-2xl border border-border/60 bg-card/95 p-5 shadow-lg dark:border-border/50 dark:bg-card/90 md:p-8">
+      <div className="mx-auto w-full max-w-5xl rounded-2xl border border-border/60 bg-card/95 p-5 shadow-lg dark:border-border/50 dark:bg-card/90 md:p-8">
         <div className="mb-6">
           <h1 className="text-xl font-semibold tracking-tight">Seu perfil</h1>
           <p className="text-sm text-muted-foreground">

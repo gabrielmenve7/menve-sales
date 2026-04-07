@@ -103,7 +103,7 @@ export function WorkspaceSwitcher({
         align="start"
         side="bottom"
         sideOffset={8}
-        className="w-[min(calc(100vw-2rem),288px)] rounded-xl border border-border/80 bg-popover p-0 shadow-xl dark:border-border/60 dark:shadow-black/50"
+        className="w-[min(calc(100vw-2rem),440px)] rounded-xl border border-border/80 bg-popover p-0 shadow-xl dark:border-border/60 dark:shadow-black/50"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <div className="border-b border-border/60 px-4 pb-4 pt-4 dark:border-border/50">
@@ -150,34 +150,36 @@ export function WorkspaceSwitcher({
             href="/settings"
             onClick={() => setOpen(false)}
             className={cn(
-              "flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent bg-muted/70 py-3 text-center text-xs font-medium transition-colors",
+              "flex min-h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-lg border border-transparent bg-muted/70 px-2 py-3 text-center text-xs font-medium leading-snug transition-colors",
               "hover:bg-muted hover:text-foreground dark:bg-muted/40 dark:hover:bg-muted/60",
             )}
           >
-            <Settings2 className="size-[18px] opacity-90" strokeWidth={1.75} />
-            Configurações
+            <Settings2 className="size-[18px] shrink-0 opacity-90" strokeWidth={1.75} />
+            <span className="break-words">Configurações</span>
           </Link>
           <Link
             href="/perfil"
+            aria-label="Perfil"
+            title="Perfil"
             onClick={() => setOpen(false)}
             className={cn(
-              "flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent bg-muted/70 py-3 text-center text-xs font-medium transition-colors",
+              "flex min-h-[4.25rem] flex-col items-center justify-center gap-0 rounded-lg border border-transparent bg-muted/70 px-2 py-3 text-center text-xs font-medium transition-colors",
               "hover:bg-muted hover:text-foreground dark:bg-muted/40 dark:hover:bg-muted/60",
             )}
           >
-            <UserCircle className="size-[18px] opacity-90" strokeWidth={1.75} />
-            Perfil
+            <UserCircle className="size-[22px] shrink-0 opacity-90" strokeWidth={1.75} />
+            <span className="sr-only">Perfil</span>
           </Link>
           <Link
             href="/settings?tab=members"
             onClick={() => setOpen(false)}
             className={cn(
-              "flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent bg-muted/70 py-3 text-center text-xs font-medium transition-colors",
+              "flex min-h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-lg border border-transparent bg-muted/70 px-2 py-3 text-center text-xs font-medium leading-snug transition-colors",
               "hover:bg-muted hover:text-foreground dark:bg-muted/40 dark:hover:bg-muted/60",
             )}
           >
-            <Users className="size-[18px] opacity-90" strokeWidth={1.75} />
-            Pessoas
+            <Users className="size-[18px] shrink-0 opacity-90" strokeWidth={1.75} />
+            <span className="break-words">Pessoas</span>
           </Link>
         </div>
       </PopoverContent>
