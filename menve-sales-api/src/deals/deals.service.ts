@@ -515,8 +515,9 @@ export class DealsService {
   }
 
   /**
-   * Próximo deal OPEN na mesma etapa do mesmo funil, mesma ordem do board (`updatedAt` desc).
-   * Fila circular: no último da ordem, o “próximo” é o primeiro (evita falso “sem próximo”).
+   * Próximo deal OPEN na mesma etapa — mesma sequência do quadro do funil:
+   * ordena todos os OPEN do funil como `getPipelineDeals` e, na etapa, mantém a ordem
+   * em que os cards aparecem na coluna (topo → base).
    */
   async nextOpenDealInSameStageQueue(tenantId: string, dealId: string) {
     const current = await this.prisma.deal.findFirst({
@@ -527,26 +528,24 @@ export class DealsService {
       return { next: null };
     }
 
-    const stageDeals = await this.prisma.deal.findMany({
+    const pipelineDeals = await this.prisma.deal.findMany({
       where: {
         tenantId,
         pipelineId: current.pipelineId,
-        stageId: current.stageId,
         status: "OPEN",
       },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      select: { id: true, contactId: true },
+      select: { id: true, contactId: true, stageId: true },
     });
 
+    const stageDeals = pipelineDeals.filter(
+      (d) => d.stageId === current.stageId,
+    );
     const idx = stageDeals.findIndex((d) => d.id === dealId);
-    if (idx < 0) {
+    if (idx < 0 || idx >= stageDeals.length - 1) {
       return { next: null };
     }
-    if (stageDeals.length <= 1) {
-      return { next: null };
-    }
-    const nextIdx = (idx + 1) % stageDeals.length;
-    const next = stageDeals[nextIdx]!;
+    const next = stageDeals[idx + 1]!;
     return {
       next: { dealId: next.id, contactId: next.contactId },
     };

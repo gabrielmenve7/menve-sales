@@ -239,16 +239,22 @@ export function InboxLeadSidebar({
 
   const pipelineDealId = activeDeal?.id ?? null;
 
-  const { data: nextInStage, isLoading: nextInStageLoading } = useQuery({
+  const {
+    data: nextInStage,
+    isLoading: nextInStageLoading,
+    isError: nextInStageError,
+  } = useQuery({
     queryKey: ["deal-next-in-stage", pipelineDealId],
     queryFn: () => getNextOpenDealInSameStage(pipelineDealId!),
     enabled: Boolean(pipelineDealId),
-    staleTime: 10_000,
+    staleTime: 0,
+    gcTime: 120_000,
   });
 
   const canGoToNextInQueue =
     Boolean(pipelineDealId) &&
     !nextInStageLoading &&
+    !nextInStageError &&
     Boolean(nextInStage);
 
   const onRefresh = useCallback(() => {
@@ -259,7 +265,8 @@ export function InboxLeadSidebar({
   const onGoToNextInQueue = useCallback(() => {
     if (!nextInStage) return;
     onOpenContactInInbox(nextInStage.contactId);
-  }, [nextInStage, onOpenContactInInbox]);
+    void queryClient.invalidateQueries({ queryKey: ["deal-next-in-stage"] });
+  }, [nextInStage, onOpenContactInInbox, queryClient]);
 
   return (
     <aside className="flex h-full min-h-0 w-full flex-col border-l border-border/20 bg-background dark:border-border/30">
@@ -275,12 +282,14 @@ export function InboxLeadSidebar({
           disabled={!canGoToNextInQueue}
           title={
             canGoToNextInQueue
-              ? "Próximo lead na mesma etapa deste funil (ordem do quadro; no fim volta ao primeiro)"
+              ? "Próximo lead na mesma etapa, na ordem do quadro (de cima para baixo)"
               : !pipelineDealId
                 ? "Selecione uma oportunidade aberta"
                 : nextInStageLoading
-                  ? "Carregando fila da etapa…"
-                  : "Só há um lead OPEN nesta etapa neste funil. Etapas com o mesmo nome em outro funil são outra fila."
+                  ? "Carregando…"
+                  : nextInStageError
+                    ? "Não foi possível carregar a fila. Atualize a página."
+                    : "Fim da fila nesta etapa ou só há um lead aqui"
           }
           onClick={onGoToNextInQueue}
           className={cn(
