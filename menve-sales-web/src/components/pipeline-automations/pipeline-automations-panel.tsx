@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   createPipelineAutomationRule,
   deletePipelineAutomationRule,
@@ -52,9 +52,7 @@ import {
 import { pipelineSelectClass } from "@/lib/pipeline-ui-tokens";
 import { cn } from "@/lib/utils";
 
-/** Página / embed: cartões alinhados aos filtros do pipeline. */
-const groupPanelClass =
-  "rounded-lg border border-border/60 bg-muted/20 p-3 shadow-sm dark:bg-muted/10";
+/** Página / embed: cabeçalho dos blocos Acionar / Ação. */
 const groupHeaderClass =
   "flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 shadow-sm dark:bg-muted/10";
 const fieldLabelClass = "text-[11px] font-medium text-muted-foreground";
@@ -126,6 +124,216 @@ const ACTION_DATE_PRESET_ORDER: PipelineAutomationActionDatePreset[] = [
   "PICK_DATE",
   "REMOVE_DATE",
 ];
+
+const MAX_GROUPED_TRIGGERS = 8;
+const MAX_GROUPED_ACTIONS = 5;
+
+type AutomationTriggerStepRow = {
+  id: string;
+  triggerType: PipelineAutomationTriggerType;
+  stageFromId: string;
+  stageToId: string;
+  legacyStageFilterId: string;
+  selectedCampaignIds: string[];
+  customFieldKey: string;
+  fromCustomStr: string;
+  toCustomStr: string;
+  tagFilterId: string;
+};
+
+type AutomationActionStepRow = {
+  id: string;
+  actionKindType: PipelineAutomationActionKindType;
+  actionStageFromId: string;
+  actionStageToId: string;
+  actionLegacyStageFilterId: string;
+  actionSelectedCampaignIds: string[];
+  actionCustomFieldKey: string;
+  actionFromCustomStr: string;
+  actionToCustomStr: string;
+  actionTagFilterId: string;
+  actionAddAssigneeUserId: string;
+  actionRemoveAssigneeUserId: string;
+  actionDatePreset: PipelineAutomationActionDatePreset | "";
+  actionDateDaysAfter: string;
+  actionDatePick: string;
+};
+
+function newAutomationRowId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `r-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  );
+}
+
+function createTriggerStepRow(): AutomationTriggerStepRow {
+  return {
+    id: newAutomationRowId(),
+    triggerType: "DEAL_STAGE_TRANSITION",
+    stageFromId: "",
+    stageToId: "",
+    legacyStageFilterId: "",
+    selectedCampaignIds: [],
+    customFieldKey: "",
+    fromCustomStr: "",
+    toCustomStr: "",
+    tagFilterId: "",
+  };
+}
+
+function createActionStepRow(): AutomationActionStepRow {
+  return {
+    id: newAutomationRowId(),
+    actionKindType: "DEAL_STAGE_TRANSITION",
+    actionStageFromId: "",
+    actionStageToId: "",
+    actionLegacyStageFilterId: "",
+    actionSelectedCampaignIds: [],
+    actionCustomFieldKey: "",
+    actionFromCustomStr: "",
+    actionToCustomStr: "",
+    actionTagFilterId: "",
+    actionAddAssigneeUserId: "",
+    actionRemoveAssigneeUserId: "",
+    actionDatePreset: "",
+    actionDateDaysAfter: "",
+    actionDatePick: "",
+  };
+}
+
+function clearedFieldsForTriggerType(
+  t: PipelineAutomationTriggerType,
+): Partial<AutomationTriggerStepRow> {
+  return {
+    triggerType: t,
+    stageFromId: "",
+    stageToId: "",
+    legacyStageFilterId: "",
+    selectedCampaignIds: [],
+    customFieldKey: "",
+    fromCustomStr: "",
+    toCustomStr: "",
+    tagFilterId: "",
+  };
+}
+
+function clearedFieldsForActionKind(
+  k: PipelineAutomationActionKindType,
+): Partial<AutomationActionStepRow> {
+  return {
+    actionKindType: k,
+    actionStageFromId: "",
+    actionStageToId: "",
+    actionLegacyStageFilterId: "",
+    actionSelectedCampaignIds: [],
+    actionCustomFieldKey: "",
+    actionFromCustomStr: "",
+    actionToCustomStr: "",
+    actionTagFilterId: "",
+    actionAddAssigneeUserId: "",
+    actionRemoveAssigneeUserId: "",
+    actionDatePreset: "",
+    actionDateDaysAfter: "",
+    actionDatePick: "",
+  };
+}
+
+function buildTriggerFilterFromStep(
+  step: AutomationTriggerStepRow,
+): PipelineAutomationTriggerFilter | null {
+  const out: PipelineAutomationTriggerFilter = {};
+  switch (step.triggerType) {
+    case "DEAL_STAGE_TRANSITION":
+      if (step.stageFromId.trim()) out.fromStageId = step.stageFromId.trim();
+      if (step.stageToId.trim()) out.toStageId = step.stageToId.trim();
+      break;
+    case "DEAL_ENTERED_STAGE":
+      if (step.legacyStageFilterId.trim())
+        out.toStageId = step.legacyStageFilterId.trim();
+      break;
+    case "DEAL_LEFT_STAGE":
+      if (step.legacyStageFilterId.trim())
+        out.fromStageId = step.legacyStageFilterId.trim();
+      break;
+    case "DEAL_CREATED":
+      if (step.selectedCampaignIds.length)
+        out.campaignSourceIds = [...step.selectedCampaignIds];
+      break;
+    case "DEAL_CUSTOM_FIELD_CHANGED":
+      out.customFieldKey = step.customFieldKey.trim();
+      {
+        const fv = parseOptionalAutomationValue(step.fromCustomStr);
+        if (fv !== undefined) out.fromCustomValue = fv;
+        const tv = parseOptionalAutomationValue(step.toCustomStr);
+        if (tv !== undefined) out.toCustomValue = tv;
+      }
+      break;
+    case "CONTACT_TAG_ADDED":
+    case "CONTACT_TAG_REMOVED":
+      if (step.tagFilterId.trim()) out.tagId = step.tagFilterId.trim();
+      break;
+    default:
+      break;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function buildMoveActionsFromSteps(
+  steps: AutomationActionStepRow[],
+): PipelineAutomationAction[] {
+  const out: PipelineAutomationAction[] = [];
+  for (const s of steps) {
+    if (s.actionKindType !== "DEAL_STAGE_TRANSITION") continue;
+    const sid = s.actionStageToId.trim();
+    if (sid) out.push({ type: "MOVE_TO_STAGE", stageId: sid });
+  }
+  return out;
+}
+
+function validateTriggerStep(
+  step: AutomationTriggerStepRow,
+  index: number,
+): string | null {
+  const n = index + 1;
+  if (
+    step.triggerType === "DEAL_CUSTOM_FIELD_CHANGED" &&
+    !step.customFieldKey.trim()
+  ) {
+    return `Gatilho ${n}: selecione o campo personalizado.`;
+  }
+  return null;
+}
+
+function validateActionStep(
+  step: AutomationActionStepRow,
+  dealCustomFieldDefs: CustomField[],
+  index: number,
+): string | null {
+  const n = index + 1;
+  if (step.actionKindType === "DEAL_CUSTOM_FIELD_CHANGED") {
+    if (!step.actionCustomFieldKey.trim()) {
+      return `Ação ${n}: selecione o campo personalizado.`;
+    }
+    const af = dealCustomFieldDefs.find(
+      (d) => d.key === step.actionCustomFieldKey.trim(),
+    );
+    if (af?.fieldType === "DATE") {
+      if (!step.actionDatePreset) {
+        return `Ação ${n}: selecione um valor para a data.`;
+      }
+      if (step.actionDatePreset === "DAYS_AFTER_TRIGGER") {
+        const x = parseInt(step.actionDateDaysAfter.trim(), 10);
+        if (!Number.isFinite(x) || x < 0) {
+          return `Ação ${n}: informe quantos dias após o gatilho.`;
+        }
+      }
+      if (step.actionDatePreset === "PICK_DATE" && !step.actionDatePick.trim()) {
+        return `Ação ${n}: escolha uma data.`;
+      }
+    }
+  }
+  return null;
+}
 
 function triggerIcon(t: PipelineAutomationTriggerType) {
   switch (t) {
@@ -949,45 +1157,19 @@ export function PipelineAutomationsPanel({
   );
 
   const [name, setName] = useState("");
-  const [triggerType, setTriggerType] =
-    useState<PipelineAutomationTriggerType>("DEAL_STAGE_TRANSITION");
-  const [stageFromId, setStageFromId] = useState("");
-  const [stageToId, setStageToId] = useState("");
-  const [legacyStageFilterId, setLegacyStageFilterId] = useState("");
-  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
-  const [customFieldKey, setCustomFieldKey] = useState("");
-  const [fromCustomStr, setFromCustomStr] = useState("");
-  const [toCustomStr, setToCustomStr] = useState("");
-  const [tagFilterId, setTagFilterId] = useState("");
-  const [targetStageId, setTargetStageId] = useState(
-    () => stages[0]?.id ?? "",
+  const [triggerSteps, setTriggerSteps] = useState<AutomationTriggerStepRow[]>(
+    () => [createTriggerStepRow()],
+  );
+  const [actionSteps, setActionSteps] = useState<AutomationActionStepRow[]>(
+    () => [createActionStepRow()],
   );
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [triggerMenuOpen, setTriggerMenuOpen] = useState(false);
+  const [openTriggerMenuId, setOpenTriggerMenuId] = useState<string | null>(
+    null,
+  );
   const [triggerSearch, setTriggerSearch] = useState("");
-  const [actionKindType, setActionKindType] =
-    useState<PipelineAutomationActionKindType>("DEAL_STAGE_TRANSITION");
-  const [actionAddAssigneeUserId, setActionAddAssigneeUserId] = useState("");
-  const [actionRemoveAssigneeUserId, setActionRemoveAssigneeUserId] =
-    useState("");
-  const [actionDatePreset, setActionDatePreset] = useState<
-    PipelineAutomationActionDatePreset | ""
-  >("");
-  const [actionDateDaysAfter, setActionDateDaysAfter] = useState("");
-  const [actionDatePick, setActionDatePick] = useState("");
-  const [actionStageFromId, setActionStageFromId] = useState("");
-  const [actionStageToId, setActionStageToId] = useState("");
-  const [actionLegacyStageFilterId, setActionLegacyStageFilterId] =
-    useState("");
-  const [actionSelectedCampaignIds, setActionSelectedCampaignIds] = useState<
-    string[]
-  >([]);
-  const [actionCustomFieldKey, setActionCustomFieldKey] = useState("");
-  const [actionFromCustomStr, setActionFromCustomStr] = useState("");
-  const [actionToCustomStr, setActionToCustomStr] = useState("");
-  const [actionTagFilterId, setActionTagFilterId] = useState("");
-  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [actionSearch, setActionSearch] = useState("");
 
   const [openRunsId, setOpenRunsId] = useState<string | null>(null);
@@ -1018,65 +1200,94 @@ export function PipelineAutomationsPanel({
     })).filter((g) => g.types.length > 0);
   }, [actionSearch]);
 
-  const actionSelectedField = useMemo(
-    () => dealCustomFieldDefs.find((d) => d.key === actionCustomFieldKey),
-    [dealCustomFieldDefs, actionCustomFieldKey],
-  );
+  function patchTriggerStep(
+    id: string,
+    partial: Partial<AutomationTriggerStepRow>,
+  ) {
+    setTriggerSteps((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...partial } : s)),
+    );
+  }
 
-  useEffect(() => {
-    if (actionKindType !== "DEAL_ALTER_ASSIGNEES") {
-      setActionAddAssigneeUserId("");
-      setActionRemoveAssigneeUserId("");
-    }
-  }, [actionKindType]);
+  function patchActionStep(
+    id: string,
+    partial: Partial<AutomationActionStepRow>,
+  ) {
+    setActionSteps((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...partial } : s)),
+    );
+  }
 
-  useEffect(() => {
-    if (
-      actionKindType !== "DEAL_CUSTOM_FIELD_CHANGED" ||
-      actionSelectedField?.fieldType !== "DATE"
-    ) {
-      setActionDatePreset("");
-      setActionDateDaysAfter("");
-      setActionDatePick("");
-    }
-  }, [actionKindType, actionSelectedField?.fieldType, actionCustomFieldKey]);
+  function triggerBundleFor(
+    step: AutomationTriggerStepRow,
+  ): AutomationKindFieldBundle {
+    const id = step.id;
+    return {
+      stageFromId: step.stageFromId,
+      setStageFromId: (v) => patchTriggerStep(id, { stageFromId: v }),
+      stageToId: step.stageToId,
+      setStageToId: (v) => patchTriggerStep(id, { stageToId: v }),
+      legacyStageFilterId: step.legacyStageFilterId,
+      setLegacyStageFilterId: (v) =>
+        patchTriggerStep(id, { legacyStageFilterId: v }),
+      selectedCampaignIds: step.selectedCampaignIds,
+      setSelectedCampaignIds: (fn) => {
+        setTriggerSteps((prev) =>
+          prev.map((s) => {
+            if (s.id !== id) return s;
+            const next =
+              typeof fn === "function" ? fn(s.selectedCampaignIds) : fn;
+            return { ...s, selectedCampaignIds: next };
+          }),
+        );
+      },
+      customFieldKey: step.customFieldKey,
+      setCustomFieldKey: (v) => patchTriggerStep(id, { customFieldKey: v }),
+      fromCustomStr: step.fromCustomStr,
+      setFromCustomStr: (v) => patchTriggerStep(id, { fromCustomStr: v }),
+      toCustomStr: step.toCustomStr,
+      setToCustomStr: (v) => patchTriggerStep(id, { toCustomStr: v }),
+      tagFilterId: step.tagFilterId,
+      setTagFilterId: (v) => patchTriggerStep(id, { tagFilterId: v }),
+    };
+  }
 
-  function buildTriggerFilter(): PipelineAutomationTriggerFilter | null {
-    const out: PipelineAutomationTriggerFilter = {};
-    switch (triggerType) {
-      case "DEAL_STAGE_TRANSITION":
-        if (stageFromId.trim()) out.fromStageId = stageFromId.trim();
-        if (stageToId.trim()) out.toStageId = stageToId.trim();
-        break;
-      case "DEAL_ENTERED_STAGE":
-        if (legacyStageFilterId.trim())
-          out.toStageId = legacyStageFilterId.trim();
-        break;
-      case "DEAL_LEFT_STAGE":
-        if (legacyStageFilterId.trim())
-          out.fromStageId = legacyStageFilterId.trim();
-        break;
-      case "DEAL_CREATED":
-        if (selectedCampaignIds.length)
-          out.campaignSourceIds = [...selectedCampaignIds];
-        break;
-      case "DEAL_CUSTOM_FIELD_CHANGED":
-        out.customFieldKey = customFieldKey.trim();
-        {
-          const fv = parseOptionalAutomationValue(fromCustomStr);
-          if (fv !== undefined) out.fromCustomValue = fv;
-          const tv = parseOptionalAutomationValue(toCustomStr);
-          if (tv !== undefined) out.toCustomValue = tv;
-        }
-        break;
-      case "CONTACT_TAG_ADDED":
-      case "CONTACT_TAG_REMOVED":
-        if (tagFilterId.trim()) out.tagId = tagFilterId.trim();
-        break;
-      default:
-        break;
-    }
-    return Object.keys(out).length ? out : null;
+  function actionBundleFor(
+    step: AutomationActionStepRow,
+  ): AutomationKindFieldBundle {
+    const id = step.id;
+    return {
+      stageFromId: step.actionStageFromId,
+      setStageFromId: (v) => patchActionStep(id, { actionStageFromId: v }),
+      stageToId: step.actionStageToId,
+      setStageToId: (v) => patchActionStep(id, { actionStageToId: v }),
+      legacyStageFilterId: step.actionLegacyStageFilterId,
+      setLegacyStageFilterId: (v) =>
+        patchActionStep(id, { actionLegacyStageFilterId: v }),
+      selectedCampaignIds: step.actionSelectedCampaignIds,
+      setSelectedCampaignIds: (fn) => {
+        setActionSteps((prev) =>
+          prev.map((s) => {
+            if (s.id !== id) return s;
+            const next =
+              typeof fn === "function"
+                ? fn(s.actionSelectedCampaignIds)
+                : fn;
+            return { ...s, actionSelectedCampaignIds: next };
+          }),
+        );
+      },
+      customFieldKey: step.actionCustomFieldKey,
+      setCustomFieldKey: (v) =>
+        patchActionStep(id, { actionCustomFieldKey: v }),
+      fromCustomStr: step.actionFromCustomStr,
+      setFromCustomStr: (v) =>
+        patchActionStep(id, { actionFromCustomStr: v }),
+      toCustomStr: step.actionToCustomStr,
+      setToCustomStr: (v) => patchActionStep(id, { actionToCustomStr: v }),
+      tagFilterId: step.actionTagFilterId,
+      setTagFilterId: (v) => patchActionStep(id, { actionTagFilterId: v }),
+    };
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -1086,88 +1297,58 @@ export function PipelineAutomationsPanel({
       setFormError("Informe um nome para a automação.");
       return;
     }
-    if (triggerType === "DEAL_CUSTOM_FIELD_CHANGED" && !customFieldKey.trim()) {
-      setFormError("Selecione o campo personalizado no gatilho.");
-      return;
-    }
-    if (
-      actionKindType === "DEAL_CUSTOM_FIELD_CHANGED" &&
-      !actionCustomFieldKey.trim()
-    ) {
-      setFormError("Selecione o campo personalizado na ação.");
-      return;
-    }
-    if (actionKindType === "DEAL_CUSTOM_FIELD_CHANGED") {
-      const af = dealCustomFieldDefs.find(
-        (d) => d.key === actionCustomFieldKey.trim(),
-      );
-      if (af?.fieldType === "DATE") {
-        if (!actionDatePreset) {
-          setFormError("Selecione um valor para a data.");
-          return;
-        }
-        if (actionDatePreset === "DAYS_AFTER_TRIGGER") {
-          const n = parseInt(actionDateDaysAfter.trim(), 10);
-          if (!Number.isFinite(n) || n < 0) {
-            setFormError("Informe quantos dias após o gatilho.");
-            return;
-          }
-        }
-        if (actionDatePreset === "PICK_DATE" && !actionDatePick.trim()) {
-          setFormError("Escolha uma data.");
-          return;
-        }
+    for (let i = 0; i < triggerSteps.length; i++) {
+      const err = validateTriggerStep(triggerSteps[i], i);
+      if (err) {
+        setFormError(err);
+        return;
       }
     }
-    const moveStageId =
-      actionKindType === "DEAL_STAGE_TRANSITION"
-        ? actionStageToId.trim()
-        : targetStageId.trim();
-    if (!moveStageId) {
+    for (let i = 0; i < actionSteps.length; i++) {
+      const err = validateActionStep(actionSteps[i], dealCustomFieldDefs, i);
+      if (err) {
+        setFormError(err);
+        return;
+      }
+    }
+    const actions = buildMoveActionsFromSteps(actionSteps);
+    if (actions.length === 0) {
       setFormError(
-        actionKindType === "DEAL_STAGE_TRANSITION"
-          ? 'Selecione "Para" na ação (etapa de destino).'
-          : "Selecione a etapa de destino da ação (Status).",
+        'Inclua ao menos uma ação do tipo “Alteração de status” com o campo “Para” preenchido para mover a oportunidade.',
       );
       return;
     }
-    const triggerFilter = buildTriggerFilter();
+    if (actions.length > MAX_GROUPED_ACTIONS) {
+      setFormError(
+        `No máximo ${MAX_GROUPED_ACTIONS} movimentações de etapa por automação.`,
+      );
+      return;
+    }
+    const baseName = name.trim();
     startTransition(async () => {
       try {
-        await createPipelineAutomationRule({
-          pipelineId: pipeline.id,
-          name: name.trim(),
-          triggerType,
-          triggerFilter,
-          actions: [{ type: "MOVE_TO_STAGE", stageId: moveStageId }],
-        });
+        for (let i = 0; i < triggerSteps.length; i++) {
+          const step = triggerSteps[i];
+          const ruleName =
+            triggerSteps.length > 1
+              ? `${baseName} · gatilho ${i + 1}`
+              : baseName;
+          await createPipelineAutomationRule({
+            pipelineId: pipeline.id,
+            name: ruleName,
+            triggerType: step.triggerType,
+            triggerFilter: buildTriggerFilterFromStep(step),
+            actions,
+          });
+        }
         onRulesChanged?.();
         setName("");
-        setTriggerType("DEAL_STAGE_TRANSITION");
-        setStageFromId("");
-        setStageToId("");
-        setLegacyStageFilterId("");
-        setSelectedCampaignIds([]);
-        setCustomFieldKey("");
-        setFromCustomStr("");
-        setToCustomStr("");
-        setTagFilterId("");
-        setTargetStageId(stages[0]?.id ?? "");
-        setActionKindType("DEAL_STAGE_TRANSITION");
-        setActionStageFromId("");
-        setActionStageToId("");
-        setActionLegacyStageFilterId("");
-        setActionSelectedCampaignIds([]);
-        setActionCustomFieldKey("");
-        setActionFromCustomStr("");
-        setActionToCustomStr("");
-        setActionTagFilterId("");
+        setTriggerSteps([createTriggerStepRow()]);
+        setActionSteps([createActionStepRow()]);
+        setOpenTriggerMenuId(null);
+        setOpenActionMenuId(null);
+        setTriggerSearch("");
         setActionSearch("");
-        setActionAddAssigneeUserId("");
-        setActionRemoveAssigneeUserId("");
-        setActionDatePreset("");
-        setActionDateDaysAfter("");
-        setActionDatePick("");
       } catch (err) {
         setFormError(
           err instanceof Error ? err.message : "Não foi possível salvar.",
@@ -1199,46 +1380,6 @@ export function PipelineAutomationsPanel({
     }
   }
 
-  const TriggerIcon = triggerIcon(triggerType);
-  const ActionIcon = actionKindIcon(actionKindType);
-
-  const triggerFieldBundle: AutomationKindFieldBundle = {
-    stageFromId,
-    setStageFromId,
-    stageToId,
-    setStageToId,
-    legacyStageFilterId,
-    setLegacyStageFilterId,
-    selectedCampaignIds,
-    setSelectedCampaignIds,
-    customFieldKey,
-    setCustomFieldKey,
-    fromCustomStr,
-    setFromCustomStr,
-    toCustomStr,
-    setToCustomStr,
-    tagFilterId,
-    setTagFilterId,
-  };
-
-  const actionFieldBundle: AutomationKindFieldBundle = {
-    stageFromId: actionStageFromId,
-    setStageFromId: setActionStageFromId,
-    stageToId: actionStageToId,
-    setStageToId: setActionStageToId,
-    legacyStageFilterId: actionLegacyStageFilterId,
-    setLegacyStageFilterId: setActionLegacyStageFilterId,
-    selectedCampaignIds: actionSelectedCampaignIds,
-    setSelectedCampaignIds: setActionSelectedCampaignIds,
-    customFieldKey: actionCustomFieldKey,
-    setCustomFieldKey: setActionCustomFieldKey,
-    fromCustomStr: actionFromCustomStr,
-    setFromCustomStr: setActionFromCustomStr,
-    toCustomStr: actionToCustomStr,
-    setToCustomStr: setActionToCustomStr,
-    tagFilterId: actionTagFilterId,
-    setTagFilterId: setActionTagFilterId,
-  };
   const formShell =
     "rounded-lg border border-border/60 bg-muted/20 p-4 shadow-sm dark:bg-muted/10";
   const isDialog = variant === "dialog";
@@ -1354,114 +1495,71 @@ export function PipelineAutomationsPanel({
                 <div className={cn("min-h-[12px] w-px flex-1", dashV)} />
               </div>
 
-              <div className={cn(isDialog ? "space-y-4" : groupPanelClass)}>
-                <p className={cn("mb-1 uppercase tracking-wide", lbl)}>
-                  Tipo de gatilho
-                </p>
-                <Popover
-                  open={triggerMenuOpen}
-                  onOpenChange={setTriggerMenuOpen}
-                >
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className={trigBtn}
-                      aria-expanded={triggerMenuOpen}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <TriggerIcon
+              <div
+                className={cn(
+                  "space-y-4",
+                  !isDialog && "rounded-lg border border-border/60 bg-muted/20 p-3 shadow-sm dark:bg-muted/10",
+                )}
+              >
+                {triggerSteps.map((step, stepIndex) => {
+                  const StepTriggerIcon = triggerIcon(step.triggerType);
+                  return (
+                    <div key={step.id} className="space-y-3">
+                      {stepIndex > 0 ? (
+                        <p
                           className={cn(
-                            "size-4 shrink-0",
-                            isDialog ? "text-zinc-400" : "text-muted-foreground",
+                            "text-[10px] font-semibold uppercase tracking-wide",
+                            lbl,
                           )}
-                          strokeWidth={2}
-                          aria-hidden
-                        />
-                        <span className="truncate">
-                          {PIPELINE_AUTOMATION_TRIGGER_LABELS[triggerType]}
-                        </span>
-                      </span>
-                      <ChevronDown
+                        >
+                          Gatilho {stepIndex + 1}
+                        </p>
+                      ) : null}
+                      <div
                         className={cn(
-                          "size-4 shrink-0",
-                          isDialog ? "text-zinc-500" : "text-muted-foreground",
+                          "relative space-y-3",
+                          isDialog ? "" : "rounded-md border border-border/50 bg-background/40 p-3",
                         )}
-                        aria-hidden
-                      />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="start"
-                    className={cn(
-                      "p-0 shadow-lg",
-                      isDialog
-                        ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
-                        : "w-[min(100vw-2rem,20rem)] border-border/60",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "border-b p-2",
-                        isDialog ? "border-zinc-800" : "border-border/40",
-                      )}
-                    >
-                      <div className="relative">
-                        <Search
-                          className={cn(
-                            "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
-                            isDialog ? "text-zinc-500" : "text-muted-foreground",
-                          )}
-                        />
-                        <Input
-                          value={triggerSearch}
-                          onChange={(e) => setTriggerSearch(e.target.value)}
-                          placeholder="Pesquisar…"
-                          className={cn(
-                            "h-9 pl-8 text-sm shadow-none",
-                            isDialog
-                              ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
-                              : "border-border/50 bg-background placeholder:text-muted-foreground/70",
-                          )}
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto py-1">
-                      {filteredTriggerGroups.map((group) => (
-                        <div key={group.heading}>
-                          <p
-                            className={cn(
-                              "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
-                              isDialog ? "text-zinc-500" : "text-muted-foreground",
-                            )}
-                          >
-                            {group.heading}
-                          </p>
-                          {group.types.map((t) => {
-                            const Icon = triggerIcon(t);
-                            const selected = t === triggerType;
-                            return (
-                              <button
-                                key={t}
-                                type="button"
-                                className={cn(
-                                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
-                                  isDialog
-                                    ? cn(
-                                        "hover:bg-zinc-800/80",
-                                        selected && "bg-zinc-800",
-                                      )
-                                    : cn(
-                                        "hover:bg-muted/50",
-                                        selected && "bg-muted/40",
-                                      ),
-                                )}
-                                onClick={() => {
-                                  setTriggerType(t);
-                                  setTriggerMenuOpen(false);
-                                  setTriggerSearch("");
-                                }}
-                              >
-                                <Icon
+                      >
+                        {triggerSteps.length > 1 ? (
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              className={cn(
+                                "rounded-md p-1.5",
+                                isDialog
+                                  ? "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                              )}
+                              aria-label="Remover gatilho"
+                              onClick={() =>
+                                setTriggerSteps((prev) =>
+                                  prev.filter((s) => s.id !== step.id),
+                                )
+                              }
+                            >
+                              <Trash2 className="size-4" aria-hidden />
+                            </button>
+                          </div>
+                        ) : null}
+                        <p className={cn("uppercase tracking-wide", lbl)}>
+                          Tipo de gatilho
+                        </p>
+                        <Popover
+                          open={openTriggerMenuId === step.id}
+                          onOpenChange={(o) => {
+                            setOpenTriggerMenuId(o ? step.id : null);
+                            if (!o) setTriggerSearch("");
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className={trigBtn}
+                              aria-expanded={openTriggerMenuId === step.id}
+                            >
+                              <span className="flex min-w-0 items-center gap-2">
+                                <StepTriggerIcon
                                   className={cn(
                                     "size-4 shrink-0",
                                     isDialog
@@ -1471,38 +1569,155 @@ export function PipelineAutomationsPanel({
                                   strokeWidth={2}
                                   aria-hidden
                                 />
-                                <span className="flex-1 truncate">
-                                  {PIPELINE_AUTOMATION_TRIGGER_LABELS[t]}
+                                <span className="truncate">
+                                  {
+                                    PIPELINE_AUTOMATION_TRIGGER_LABELS[
+                                      step.triggerType
+                                    ]
+                                  }
                                 </span>
-                                {selected ? (
-                                  <span
-                                    className={
-                                      isDialog ? "text-zinc-200" : "text-foreground"
-                                    }
+                              </span>
+                              <ChevronDown
+                                className={cn(
+                                  "size-4 shrink-0",
+                                  isDialog
+                                    ? "text-zinc-500"
+                                    : "text-muted-foreground",
+                                )}
+                                aria-hidden
+                              />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align="start"
+                            className={cn(
+                              "p-0 shadow-lg",
+                              isDialog
+                                ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
+                                : "w-[min(100vw-2rem,20rem)] border-border/60",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "border-b p-2",
+                                isDialog
+                                  ? "border-zinc-800"
+                                  : "border-border/40",
+                              )}
+                            >
+                              <div className="relative">
+                                <Search
+                                  className={cn(
+                                    "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
+                                    isDialog
+                                      ? "text-zinc-500"
+                                      : "text-muted-foreground",
+                                  )}
+                                />
+                                <Input
+                                  value={triggerSearch}
+                                  onChange={(e) =>
+                                    setTriggerSearch(e.target.value)
+                                  }
+                                  placeholder="Pesquisar…"
+                                  className={cn(
+                                    "h-9 pl-8 text-sm shadow-none",
+                                    isDialog
+                                      ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
+                                      : "border-border/50 bg-background placeholder:text-muted-foreground/70",
+                                  )}
+                                />
+                              </div>
+                            </div>
+                            <div className="max-h-64 overflow-y-auto py-1">
+                              {filteredTriggerGroups.map((group) => (
+                                <div key={group.heading}>
+                                  <p
+                                    className={cn(
+                                      "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
+                                      isDialog
+                                        ? "text-zinc-500"
+                                        : "text-muted-foreground",
+                                    )}
                                   >
-                                    ✓
-                                  </span>
-                                ) : null}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                                    {group.heading}
+                                  </p>
+                                  {group.types.map((t) => {
+                                    const Icon = triggerIcon(t);
+                                    const selected = t === step.triggerType;
+                                    return (
+                                      <button
+                                        key={t}
+                                        type="button"
+                                        className={cn(
+                                          "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
+                                          isDialog
+                                            ? cn(
+                                                "hover:bg-zinc-800/80",
+                                                selected && "bg-zinc-800",
+                                              )
+                                            : cn(
+                                                "hover:bg-muted/50",
+                                                selected && "bg-muted/40",
+                                              ),
+                                        )}
+                                        onClick={() => {
+                                          patchTriggerStep(
+                                            step.id,
+                                            clearedFieldsForTriggerType(t),
+                                          );
+                                          setOpenTriggerMenuId(null);
+                                          setTriggerSearch("");
+                                        }}
+                                      >
+                                        <Icon
+                                          className={cn(
+                                            "size-4 shrink-0",
+                                            isDialog
+                                              ? "text-zinc-400"
+                                              : "text-muted-foreground",
+                                          )}
+                                          strokeWidth={2}
+                                          aria-hidden
+                                        />
+                                        <span className="flex-1 truncate">
+                                          {PIPELINE_AUTOMATION_TRIGGER_LABELS[t]}
+                                        </span>
+                                        {selected ? (
+                                          <span
+                                            className={
+                                              isDialog
+                                                ? "text-zinc-200"
+                                                : "text-foreground"
+                                            }
+                                          >
+                                            ✓
+                                          </span>
+                                        ) : null}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
 
-                <AutomationKindConfigFields
-                  kind={triggerType}
-                  bundle={triggerFieldBundle}
-                  isDialog={isDialog}
-                  lbl={lbl}
-                  sel={sel}
-                  stages={stages}
-                  campaignSources={campaignSources}
-                  dealCustomFieldDefs={dealCustomFieldDefs}
-                  sortedTags={sortedTags}
-                />
+                        <AutomationKindConfigFields
+                          kind={step.triggerType}
+                          bundle={triggerBundleFor(step)}
+                          isDialog={isDialog}
+                          lbl={lbl}
+                          sel={sel}
+                          stages={stages}
+                          campaignSources={campaignSources}
+                          dealCustomFieldDefs={dealCustomFieldDefs}
+                          sortedTags={sortedTags}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex justify-center pt-2">
@@ -1511,14 +1726,21 @@ export function PipelineAutomationsPanel({
               <div className="flex justify-center">
                 <button
                   type="button"
-                  disabled
+                  disabled={triggerSteps.length >= MAX_GROUPED_TRIGGERS}
                   className={cn(
-                    "flex size-8 items-center justify-center rounded-lg border border-dashed",
+                    "flex size-8 items-center justify-center rounded-lg border border-dashed transition-colors",
                     isDialog
-                      ? "border-zinc-700 bg-transparent text-zinc-600"
-                      : "border-border/50 bg-muted/20 text-muted-foreground",
+                      ? "border-zinc-600 bg-zinc-900/40 text-zinc-300 hover:bg-zinc-800/80 disabled:cursor-not-allowed disabled:opacity-40"
+                      : "border-border/60 bg-muted/30 text-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40",
                   )}
-                  aria-label="Adicionar gatilho (em breve)"
+                  aria-label="Adicionar outro gatilho (cria uma regra por gatilho com as mesmas ações)"
+                  title="Cada gatilho adicional gera uma regra separada com as mesmas ações."
+                  onClick={() =>
+                    setTriggerSteps((prev) => {
+                      if (prev.length >= MAX_GROUPED_TRIGGERS) return prev;
+                      return [...prev, createTriggerStepRow()];
+                    })
+                  }
                 >
                   +
                 </button>
@@ -1586,117 +1808,75 @@ export function PipelineAutomationsPanel({
                 <div className={cn("min-h-[12px] w-px flex-1", dashV)} />
               </div>
 
-              <div className={cn(isDialog ? "space-y-4" : groupPanelClass)}>
-                <p className={cn("mb-1 uppercase tracking-wide", lbl)}>
-                  Tipo de ação
-                </p>
-                <Popover
-                  open={actionMenuOpen}
-                  onOpenChange={setActionMenuOpen}
-                >
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className={trigBtn}
-                      aria-expanded={actionMenuOpen}
-                      aria-label="Tipo de ação"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <ActionIcon
+              <div
+                className={cn(
+                  "space-y-4",
+                  !isDialog && "rounded-lg border border-border/60 bg-muted/20 p-3 shadow-sm dark:bg-muted/10",
+                )}
+              >
+                {actionSteps.map((step, stepIndex) => {
+                  const StepActionIcon = actionKindIcon(step.actionKindType);
+                  const stepDateField = dealCustomFieldDefs.find(
+                    (d) => d.key === step.actionCustomFieldKey,
+                  );
+                  return (
+                    <div key={step.id} className="space-y-3">
+                      {stepIndex > 0 ? (
+                        <p
                           className={cn(
-                            "size-4 shrink-0",
-                            isDialog
-                              ? "text-zinc-400"
-                              : "text-muted-foreground",
+                            "text-[10px] font-semibold uppercase tracking-wide",
+                            lbl,
                           )}
-                          strokeWidth={2}
-                          aria-hidden
-                        />
-                        <span className="truncate">
-                          {pipelineAutomationActionKindLabel(actionKindType)}
-                        </span>
-                      </span>
-                      <ChevronDown
+                        >
+                          Ação {stepIndex + 1}
+                        </p>
+                      ) : null}
+                      <div
                         className={cn(
-                          "size-4 shrink-0",
-                          isDialog ? "text-zinc-500" : "text-muted-foreground",
+                          "relative space-y-3",
+                          isDialog ? "" : "rounded-md border border-border/50 bg-background/40 p-3",
                         )}
-                        aria-hidden
-                      />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="start"
-                    className={cn(
-                      "p-0 shadow-lg",
-                      isDialog
-                        ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
-                        : "w-[min(100vw-2rem,20rem)] border-border/60",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "border-b p-2",
-                        isDialog ? "border-zinc-800" : "border-border/40",
-                      )}
-                    >
-                      <div className="relative">
-                        <Search
-                          className={cn(
-                            "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
-                            isDialog ? "text-zinc-500" : "text-muted-foreground",
-                          )}
-                        />
-                        <Input
-                          value={actionSearch}
-                          onChange={(e) => setActionSearch(e.target.value)}
-                          placeholder="Pesquisar…"
-                          className={cn(
-                            "h-9 pl-8 text-sm shadow-none",
-                            isDialog
-                              ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
-                              : "border-border/50 bg-background placeholder:text-muted-foreground/70",
-                          )}
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto py-1">
-                      {filteredActionGroups.map((group) => (
-                        <div key={group.heading}>
-                          <p
-                            className={cn(
-                              "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
-                              isDialog ? "text-zinc-500" : "text-muted-foreground",
-                            )}
-                          >
-                            {group.heading}
-                          </p>
-                          {group.types.map((t) => {
-                            const Icon = actionKindIcon(t);
-                            const selected = t === actionKindType;
-                            return (
-                              <button
-                                key={t}
-                                type="button"
-                                className={cn(
-                                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
-                                  isDialog
-                                    ? cn(
-                                        "hover:bg-zinc-800/80",
-                                        selected && "bg-zinc-800",
-                                      )
-                                    : cn(
-                                        "hover:bg-muted/50",
-                                        selected && "bg-muted/40",
-                                      ),
-                                )}
-                                onClick={() => {
-                                  setActionKindType(t);
-                                  setActionMenuOpen(false);
-                                  setActionSearch("");
-                                }}
-                              >
-                                <Icon
+                      >
+                        {actionSteps.length > 1 ? (
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              className={cn(
+                                "rounded-md p-1.5",
+                                isDialog
+                                  ? "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                              )}
+                              aria-label="Remover ação"
+                              onClick={() =>
+                                setActionSteps((prev) =>
+                                  prev.filter((s) => s.id !== step.id),
+                                )
+                              }
+                            >
+                              <Trash2 className="size-4" aria-hidden />
+                            </button>
+                          </div>
+                        ) : null}
+                        <p className={cn("uppercase tracking-wide", lbl)}>
+                          Tipo de ação
+                        </p>
+                        <Popover
+                          open={openActionMenuId === step.id}
+                          onOpenChange={(o) => {
+                            setOpenActionMenuId(o ? step.id : null);
+                            if (!o) setActionSearch("");
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className={trigBtn}
+                              aria-expanded={openActionMenuId === step.id}
+                              aria-label="Tipo de ação"
+                            >
+                              <span className="flex min-w-0 items-center gap-2">
+                                <StepActionIcon
                                   className={cn(
                                     "size-4 shrink-0",
                                     isDialog
@@ -1706,124 +1886,206 @@ export function PipelineAutomationsPanel({
                                   strokeWidth={2}
                                   aria-hidden
                                 />
-                                <span className="flex-1 truncate">
-                                  {pipelineAutomationActionKindLabel(t)}
+                                <span className="truncate">
+                                  {pipelineAutomationActionKindLabel(
+                                    step.actionKindType,
+                                  )}
                                 </span>
-                                {selected ? (
-                                  <span
-                                    className={
-                                      isDialog ? "text-zinc-200" : "text-foreground"
-                                    }
+                              </span>
+                              <ChevronDown
+                                className={cn(
+                                  "size-4 shrink-0",
+                                  isDialog
+                                    ? "text-zinc-500"
+                                    : "text-muted-foreground",
+                                )}
+                                aria-hidden
+                              />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align="start"
+                            className={cn(
+                              "p-0 shadow-lg",
+                              isDialog
+                                ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
+                                : "w-[min(100vw-2rem,20rem)] border-border/60",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "border-b p-2",
+                                isDialog
+                                  ? "border-zinc-800"
+                                  : "border-border/40",
+                              )}
+                            >
+                              <div className="relative">
+                                <Search
+                                  className={cn(
+                                    "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
+                                    isDialog
+                                      ? "text-zinc-500"
+                                      : "text-muted-foreground",
+                                  )}
+                                />
+                                <Input
+                                  value={actionSearch}
+                                  onChange={(e) =>
+                                    setActionSearch(e.target.value)
+                                  }
+                                  placeholder="Pesquisar…"
+                                  className={cn(
+                                    "h-9 pl-8 text-sm shadow-none",
+                                    isDialog
+                                      ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
+                                      : "border-border/50 bg-background placeholder:text-muted-foreground/70",
+                                  )}
+                                />
+                              </div>
+                            </div>
+                            <div className="max-h-64 overflow-y-auto py-1">
+                              {filteredActionGroups.map((group) => (
+                                <div key={group.heading}>
+                                  <p
+                                    className={cn(
+                                      "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
+                                      isDialog
+                                        ? "text-zinc-500"
+                                        : "text-muted-foreground",
+                                    )}
                                   >
-                                    ✓
-                                  </span>
-                                ) : null}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                                    {group.heading}
+                                  </p>
+                                  {group.types.map((t) => {
+                                    const Icon = actionKindIcon(t);
+                                    const selected = t === step.actionKindType;
+                                    return (
+                                      <button
+                                        key={t}
+                                        type="button"
+                                        className={cn(
+                                          "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
+                                          isDialog
+                                            ? cn(
+                                                "hover:bg-zinc-800/80",
+                                                selected && "bg-zinc-800",
+                                              )
+                                            : cn(
+                                                "hover:bg-muted/50",
+                                                selected && "bg-muted/40",
+                                              ),
+                                        )}
+                                        onClick={() => {
+                                          patchActionStep(
+                                            step.id,
+                                            clearedFieldsForActionKind(t),
+                                          );
+                                          setOpenActionMenuId(null);
+                                          setActionSearch("");
+                                        }}
+                                      >
+                                        <Icon
+                                          className={cn(
+                                            "size-4 shrink-0",
+                                            isDialog
+                                              ? "text-zinc-400"
+                                              : "text-muted-foreground",
+                                          )}
+                                          strokeWidth={2}
+                                          aria-hidden
+                                        />
+                                        <span className="flex-1 truncate">
+                                          {pipelineAutomationActionKindLabel(t)}
+                                        </span>
+                                        {selected ? (
+                                          <span
+                                            className={
+                                              isDialog
+                                                ? "text-zinc-200"
+                                                : "text-foreground"
+                                            }
+                                          >
+                                            ✓
+                                          </span>
+                                        ) : null}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
 
-                {actionKindType === "DEAL_ALTER_ASSIGNEES" ? (
-                  <ActionAlterAssigneeBlock
-                    members={sortedTenantMembers}
-                    addUserId={actionAddAssigneeUserId}
-                    setAddUserId={setActionAddAssigneeUserId}
-                    removeUserId={actionRemoveAssigneeUserId}
-                    setRemoveUserId={setActionRemoveAssigneeUserId}
-                    lbl={lbl}
-                    sel={sel}
-                    isDialog={isDialog}
-                  />
-                ) : actionKindType === "DEAL_CUSTOM_FIELD_CHANGED" &&
-                  actionSelectedField?.fieldType === "DATE" ? (
-                  <ActionDateCustomFieldBlock
-                    dealCustomFieldDefs={dealCustomFieldDefs}
-                    customFieldKey={actionCustomFieldKey}
-                    setCustomFieldKey={setActionCustomFieldKey}
-                    preset={actionDatePreset}
-                    setPreset={setActionDatePreset}
-                    daysAfter={actionDateDaysAfter}
-                    setDaysAfter={setActionDateDaysAfter}
-                    pick={actionDatePick}
-                    setPick={setActionDatePick}
-                    lbl={lbl}
-                    sel={sel}
-                    isDialog={isDialog}
-                    valueTrigBtn={trigBtn}
-                  />
-                ) : (
-                  <AutomationKindConfigFields
-                    kind={actionKindType as PipelineAutomationTriggerType}
-                    bundle={actionFieldBundle}
-                    isDialog={isDialog}
-                    lbl={lbl}
-                    sel={sel}
-                    stages={stages}
-                    campaignSources={campaignSources}
-                    dealCustomFieldDefs={dealCustomFieldDefs}
-                    sortedTags={sortedTags}
-                  />
-                )}
-
-                <div className="mt-4 space-y-3">
-                  {actionKindType !== "DEAL_STAGE_TRANSITION" ? (
-                    <div className="space-y-1">
-                      <p className={lbl}>
-                        Status
-                        <span
-                          className={
-                            isDialog ? "text-rose-400" : "text-destructive"
-                          }
-                        >
-                          *
-                        </span>
-                      </p>
-                      <select
-                        className={sel}
-                        value={targetStageId}
-                        onChange={(e) => setTargetStageId(e.target.value)}
-                        aria-label="Etapa de destino da ação"
-                      >
-                        <option value="">Selecionar um status</option>
-                        {stages.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
+                        {step.actionKindType === "DEAL_ALTER_ASSIGNEES" ? (
+                          <ActionAlterAssigneeBlock
+                            members={sortedTenantMembers}
+                            addUserId={step.actionAddAssigneeUserId}
+                            setAddUserId={(v) =>
+                              patchActionStep(step.id, {
+                                actionAddAssigneeUserId: v,
+                              })
+                            }
+                            removeUserId={step.actionRemoveAssigneeUserId}
+                            setRemoveUserId={(v) =>
+                              patchActionStep(step.id, {
+                                actionRemoveAssigneeUserId: v,
+                              })
+                            }
+                            lbl={lbl}
+                            sel={sel}
+                            isDialog={isDialog}
+                          />
+                        ) : step.actionKindType ===
+                            "DEAL_CUSTOM_FIELD_CHANGED" &&
+                          stepDateField?.fieldType === "DATE" ? (
+                          <ActionDateCustomFieldBlock
+                            dealCustomFieldDefs={dealCustomFieldDefs}
+                            customFieldKey={step.actionCustomFieldKey}
+                            setCustomFieldKey={(v) =>
+                              patchActionStep(step.id, {
+                                actionCustomFieldKey: v,
+                              })
+                            }
+                            preset={step.actionDatePreset}
+                            setPreset={(v) =>
+                              patchActionStep(step.id, { actionDatePreset: v })
+                            }
+                            daysAfter={step.actionDateDaysAfter}
+                            setDaysAfter={(v) =>
+                              patchActionStep(step.id, {
+                                actionDateDaysAfter: v,
+                              })
+                            }
+                            pick={step.actionDatePick}
+                            setPick={(v) =>
+                              patchActionStep(step.id, { actionDatePick: v })
+                            }
+                            lbl={lbl}
+                            sel={sel}
+                            isDialog={isDialog}
+                            valueTrigBtn={trigBtn}
+                          />
+                        ) : (
+                          <AutomationKindConfigFields
+                            kind={
+                              step.actionKindType as PipelineAutomationTriggerType
+                            }
+                            bundle={actionBundleFor(step)}
+                            isDialog={isDialog}
+                            lbl={lbl}
+                            sel={sel}
+                            stages={stages}
+                            campaignSources={campaignSources}
+                            dealCustomFieldDefs={dealCustomFieldDefs}
+                            sortedTags={sortedTags}
+                          />
+                        )}
+                      </div>
                     </div>
-                  ) : null}
-                  <div
-                    className={cn(
-                      "flex gap-2 rounded-md border px-3 py-2 text-[11px] leading-snug",
-                      isDialog
-                        ? "border-amber-500/25 bg-amber-500/10 text-amber-100/95"
-                        : "border-amber-500/35 bg-amber-500/10 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
-                    )}
-                  >
-                    <span aria-hidden>⚠</span>
-                    <span>
-                      {actionKindType === "DEAL_STAGE_TRANSITION" ? (
-                        <>
-                          A oportunidade será movida para a etapa em{" "}
-                          <strong className="font-medium">Para</strong>. Se a
-                          etapa não existir mais, a regra pode falhar na execução.
-                        </>
-                      ) : (
-                        <>
-                          Por enquanto só é aplicado mover para a etapa em{" "}
-                          <strong className="font-medium">Status</strong>. Os
-                          demais campos acima espelham o tipo escolhido para
-                          quando a API suportar ações adicionais.
-                        </>
-                      )}
-                    </span>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
 
               <div className="flex justify-center pt-2">
@@ -1832,14 +2094,21 @@ export function PipelineAutomationsPanel({
               <div className="flex justify-center">
                 <button
                   type="button"
-                  disabled
+                  disabled={actionSteps.length >= MAX_GROUPED_ACTIONS}
                   className={cn(
-                    "flex size-8 items-center justify-center rounded-lg border border-dashed",
+                    "flex size-8 items-center justify-center rounded-lg border border-dashed transition-colors",
                     isDialog
-                      ? "border-zinc-700 bg-transparent text-zinc-600"
-                      : "border-border/50 bg-muted/20 text-muted-foreground",
+                      ? "border-zinc-600 bg-zinc-900/40 text-zinc-300 hover:bg-zinc-800/80 disabled:cursor-not-allowed disabled:opacity-40"
+                      : "border-border/60 bg-muted/30 text-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40",
                   )}
-                  aria-label="Adicionar ação (em breve)"
+                  aria-label="Adicionar outra ação (até 5 movimentações de etapa em sequência)"
+                  title="Cada bloco extra pode definir mais uma movimentação (tipo Alteração de status com Para)."
+                  onClick={() =>
+                    setActionSteps((prev) => {
+                      if (prev.length >= MAX_GROUPED_ACTIONS) return prev;
+                      return [...prev, createActionStepRow()];
+                    })
+                  }
                 >
                   +
                 </button>
