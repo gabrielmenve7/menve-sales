@@ -37,6 +37,11 @@ export const widgetQuerySpecInputSchema = z.object({
   days: z.number().int().min(1).max(366).optional(),
   /** Com BY_DAY: primeiro dia da série (YYYY-MM-DD). Se definido, substitui janela rolante de `days`. */
   timelineStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /**
+   * Com BY_DAY + timelineStart: se true, inclui todos os dias até o fim do mês de timelineStart
+   * (dias futuros com valor 0). Se false, a série vai só até hoje (comportamento anterior).
+   */
+  fillTimelineMonth: z.boolean().optional(),
 
   /** Legado */
   measure: z.enum(["COUNT", "SUM_VALUE"]).optional(),
@@ -72,6 +77,7 @@ export type ResolvedWidgetQuerySpec = {
   dimension: "BY_STAGE" | "BY_STATUS" | "BY_DAY" | null;
   days?: number;
   timelineStart?: string;
+  fillTimelineMonth?: boolean;
   dataMeasure: "QUANTITY" | "MONEY" | "CUSTOM_NUMBER";
   aggregation: "SUM" | "AVG";
   customFieldKey?: string;
@@ -135,6 +141,7 @@ export function resolveWidgetQuerySpec(
     dimension: input.dimension ?? null,
     days: input.days,
     timelineStart: input.timelineStart?.trim() || undefined,
+    fillTimelineMonth: input.fillTimelineMonth === true ? true : undefined,
     dataMeasure,
     aggregation,
     customFieldKey: input.customFieldKey,

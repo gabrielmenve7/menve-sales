@@ -8,12 +8,34 @@ const gridSchema = z.object({
   h: z.number().int().min(1).max(24),
 });
 
+const barChartConfigSchema = z
+  .object({
+    showAverageLine: z.boolean().optional(),
+    showDataLabels: z.boolean().optional(),
+    showLegend: z.boolean().optional(),
+    timePreset: z
+      .enum([
+        "THIS_MONTH",
+        "NEXT_MONTH",
+        "LAST_7_DAYS",
+        "LAST_30_DAYS",
+        "LAST_90_DAYS",
+        "CUSTOM",
+      ])
+      .optional(),
+    xGroupBy: z.enum(["DAY", "WEEK", "MONTH"]).optional(),
+    yGroupBy: z.literal("NONE").optional(),
+  })
+  .strict()
+  .optional();
+
 export const layoutWidgetSchema = z.object({
   id: z.string().min(1),
   type: z.enum(["METRIC", "BAR", "PIE", "DONUT"]),
   title: z.string().max(120).optional(),
   grid: gridSchema,
   querySpec: widgetQuerySpecSchema,
+  barChart: barChartConfigSchema,
 });
 
 export const layoutJsonSchema = z.object({

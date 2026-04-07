@@ -26,6 +26,18 @@ function endOfDayUtc(isoDate: string): Date {
   return new Date(`${isoDate}T23:59:59.999Z`);
 }
 
+/** Último instante (UTC) do último dia do mês civil que contém `isoYmd` (YYYY-MM-DD). */
+function endOfMonthContainingUtc(isoYmd: string): Date {
+  const y = Number(isoYmd.slice(0, 4));
+  const mo = Number(isoYmd.slice(5, 7));
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || mo < 1 || mo > 12) {
+    const d = new Date();
+    d.setUTCHours(23, 59, 59, 999);
+    return d;
+  }
+  return new Date(Date.UTC(y, mo, 0, 23, 59, 59, 999));
+}
+
 function extractJsonNumber(
   customData: Prisma.JsonValue | null,
   key: string,
@@ -465,9 +477,16 @@ export class DashboardQueryService {
     let dateKeys: string[];
 
     if (spec.timelineStart?.trim()) {
-      since = startOfDayUtc(spec.timelineStart.trim());
-      const end = new Date();
-      end.setUTCHours(23, 59, 59, 999);
+      const startKey = spec.timelineStart.trim();
+      since = startOfDayUtc(startKey);
+      const end =
+        spec.fillTimelineMonth === true
+          ? endOfMonthContainingUtc(startKey)
+          : (() => {
+              const t = new Date();
+              t.setUTCHours(23, 59, 59, 999);
+              return t;
+            })();
       dateKeys = [];
       for (
         let d = new Date(since.getTime());

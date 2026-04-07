@@ -27,6 +27,7 @@ export type WidgetFilterGroupSaved = {
 /** Presets de período (eixo temporal) — só aplicam com dimensão BY_DAY. */
 export type BarTimePreset =
   | "THIS_MONTH"
+  | "NEXT_MONTH"
   | "LAST_7_DAYS"
   | "LAST_30_DAYS"
   | "LAST_90_DAYS"
@@ -59,6 +60,11 @@ export type WidgetQuerySpec = {
    * Quando definido com BY_DAY, a API gera um ponto por dia até hoje (ignora janela rolante `days`).
    */
   timelineStart?: string;
+  /**
+   * Com BY_DAY + timelineStart (este/próximo mês): incluir todos os dias do mês no eixo;
+   * dias sem dados ficam 0. Se false, a série vai só até hoje.
+   */
+  fillTimelineMonth?: boolean;
   /** Legado — ainda aceito pela API */
   measure?: "COUNT" | "SUM_VALUE";
   includeClosed?: boolean;
