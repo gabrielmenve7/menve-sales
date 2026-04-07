@@ -2,7 +2,7 @@
 
 import type { CustomField } from "@prisma/client";
 import { useQuery } from "@tanstack/react-query";
-import { Kanban, Plus } from "lucide-react";
+import { ArrowRight, Kanban, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PipelineDealDetailDialog } from "@/app/(dashboard)/pipeline/pipeline-deal-detail-dialog";
@@ -206,12 +206,16 @@ export function InboxLeadSidebar({
   dealCustomFieldDefs,
   tenantMembers,
   onLeadChanged,
+  canGoToNextInQueue,
+  onGoToNextInQueue,
 }: {
   contact: InboxContact;
   deals: InboxOpenDeal[];
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   onLeadChanged: () => void;
+  canGoToNextInQueue: boolean;
+  onGoToNextInQueue: () => void;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [activeDealId, setActiveDealId] = useState<string | null>(null);
@@ -246,17 +250,25 @@ export function InboxLeadSidebar({
             Oportunidade
           </h2>
         </div>
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 shrink-0 px-2 text-xs"
-          asChild
+          disabled={!canGoToNextInQueue}
+          title={
+            canGoToNextInQueue
+              ? "Abrir a próxima conversa da lista"
+              : "Não há próxima conversa na fila"
+          }
+          onClick={onGoToNextInQueue}
+          className={cn(
+            "inline-flex h-8 shrink-0 items-center gap-1 px-0 text-xs font-medium transition-colors",
+            canGoToNextInQueue
+              ? "text-muted-foreground hover:text-foreground"
+              : "cursor-not-allowed text-muted-foreground/40",
+          )}
         >
-          <Link href="/pipeline" title="Ver funil completo">
-            Funil
-          </Link>
-        </Button>
+          <span>Próximo da fila</span>
+          <ArrowRight className="size-3.5 shrink-0 opacity-80" aria-hidden />
+        </button>
       </div>
 
       {openDeals.length > 1 ? (
