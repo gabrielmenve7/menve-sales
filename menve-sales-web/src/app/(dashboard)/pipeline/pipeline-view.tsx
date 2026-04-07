@@ -13,6 +13,7 @@ import {
   Settings,
   SlidersHorizontal,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -398,34 +399,16 @@ export function PipelineView({
             >
               <Settings className="size-[18px]" strokeWidth={1.75} />
             </Link>
-          </div>
-          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Visão do pipeline">
-            <Link
-              href={`/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}`}
-              role="tab"
-              aria-selected={viewTab === "board"}
-              className={cn(
-                "inline-flex h-10 items-center rounded-xl border px-4 text-sm font-medium transition-colors",
-                viewTab === "board"
-                  ? "border-border/50 bg-muted/50 text-foreground shadow-sm"
-                  : "border-transparent text-muted-foreground hover:bg-muted/40",
-              )}
-            >
-              Quadro
-            </Link>
-            <Link
-              href={`/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}&tab=automations`}
-              role="tab"
-              aria-selected={viewTab === "automations"}
-              className={cn(
-                "inline-flex h-10 items-center rounded-xl border px-4 text-sm font-medium transition-colors",
-                viewTab === "automations"
-                  ? "border-border/50 bg-muted/50 text-foreground shadow-sm"
-                  : "border-transparent text-muted-foreground hover:bg-muted/40",
-              )}
-            >
-              Automações
-            </Link>
+            {viewTab === "automations" ? (
+              <Link
+                href={`/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}`}
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/35 bg-primary/10 text-primary shadow-sm transition-colors hover:bg-primary/15"
+                aria-label="Voltar ao quadro"
+                title="Voltar ao quadro"
+              >
+                <Zap className="size-[18px]" strokeWidth={2} fill="currentColor" />
+              </Link>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px] leading-snug">
             <span className="text-muted-foreground">
@@ -448,6 +431,14 @@ export function PipelineView({
             viewTab === "automations" && "hidden",
           )}
         >
+          <Link
+            href={`/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}&tab=automations`}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-muted/40 hover:text-foreground"
+            aria-label="Automações do funil"
+            title="Automações"
+          >
+            <Zap className="size-[18px]" strokeWidth={2} />
+          </Link>
           <Popover>
             <PopoverTrigger asChild>
               <Button
