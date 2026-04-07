@@ -69,6 +69,7 @@ export function PipelineView({
   dealCustomFieldDefs,
   tenantMembers,
   campaignSources,
+  tenantTags = [],
   openAutomationsFromUrl = false,
   canConfigureAutomations,
 }: {
@@ -85,6 +86,7 @@ export function PipelineView({
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   campaignSources: { id: string; name: string }[];
+  tenantTags?: { id: string; name: string }[];
   /** Abre o modal de automações uma vez (ex.: link com `?tab=automations`). */
   openAutomationsFromUrl?: boolean;
   canConfigureAutomations?: boolean;
@@ -611,6 +613,9 @@ export function PipelineView({
         onOpenChange={setAutomationsOpen}
         pipeline={activePipeline}
         canConfigure={canConfigureAutomations ?? false}
+        dealCustomFieldDefs={dealCustomFieldDefs}
+        campaignSources={campaignSources}
+        tenantTags={tenantTags}
       />
     </div>
   );

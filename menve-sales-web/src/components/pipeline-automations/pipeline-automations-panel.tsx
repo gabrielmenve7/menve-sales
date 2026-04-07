@@ -1,7 +1,20 @@
 "use client";
 
+import type { CustomField } from "@prisma/client";
 import type { Pipeline, Stage } from "@prisma/client";
-import { ArrowRight, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  CircleDot,
+  ListTree,
+  Search,
+  Tag,
+  Target,
+  Trash2,
+  UserMinus,
+  UserPlus,
+  Zap,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import {
@@ -13,28 +26,143 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type {
   PipelineAutomationAction,
   PipelineAutomationRunRow,
   PipelineAutomationRuleRow,
+  PipelineAutomationTriggerFilter,
   PipelineAutomationTriggerType,
 } from "@/lib/pipeline-automation-types";
 import { PIPELINE_AUTOMATION_TRIGGER_LABELS } from "@/lib/pipeline-automation-types";
-import {
-  pipelineFieldSelectClass,
-  pipelineSelectClass,
-} from "@/lib/pipeline-ui-tokens";
+import { cn } from "@/lib/utils";
 
-const TRIGGER_OPTIONS: PipelineAutomationTriggerType[] = [
-  "DEAL_CREATED",
-  "DEAL_ENTERED_STAGE",
-  "DEAL_LEFT_STAGE",
-  "DEAL_MARKED_WON",
-  "DEAL_MARKED_LOST",
-];
+const clickBlock =
+  "rounded-lg border border-[#333] bg-[#1e1e1e] p-4 shadow-sm";
+const clickHeader =
+  "flex items-center justify-between gap-3 rounded-lg border border-[#333] bg-[#1e1e1e] px-3 py-2.5";
+const clickField =
+  "flex h-10 w-full items-center justify-between gap-2 rounded border border-[#333] bg-[#262626] px-3 text-left text-[13px] text-neutral-100 outline-none transition hover:bg-[#2a2a2a] focus-visible:ring-1 focus-visible:ring-neutral-500";
+const clickInnerLabel = "text-[11px] font-medium text-neutral-500";
+const clickSelect = cn(
+  clickField,
+  "cursor-pointer appearance-none bg-[#262626] pr-8",
+);
+
+const TRIGGER_GROUPS: { heading: string; types: PipelineAutomationTriggerType[] }[] =
+  [
+    {
+      heading: "Oportunidade",
+      types: [
+        "DEAL_STAGE_TRANSITION",
+        "DEAL_CREATED",
+        "DEAL_CUSTOM_FIELD_CHANGED",
+        "DEAL_ASSIGNEE_ASSIGNED",
+        "DEAL_ASSIGNEE_REMOVED",
+        "DEAL_ENTERED_STAGE",
+        "DEAL_LEFT_STAGE",
+        "DEAL_MARKED_WON",
+        "DEAL_MARKED_LOST",
+      ],
+    },
+    {
+      heading: "Contato",
+      types: ["CONTACT_TAG_ADDED", "CONTACT_TAG_REMOVED"],
+    },
+  ];
+
+function triggerIcon(t: PipelineAutomationTriggerType) {
+  switch (t) {
+    case "DEAL_STAGE_TRANSITION":
+    case "DEAL_ENTERED_STAGE":
+    case "DEAL_LEFT_STAGE":
+      return Target;
+    case "DEAL_CREATED":
+      return CircleDot;
+    case "DEAL_CUSTOM_FIELD_CHANGED":
+      return ListTree;
+    case "DEAL_ASSIGNEE_ASSIGNED":
+      return UserPlus;
+    case "DEAL_ASSIGNEE_REMOVED":
+      return UserMinus;
+    case "CONTACT_TAG_ADDED":
+    case "CONTACT_TAG_REMOVED":
+      return Tag;
+    default:
+      return Target;
+  }
+}
 
 function stageName(stages: Stage[], id: string) {
   return stages.find((s) => s.id === id)?.name ?? id.slice(0, 8);
+}
+
+function parseOptionalAutomationValue(raw: string): unknown | undefined {
+  const s = raw.trim();
+  if (!s) return undefined;
+  try {
+    return JSON.parse(s) as unknown;
+  } catch {
+    return s;
+  }
+}
+
+function parseAutomationTriggerFilter(
+  tf: unknown,
+): PipelineAutomationRuleRow["triggerFilter"] {
+  if (!tf || typeof tf !== "object") return null;
+  const t = tf as Record<string, unknown>;
+  const out: PipelineAutomationTriggerFilter = {};
+  if (typeof t.toStageId === "string" && t.toStageId)
+    out.toStageId = t.toStageId;
+  if (typeof t.fromStageId === "string" && t.fromStageId)
+    out.fromStageId = t.fromStageId;
+  if (Array.isArray(t.campaignSourceIds)) {
+    const ids = t.campaignSourceIds.filter((x) => typeof x === "string");
+    if (ids.length) out.campaignSourceIds = ids;
+  }
+  if (typeof t.customFieldKey === "string" && t.customFieldKey)
+    out.customFieldKey = t.customFieldKey;
+  if ("fromCustomValue" in t) out.fromCustomValue = t.fromCustomValue;
+  if ("toCustomValue" in t) out.toCustomValue = t.toCustomValue;
+  if (typeof t.tagId === "string" && t.tagId) out.tagId = t.tagId;
+  return Object.keys(out).length ? out : null;
+}
+
+function describeTriggerFilter(
+  r: PipelineAutomationRuleRow,
+  stages: Stage[],
+  campaignSources: { id: string; name: string }[],
+  dealFields: CustomField[],
+  tags: { id: string; name: string }[],
+): string {
+  const f = r.triggerFilter;
+  if (!f) return "";
+  const parts: string[] = [];
+  if (f.fromStageId)
+    parts.push(`de “${stageName(stages, f.fromStageId)}”`);
+  if (f.toStageId) parts.push(`para “${stageName(stages, f.toStageId)}”`);
+  if (f.campaignSourceIds?.length) {
+    const names = f.campaignSourceIds.map(
+      (id) => campaignSources.find((c) => c.id === id)?.name ?? id.slice(0, 6),
+    );
+    parts.push(`origens: ${names.join(", ")}`);
+  }
+  if (f.customFieldKey) {
+    const fn =
+      dealFields.find((d) => d.key === f.customFieldKey)?.name ??
+      f.customFieldKey;
+    parts.push(`campo “${fn}”`);
+  }
+  if (f.tagId) {
+    const tn = tags.find((x) => x.id === f.tagId)?.name ?? f.tagId.slice(0, 6);
+    parts.push(`tag “${tn}”`);
+  }
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
 }
 
 function summarizeRule(r: PipelineAutomationRuleRow, stages: Stage[]) {
@@ -63,22 +191,7 @@ function parseRulesFromApi(raw: unknown): PipelineAutomationRuleRow[] {
       }
     }
     if (actions.length === 0) continue;
-    const tf = o.triggerFilter;
-    let triggerFilter: PipelineAutomationRuleRow["triggerFilter"] = null;
-    if (tf && typeof tf === "object") {
-      const t = tf as Record<string, unknown>;
-      triggerFilter = {
-        ...(typeof t.toStageId === "string"
-          ? { toStageId: t.toStageId }
-          : {}),
-        ...(typeof t.fromStageId === "string"
-          ? { fromStageId: t.fromStageId }
-          : {}),
-      };
-      if (!triggerFilter.toStageId && !triggerFilter.fromStageId) {
-        triggerFilter = null;
-      }
-    }
+    const triggerFilter = parseAutomationTriggerFilter(o.triggerFilter);
     const tt = o.triggerType;
     if (typeof tt !== "string") continue;
     if (!(tt in PIPELINE_AUTOMATION_TRIGGER_LABELS)) continue;
@@ -123,36 +236,65 @@ function parseRuns(raw: unknown): PipelineAutomationRunRow[] {
   return out;
 }
 
+function selectOptionsFromCustomField(field: CustomField | undefined) {
+  if (!field?.options || !Array.isArray(field.options)) return [];
+  return field.options.map((opt) => {
+    if (opt && typeof opt === "object" && "value" in opt) {
+      const v = (opt as { value?: string; label?: string }).value;
+      const l = (opt as { label?: string }).label;
+      return { value: String(v ?? ""), label: String(l ?? v ?? "") };
+    }
+    return { value: String(opt), label: String(opt) };
+  });
+}
+
 export function PipelineAutomationsPanel({
   pipeline,
   rulesRaw,
   canConfigure,
   variant = "page",
   onRulesChanged,
+  dealCustomFieldDefs = [],
+  campaignSources = [],
+  tenantTags = [],
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   rulesRaw: unknown;
   canConfigure: boolean;
-  /** No modal central, omitir linha duplicada do nome do funil. */
   variant?: "page" | "dialog";
-  /** Chamado após criar, excluir ou alternar regra (ex.: refetch no pai). */
   onRulesChanged?: () => void;
+  dealCustomFieldDefs?: CustomField[];
+  campaignSources?: { id: string; name: string }[];
+  tenantTags?: { id: string; name: string }[];
 }) {
   const stages = useMemo(
     () => [...pipeline.stages].sort((a, b) => a.sortOrder - b.sortOrder),
     [pipeline.stages],
   );
   const rules = useMemo(() => parseRulesFromApi(rulesRaw), [rulesRaw]);
+  const sortedTags = useMemo(
+    () => [...tenantTags].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    [tenantTags],
+  );
 
   const [name, setName] = useState("");
   const [triggerType, setTriggerType] =
-    useState<PipelineAutomationTriggerType>("DEAL_CREATED");
-  const [filterStageId, setFilterStageId] = useState("");
+    useState<PipelineAutomationTriggerType>("DEAL_STAGE_TRANSITION");
+  const [stageFromId, setStageFromId] = useState("");
+  const [stageToId, setStageToId] = useState("");
+  const [legacyStageFilterId, setLegacyStageFilterId] = useState("");
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
+  const [customFieldKey, setCustomFieldKey] = useState("");
+  const [fromCustomStr, setFromCustomStr] = useState("");
+  const [toCustomStr, setToCustomStr] = useState("");
+  const [tagFilterId, setTagFilterId] = useState("");
   const [targetStageId, setTargetStageId] = useState(
     () => stages[0]?.id ?? "",
   );
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [triggerMenuOpen, setTriggerMenuOpen] = useState(false);
+  const [triggerSearch, setTriggerSearch] = useState("");
 
   const [openRunsId, setOpenRunsId] = useState<string | null>(null);
   const [runsByRule, setRunsByRule] = useState<
@@ -160,17 +302,62 @@ export function PipelineAutomationsPanel({
   >({});
   const [runsLoading, setRunsLoading] = useState<string | null>(null);
 
-  function buildTriggerFilter(): {
-    toStageId?: string;
-    fromStageId?: string;
-  } | null {
-    if (triggerType === "DEAL_ENTERED_STAGE" && filterStageId.trim()) {
-      return { toStageId: filterStageId.trim() };
+  const selectedField = useMemo(
+    () => dealCustomFieldDefs.find((d) => d.key === customFieldKey),
+    [dealCustomFieldDefs, customFieldKey],
+  );
+  const fieldSelectOptions = useMemo(
+    () => selectOptionsFromCustomField(selectedField),
+    [selectedField],
+  );
+
+  const filteredTriggerGroups = useMemo(() => {
+    const q = triggerSearch.trim().toLowerCase();
+    if (!q) return TRIGGER_GROUPS;
+    return TRIGGER_GROUPS.map((g) => ({
+      ...g,
+      types: g.types.filter((t) =>
+        PIPELINE_AUTOMATION_TRIGGER_LABELS[t].toLowerCase().includes(q),
+      ),
+    })).filter((g) => g.types.length > 0);
+  }, [triggerSearch]);
+
+  function buildTriggerFilter(): PipelineAutomationTriggerFilter | null {
+    const out: PipelineAutomationTriggerFilter = {};
+    switch (triggerType) {
+      case "DEAL_STAGE_TRANSITION":
+        if (stageFromId.trim()) out.fromStageId = stageFromId.trim();
+        if (stageToId.trim()) out.toStageId = stageToId.trim();
+        break;
+      case "DEAL_ENTERED_STAGE":
+        if (legacyStageFilterId.trim())
+          out.toStageId = legacyStageFilterId.trim();
+        break;
+      case "DEAL_LEFT_STAGE":
+        if (legacyStageFilterId.trim())
+          out.fromStageId = legacyStageFilterId.trim();
+        break;
+      case "DEAL_CREATED":
+        if (selectedCampaignIds.length)
+          out.campaignSourceIds = [...selectedCampaignIds];
+        break;
+      case "DEAL_CUSTOM_FIELD_CHANGED":
+        out.customFieldKey = customFieldKey.trim();
+        {
+          const fv = parseOptionalAutomationValue(fromCustomStr);
+          if (fv !== undefined) out.fromCustomValue = fv;
+          const tv = parseOptionalAutomationValue(toCustomStr);
+          if (tv !== undefined) out.toCustomValue = tv;
+        }
+        break;
+      case "CONTACT_TAG_ADDED":
+      case "CONTACT_TAG_REMOVED":
+        if (tagFilterId.trim()) out.tagId = tagFilterId.trim();
+        break;
+      default:
+        break;
     }
-    if (triggerType === "DEAL_LEFT_STAGE" && filterStageId.trim()) {
-      return { fromStageId: filterStageId.trim() };
-    }
-    return null;
+    return Object.keys(out).length ? out : null;
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -181,22 +368,34 @@ export function PipelineAutomationsPanel({
       return;
     }
     if (!targetStageId) {
-      setFormError("Selecione a etapa de destino.");
+      setFormError("Selecione a etapa de destino da ação.");
       return;
     }
+    if (triggerType === "DEAL_CUSTOM_FIELD_CHANGED" && !customFieldKey.trim()) {
+      setFormError("Selecione o campo personalizado.");
+      return;
+    }
+    const triggerFilter = buildTriggerFilter();
     startTransition(async () => {
       try {
         await createPipelineAutomationRule({
           pipelineId: pipeline.id,
           name: name.trim(),
           triggerType,
-          triggerFilter: buildTriggerFilter(),
+          triggerFilter,
           actions: [{ type: "MOVE_TO_STAGE", stageId: targetStageId }],
         });
         onRulesChanged?.();
         setName("");
-        setTriggerType("DEAL_CREATED");
-        setFilterStageId("");
+        setTriggerType("DEAL_STAGE_TRANSITION");
+        setStageFromId("");
+        setStageToId("");
+        setLegacyStageFilterId("");
+        setSelectedCampaignIds([]);
+        setCustomFieldKey("");
+        setFromCustomStr("");
+        setToCustomStr("");
+        setTagFilterId("");
         setTargetStageId(stages[0]?.id ?? "");
       } catch (err) {
         setFormError(
@@ -229,10 +428,16 @@ export function PipelineAutomationsPanel({
     }
   }
 
+  const TriggerIcon = triggerIcon(triggerType);
+  const formShell =
+    variant === "dialog"
+      ? "rounded-xl border border-[#2a2a2a] bg-[#111] p-5"
+      : "rounded-xl border border-border/60 bg-muted/20 p-5 dark:bg-muted/10";
+
   return (
     <div className="flex min-h-0 flex-1 flex-col space-y-6">
       {variant === "dialog" ? (
-        <p className="text-[12px] text-muted-foreground">
+        <p className="text-[12px] text-neutral-500">
           As regras são avaliadas na ordem abaixo quando o evento ocorre.
         </p>
       ) : (
@@ -244,14 +449,14 @@ export function PipelineAutomationsPanel({
       )}
 
       {canConfigure ? (
-        <form
-          onSubmit={onSubmit}
-          className="shrink-0 space-y-4 rounded-lg border border-border/60 bg-muted/20 p-4 dark:bg-muted/10"
-        >
+        <form onSubmit={onSubmit} className={cn("shrink-0 space-y-5", formShell)}>
           <div className="space-y-1.5">
             <Label
               htmlFor="auto-name"
-              className="text-[11px] font-medium text-muted-foreground"
+              className={cn(
+                "text-[11px] font-medium",
+                variant === "dialog" ? "text-neutral-500" : "text-muted-foreground",
+              )}
             >
               Nome da automação
             </Label>
@@ -260,98 +465,464 @@ export function PipelineAutomationsPanel({
               placeholder="Dê um nome a esta automação…"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-11 rounded-xl border-border/50 text-[14px] shadow-sm"
+              className={cn(
+                "h-11 text-[14px]",
+                variant === "dialog" &&
+                  "rounded-md border-[#333] bg-[#1a1a1a] text-neutral-100 placeholder:text-neutral-600",
+              )}
             />
           </div>
 
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
-            <div className="min-w-0 flex-1 space-y-2 rounded-lg border border-border/50 bg-background/80 p-3 shadow-sm">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Quando
-              </p>
-              <div className="space-y-2">
-                <Label className="text-[10px] text-muted-foreground">
-                  Gatilho
-                </Label>
-                <select
-                  className={pipelineSelectClass}
-                  value={triggerType}
-                  onChange={(e) =>
-                    setTriggerType(
-                      e.target.value as PipelineAutomationTriggerType,
-                    )
-                  }
-                  aria-label="Gatilho"
+          <div
+            className={cn(
+              "grid gap-6 lg:grid-cols-[1fr_auto_1fr] lg:items-start",
+              variant === "dialog" && "text-neutral-200",
+            )}
+          >
+            {/* Acionar */}
+            <div className="relative min-w-0 space-y-0">
+              <div className="flex justify-center">
+                <div className="h-4 w-px border-l border-dashed border-[#444]" />
+              </div>
+              <div className={clickHeader}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-violet-600/20 text-violet-300">
+                    <Zap className="size-4" strokeWidth={2} aria-hidden />
+                  </span>
+                  <span className="truncate text-[14px] font-semibold text-neutral-50">
+                    Acionar
+                  </span>
+                </div>
+                <span className="hidden shrink-0 rounded-md border border-[#333] bg-[#262626] px-2 py-1 text-[11px] text-neutral-400 sm:inline">
+                  Oportunidades neste funil
+                </span>
+              </div>
+              <div className="flex justify-center py-1">
+                <div className="min-h-[12px] w-px flex-1 border-l border-dashed border-[#444]" />
+              </div>
+
+              <div className={clickBlock}>
+                <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                  Tipo de gatilho
+                </p>
+                <Popover
+                  open={triggerMenuOpen}
+                  onOpenChange={setTriggerMenuOpen}
                 >
-                  {TRIGGER_OPTIONS.map((t) => (
-                    <option key={t} value={t}>
-                      {PIPELINE_AUTOMATION_TRIGGER_LABELS[t]}
-                    </option>
-                  ))}
-                </select>
-                {(triggerType === "DEAL_ENTERED_STAGE" ||
-                  triggerType === "DEAL_LEFT_STAGE") && (
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">
-                      {triggerType === "DEAL_ENTERED_STAGE"
-                        ? "Etapa de destino (opcional)"
-                        : "Etapa de origem (opcional)"}
-                    </Label>
-                    <select
-                      className={pipelineSelectClass}
-                      value={filterStageId}
-                      onChange={(e) => setFilterStageId(e.target.value)}
-                      aria-label="Filtro de etapa"
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={clickField}
+                      aria-expanded={triggerMenuOpen}
                     >
-                      <option value="">Qualquer etapa</option>
-                      {stages.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <TriggerIcon
+                          className="size-4 shrink-0 text-neutral-400"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                        <span className="truncate">
+                          {PIPELINE_AUTOMATION_TRIGGER_LABELS[triggerType]}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        className="size-4 shrink-0 text-neutral-500"
+                        aria-hidden
+                      />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-[min(100vw-2rem,320px)] border border-[#333] bg-[#1e1e1e] p-0 text-neutral-200 shadow-xl"
+                  >
+                    <div className="border-b border-[#333] p-2">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
+                        <Input
+                          value={triggerSearch}
+                          onChange={(e) => setTriggerSearch(e.target.value)}
+                          placeholder="Pesquisar…"
+                          className="h-9 border-[#333] bg-[#262626] pl-8 text-[13px] text-neutral-100 placeholder:text-neutral-600"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto py-1">
+                      {filteredTriggerGroups.map((group) => (
+                        <div key={group.heading}>
+                          <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                            {group.heading}
+                          </p>
+                          {group.types.map((t) => {
+                            const Icon = triggerIcon(t);
+                            const selected = t === triggerType;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                className={cn(
+                                  "flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-[#2a2a2a]",
+                                  selected && "bg-[#2a2a2a]",
+                                )}
+                                onClick={() => {
+                                  setTriggerType(t);
+                                  setTriggerMenuOpen(false);
+                                  setTriggerSearch("");
+                                }}
+                              >
+                                <Icon
+                                  className="size-4 shrink-0 text-neutral-400"
+                                  strokeWidth={2}
+                                  aria-hidden
+                                />
+                                <span className="flex-1 truncate">
+                                  {PIPELINE_AUTOMATION_TRIGGER_LABELS[t]}
+                                </span>
+                                {selected ? (
+                                  <span className="text-neutral-300">✓</span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
                       ))}
-                    </select>
-                  </div>
-                )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <div className="mt-4 space-y-3 border-t border-[#333] pt-4">
+                  {triggerType === "DEAL_STAGE_TRANSITION" ? (
+                    <>
+                      <div className="space-y-1">
+                        <p className={clickInnerLabel}>De</p>
+                        <select
+                          className={clickSelect}
+                          value={stageFromId}
+                          onChange={(e) => setStageFromId(e.target.value)}
+                          aria-label="Etapa de origem"
+                        >
+                          <option value="">Qualquer status</option>
+                          {stages.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <p className={clickInnerLabel}>Para</p>
+                        <select
+                          className={clickSelect}
+                          value={stageToId}
+                          onChange={(e) => setStageToId(e.target.value)}
+                          aria-label="Etapa de destino do gatilho"
+                        >
+                          <option value="">Qualquer status</option>
+                          {stages.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  ) : null}
+
+                  {triggerType === "DEAL_ENTERED_STAGE" ||
+                  triggerType === "DEAL_LEFT_STAGE" ? (
+                    <div className="space-y-1">
+                      <p className={clickInnerLabel}>
+                        {triggerType === "DEAL_ENTERED_STAGE"
+                          ? "Etapa de destino (opcional)"
+                          : "Etapa de origem (opcional)"}
+                      </p>
+                      <select
+                        className={clickSelect}
+                        value={legacyStageFilterId}
+                        onChange={(e) => setLegacyStageFilterId(e.target.value)}
+                        aria-label="Filtro de etapa"
+                      >
+                        <option value="">Qualquer etapa</option>
+                        {stages.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {triggerType === "DEAL_CREATED" ? (
+                    <div className="space-y-2">
+                      <p className={clickInnerLabel}>
+                        Origens de criação (vazio = todas)
+                      </p>
+                      <div className="max-h-36 space-y-1.5 overflow-y-auto rounded border border-[#333] bg-[#262626] p-2">
+                        {campaignSources.length === 0 ? (
+                          <p className="text-[12px] text-neutral-500">
+                            Nenhuma origem cadastrada.
+                          </p>
+                        ) : (
+                          campaignSources.map((c) => (
+                            <label
+                              key={c.id}
+                              className="flex cursor-pointer items-center gap-2 text-[12px]"
+                            >
+                              <input
+                                type="checkbox"
+                                className="rounded border-[#555] bg-[#1e1e1e]"
+                                checked={selectedCampaignIds.includes(c.id)}
+                                onChange={(e) => {
+                                  setSelectedCampaignIds((prev) =>
+                                    e.target.checked
+                                      ? [...prev, c.id]
+                                      : prev.filter((x) => x !== c.id),
+                                  );
+                                }}
+                              />
+                              <span className="truncate">{c.name}</span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {triggerType === "DEAL_CUSTOM_FIELD_CHANGED" ? (
+                    <>
+                      <div className="space-y-1">
+                        <p className={clickInnerLabel}>Campo</p>
+                        <select
+                          className={clickSelect}
+                          value={customFieldKey}
+                          onChange={(e) => {
+                            setCustomFieldKey(e.target.value);
+                            setFromCustomStr("");
+                            setToCustomStr("");
+                          }}
+                          aria-label="Campo personalizado"
+                        >
+                          <option value="">Selecionar…</option>
+                          {dealCustomFieldDefs.map((d) => (
+                            <option key={d.id} value={d.key}>
+                              {d.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedField?.fieldType === "SELECT" &&
+                      fieldSelectOptions.length > 0 ? (
+                        <>
+                          <div className="space-y-1">
+                            <p className={clickInnerLabel}>De (opcional)</p>
+                            <select
+                              className={clickSelect}
+                              value={fromCustomStr}
+                              onChange={(e) => setFromCustomStr(e.target.value)}
+                              aria-label="Valor anterior"
+                            >
+                              <option value="">Qualquer</option>
+                              {fieldSelectOptions.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <p className={clickInnerLabel}>Para (opcional)</p>
+                            <select
+                              className={clickSelect}
+                              value={toCustomStr}
+                              onChange={(e) => setToCustomStr(e.target.value)}
+                              aria-label="Novo valor"
+                            >
+                              <option value="">Qualquer</option>
+                              {fieldSelectOptions.map((o) => (
+                                <option key={`t-${o.value}`} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="space-y-1">
+                            <p className={clickInnerLabel}>
+                              Valor anterior (opcional, JSON ou texto)
+                            </p>
+                            <Input
+                              value={fromCustomStr}
+                              onChange={(e) => setFromCustomStr(e.target.value)}
+                              placeholder="Vazio = qualquer"
+                              className="h-10 border-[#333] bg-[#262626] text-[13px] text-neutral-100"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <p className={clickInnerLabel}>
+                              Novo valor (opcional)
+                            </p>
+                            <Input
+                              value={toCustomStr}
+                              onChange={(e) => setToCustomStr(e.target.value)}
+                              placeholder="Vazio = qualquer"
+                              className="h-10 border-[#333] bg-[#262626] text-[13px] text-neutral-100"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : null}
+
+                  {(triggerType === "CONTACT_TAG_ADDED" ||
+                    triggerType === "CONTACT_TAG_REMOVED") && (
+                    <div className="space-y-1">
+                      <p className={clickInnerLabel}>Tag (opcional)</p>
+                      <select
+                        className={clickSelect}
+                        value={tagFilterId}
+                        onChange={(e) => setTagFilterId(e.target.value)}
+                        aria-label="Filtrar por tag"
+                      >
+                        <option value="">Qualquer tag</option>
+                        {sortedTags.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] leading-snug text-neutral-500">
+                        Dispara para oportunidades abertas deste funil quando a
+                        tag é aplicada ou removida no contato vinculado.
+                      </p>
+                    </div>
+                  )}
+
+                  {(triggerType === "DEAL_ASSIGNEE_ASSIGNED" ||
+                    triggerType === "DEAL_ASSIGNEE_REMOVED" ||
+                    triggerType === "DEAL_MARKED_WON" ||
+                    triggerType === "DEAL_MARKED_LOST") && (
+                    <p className="text-[12px] text-neutral-500">
+                      Sem filtros adicionais.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-center pt-2">
+                <div className="h-6 w-px border-l border-dashed border-[#444]" />
+              </div>
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  disabled
+                  className="flex size-8 items-center justify-center rounded border border-dashed border-[#444] bg-[#1a1a1a] text-neutral-600"
+                  aria-label="Adicionar gatilho (em breve)"
+                >
+                  +
+                </button>
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center justify-center px-1 lg:px-2">
-              <ArrowRight
-                className="size-6 text-muted-foreground lg:size-7"
-                strokeWidth={1.75}
-                aria-hidden
-              />
+            {/* Seta central */}
+            <div className="flex flex-col items-center justify-center gap-2 lg:pt-16">
+              <div className="flex size-10 items-center justify-center rounded border border-[#333] bg-[#1a1a1a] text-lg text-neutral-400">
+                →
+              </div>
             </div>
 
-            <div className="min-w-0 flex-1 space-y-2 rounded-lg border border-border/50 bg-background/80 p-3 shadow-sm">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Então
-              </p>
-              <Label className="text-[10px] text-muted-foreground">
-                Mover oportunidade para
-              </Label>
-              <select
-                className={pipelineFieldSelectClass}
-                value={targetStageId}
-                onChange={(e) => setTargetStageId(e.target.value)}
-                aria-label="Etapa de destino da ação"
-              >
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+            {/* Ação */}
+            <div className="relative min-w-0 space-y-0">
+              <div className="flex justify-center">
+                <div className="h-4 w-px border-l border-dashed border-[#444]" />
+              </div>
+              <div className={clickHeader}>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-emerald-300">
+                    <CircleDot className="size-4" strokeWidth={2} aria-hidden />
+                  </span>
+                  <span className="truncate text-[14px] font-semibold text-neutral-50">
+                    Ação
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-center py-1">
+                <div className="min-h-[12px] w-px flex-1 border-l border-dashed border-[#444]" />
+              </div>
+
+              <div className={clickBlock}>
+                <button
+                  type="button"
+                  className={cn(clickField, "mb-4 w-full cursor-default")}
+                  aria-hidden
+                >
+                  <span className="flex items-center gap-2">
+                    <Target
+                      className="size-4 text-neutral-400"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                    <span>Alterar status (mover etapa)</span>
+                  </span>
+                  <ChevronDown
+                    className="size-4 text-neutral-500 opacity-50"
+                    aria-hidden
+                  />
+                </button>
+                <div className="space-y-1">
+                  <p className={clickInnerLabel}>
+                    Status<span className="text-red-400">*</span>
+                  </p>
+                  <select
+                    className={clickSelect}
+                    value={targetStageId}
+                    onChange={(e) => setTargetStageId(e.target.value)}
+                    aria-label="Etapa de destino da ação"
+                  >
+                    <option value="">Selecionar um status</option>
+                    {stages.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mt-4 flex gap-2 rounded-md border border-amber-900/50 bg-amber-950/40 px-3 py-2 text-[11px] leading-snug text-amber-200/90">
+                  <span aria-hidden>⚠</span>
+                  <span>
+                    A oportunidade será movida para a etapa escolhida. Se a etapa
+                    não existir mais, a regra pode falhar na execução.
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-center pt-2">
+                <div className="h-6 w-px border-l border-dashed border-[#444]" />
+              </div>
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  disabled
+                  className="flex size-8 items-center justify-center rounded border border-dashed border-[#444] bg-[#1a1a1a] text-neutral-600"
+                  aria-label="Adicionar ação (em breve)"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
 
           {formError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-sm text-red-400" role="alert">
               {formError}
             </p>
           ) : null}
 
-          <Button type="submit" disabled={pending} className="font-medium">
+          <Button
+            type="submit"
+            disabled={pending}
+            className="font-medium"
+          >
             {pending ? "Salvando…" : "Salvar automação"}
           </Button>
         </form>
@@ -385,12 +956,13 @@ export function PipelineAutomationsPanel({
                     <p className="font-medium text-foreground">{r.name}</p>
                     <p className="text-[12px] text-muted-foreground">
                       {PIPELINE_AUTOMATION_TRIGGER_LABELS[r.triggerType]}
-                      {r.triggerFilter?.toStageId
-                        ? ` · etapa ${stageName(stages, r.triggerFilter.toStageId)}`
-                        : null}
-                      {r.triggerFilter?.fromStageId
-                        ? ` · saiu de ${stageName(stages, r.triggerFilter.fromStageId)}`
-                        : null}
+                      {describeTriggerFilter(
+                        r,
+                        stages,
+                        campaignSources,
+                        dealCustomFieldDefs,
+                        sortedTags,
+                      )}
                     </p>
                     <p className="text-[13px] text-foreground/90">
                       {summarizeRule(r, stages)}
@@ -439,7 +1011,7 @@ export function PipelineAutomationsPanel({
                           size="icon"
                           className="size-9 text-muted-foreground hover:text-destructive"
                           aria-label="Excluir regra"
-                            onClick={() => {
+                          onClick={() => {
                             if (
                               !confirm(
                                 `Excluir a automação “${r.name}”?`,

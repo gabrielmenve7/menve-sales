@@ -1,9 +1,13 @@
 import {
   BadRequestException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { PipelineAutomationEngineService } from "../pipeline-automations/pipeline-automation-engine.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { coerceCustomFieldValue } from "../custom-fields/custom-field-coerce";
 import { findContactCustomFieldDefinitions } from "../custom-fields/custom-fields-load.util";
@@ -39,7 +43,12 @@ function csvEscape(value: string) {
 
 @Injectable()
 export class ContactsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(forwardRef(() => PipelineAutomationEngineService))
+    private readonly pipelineAutomationEngine?: PipelineAutomationEngineService,
+  ) {}
 
   async listForPipeline(tenantId: string) {
     return this.prisma.contact.findMany({
@@ -271,7 +280,12 @@ export class ContactsService {
     return { imported, skipped };
   }
 
-  async addTag(tenantId: string, contactId: string, tagId: string) {
+  async addTag(
+    tenantId: string,
+    actorUserId: string,
+    contactId: string,
+    tagId: string,
+  ) {
     const [contact, tag] = await Promise.all([
       this.prisma.contact.findFirst({ where: { id: contactId, tenantId } }),
       this.prisma.tag.findFirst({ where: { id: tagId, tenantId } }),
@@ -282,14 +296,50 @@ export class ContactsService {
       create: { contactId, tagId },
       update: {},
     });
+    if (this.pipelineAutomationEngine) {
+      try {
+        await this.pipelineAutomationEngine.afterContactTagAdded({
+          tenantId,
+          actorUserId,
+          contactId,
+          tagId,
+          depth: 0,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
-  async removeTag(tenantId: string, contactId: string, tagId: string) {
+  async removeTag(
+    tenantId: string,
+    actorUserId: string,
+    contactId: string,
+    tagId: string,
+  ) {
     const contact = await this.prisma.contact.findFirst({
       where: { id: contactId, tenantId },
     });
     if (!contact) throw new BadRequestException("Contato inválido");
-    await this.prisma.contactTag.deleteMany({ where: { contactId, tagId } });
+    const deleted = await this.prisma.contactTag.deleteMany({
+      where: { contactId, tagId },
+    });
+    if (
+      deleted.count > 0 &&
+      this.pipelineAutomationEngine
+    ) {
+      try {
+        await this.pipelineAutomationEngine.afterContactTagRemoved({
+          tenantId,
+          actorUserId,
+          contactId,
+          tagId,
+          depth: 0,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   async updateCustomData(

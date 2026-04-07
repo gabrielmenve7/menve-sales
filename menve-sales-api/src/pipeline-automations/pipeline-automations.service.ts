@@ -3,7 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import {
+  CustomFieldEntity,
+  PipelineAutomationTriggerType,
+  Prisma,
+} from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import type { RequestUser } from "../common/request-user";
 import { assertCanConfigureTenant } from "../common/rbac";
@@ -46,7 +50,7 @@ export class PipelineAutomationsService {
   }
 
   private collectStageIdsFromRule(
-    triggerFilter: Prisma.JsonValue | null | undefined,
+    triggerFilter: unknown,
     actions: Prisma.JsonValue,
   ): string[] {
     const ids: string[] = [];
@@ -62,6 +66,79 @@ export class PipelineAutomationsService {
       }
     }
     return ids;
+  }
+
+  private collectCampaignSourceIdsFromFilter(triggerFilter: unknown): string[] {
+    const tf = triggerFilterSchema.safeParse(triggerFilter);
+    if (!tf.success || !tf.data?.campaignSourceIds?.length) return [];
+    return [...new Set(tf.data.campaignSourceIds)];
+  }
+
+  private collectTagIdsFromFilter(triggerFilter: unknown): string[] {
+    const tf = triggerFilterSchema.safeParse(triggerFilter);
+    if (!tf.success || !tf.data?.tagId) return [];
+    return [tf.data.tagId];
+  }
+
+  private async assertCampaignSourcesInTenant(
+    tenantId: string,
+    ids: string[],
+  ) {
+    if (ids.length === 0) return;
+    const rows = await this.prisma.campaignSource.findMany({
+      where: { tenantId, id: { in: ids } },
+      select: { id: true },
+    });
+    if (rows.length !== new Set(ids).size) {
+      throw new BadRequestException("Origem de campanha inválida");
+    }
+  }
+
+  private async assertTagsInTenant(tenantId: string, ids: string[]) {
+    if (ids.length === 0) return;
+    const rows = await this.prisma.tag.findMany({
+      where: { tenantId, id: { in: ids } },
+      select: { id: true },
+    });
+    if (rows.length !== new Set(ids).size) {
+      throw new BadRequestException("Tag inválida");
+    }
+  }
+
+  private async assertDealCustomFieldKey(tenantId: string, key: string) {
+    const f = await this.prisma.customField.findFirst({
+      where: { tenantId, entity: CustomFieldEntity.DEAL, key },
+      select: { id: true },
+    });
+    if (!f) throw new BadRequestException("Campo personalizado inválido");
+  }
+
+  private async assertTriggerFilterRefs(
+    tenantId: string,
+    triggerType: PipelineAutomationTriggerType,
+    triggerFilter: unknown,
+  ) {
+    const tf = triggerFilterSchema.safeParse(triggerFilter);
+    const f = tf.success ? tf.data : undefined;
+    if (
+      triggerType === PipelineAutomationTriggerType.DEAL_CUSTOM_FIELD_CHANGED
+    ) {
+      const k = f?.customFieldKey;
+      if (!k) {
+        throw new BadRequestException(
+          "Selecione o campo personalizado para este gatilho",
+        );
+      }
+      await this.assertDealCustomFieldKey(tenantId, k);
+    }
+    await this.assertCampaignSourcesInTenant(
+      tenantId,
+      this.collectCampaignSourceIdsFromFilter(triggerFilter),
+    );
+    await this.assertTagsInTenant(
+      tenantId,
+      this.collectTagIdsFromFilter(triggerFilter),
+    );
   }
 
   async list(tenantId: string, pipelineId: string) {
@@ -97,6 +174,11 @@ export class PipelineAutomationsService {
       u.tenantId,
       pipelineId,
       stageIds,
+    );
+    await this.assertTriggerFilterRefs(
+      u.tenantId,
+      data.triggerType,
+      data.triggerFilter ?? null,
     );
     return this.prisma.pipelineAutomationRule.create({
       data: {
@@ -134,15 +216,15 @@ export class PipelineAutomationsService {
         : (existing.triggerFilter as Record<string, unknown> | null);
     const nextActions =
       patch.actions !== undefined ? patch.actions : existing.actions;
-    const stageIds = this.collectStageIdsFromRule(
-      nextFilter as Prisma.JsonValue | null | undefined,
-      nextActions,
-    );
+    const stageIds = this.collectStageIdsFromRule(nextFilter, nextActions);
     await this.assertStagesBelongToPipeline(
       u.tenantId,
       pipelineId,
       stageIds,
     );
+    const nextTriggerType =
+      patch.triggerType ?? existing.triggerType;
+    await this.assertTriggerFilterRefs(u.tenantId, nextTriggerType, nextFilter);
     return this.prisma.pipelineAutomationRule.update({
       where: { id: ruleId },
       data: {

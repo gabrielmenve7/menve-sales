@@ -3,11 +3,11 @@ import {
   PipelineAutomationRunStatus,
   PipelineAutomationTriggerType,
 } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { DealsService } from "../deals/deals.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PIPELINE_AUTOMATION_MAX_DEPTH } from "./pipeline-automation.constants";
 import { automationActionsSchema } from "./pipeline-automation.dto";
-import type { Prisma } from "@prisma/client";
 
 type StageEventCtx = {
   tenantId: string;
@@ -26,6 +26,41 @@ type SimpleDealCtx = {
   pipelineId: string;
   depth: number;
 };
+
+type CreatedDealCtx = SimpleDealCtx & {
+  campaignSourceId: string | null;
+};
+
+type AutomationEvent =
+  | { kind: "created"; campaignSourceId: string | null }
+  | { kind: "stage"; fromStageId: string; toStageId: string }
+  | { kind: "won" }
+  | { kind: "lost" }
+  | { kind: "custom_field"; fieldKey: string; fromValue: unknown; toValue: unknown }
+  | { kind: "assignee"; assigned: boolean }
+  | { kind: "contact_tag"; tagId: string; added: boolean };
+
+type TriggerFilterShape = {
+  toStageId?: string;
+  fromStageId?: string;
+  campaignSourceIds?: string[];
+  customFieldKey?: string;
+  fromCustomValue?: unknown;
+  toCustomValue?: unknown;
+  tagId?: string;
+};
+
+function asTriggerFilter(filter: Prisma.JsonValue | null): TriggerFilterShape {
+  return (filter ?? {}) as TriggerFilterShape;
+}
+
+function automationFilterValueMatches(
+  expected: unknown | undefined,
+  actual: unknown,
+): boolean {
+  if (expected === undefined) return true;
+  return JSON.stringify(expected) === JSON.stringify(actual);
+}
 
 @Injectable()
 export class PipelineAutomationEngineService {
@@ -47,19 +82,17 @@ export class PipelineAutomationEngineService {
   private filterMatches(
     triggerType: PipelineAutomationTriggerType,
     filter: Prisma.JsonValue | null,
-    event:
-      | { kind: "created" }
-      | { kind: "stage"; fromStageId: string; toStageId: string }
-      | { kind: "won" }
-      | { kind: "lost" },
+    event: AutomationEvent,
   ): boolean {
-    const f = (filter ?? {}) as {
-      toStageId?: string;
-      fromStageId?: string;
-    };
+    const f = asTriggerFilter(filter);
     switch (triggerType) {
       case PipelineAutomationTriggerType.DEAL_CREATED:
-        return event.kind === "created";
+        if (event.kind !== "created") return false;
+        if (f.campaignSourceIds && f.campaignSourceIds.length > 0) {
+          const c = event.campaignSourceId;
+          if (!c || !f.campaignSourceIds.includes(c)) return false;
+        }
+        return true;
       case PipelineAutomationTriggerType.DEAL_ENTERED_STAGE:
         if (event.kind !== "stage") return false;
         if (f.toStageId && f.toStageId !== event.toStageId) return false;
@@ -67,6 +100,34 @@ export class PipelineAutomationEngineService {
       case PipelineAutomationTriggerType.DEAL_LEFT_STAGE:
         if (event.kind !== "stage") return false;
         if (f.fromStageId && f.fromStageId !== event.fromStageId) return false;
+        return true;
+      case PipelineAutomationTriggerType.DEAL_STAGE_TRANSITION:
+        if (event.kind !== "stage") return false;
+        if (f.fromStageId && f.fromStageId !== event.fromStageId) return false;
+        if (f.toStageId && f.toStageId !== event.toStageId) return false;
+        return true;
+      case PipelineAutomationTriggerType.DEAL_CUSTOM_FIELD_CHANGED:
+        if (event.kind !== "custom_field") return false;
+        if (!f.customFieldKey || f.customFieldKey !== event.fieldKey)
+          return false;
+        if (
+          !automationFilterValueMatches(f.fromCustomValue, event.fromValue)
+        )
+          return false;
+        if (!automationFilterValueMatches(f.toCustomValue, event.toValue))
+          return false;
+        return true;
+      case PipelineAutomationTriggerType.DEAL_ASSIGNEE_ASSIGNED:
+        return event.kind === "assignee" && event.assigned;
+      case PipelineAutomationTriggerType.DEAL_ASSIGNEE_REMOVED:
+        return event.kind === "assignee" && !event.assigned;
+      case PipelineAutomationTriggerType.CONTACT_TAG_ADDED:
+        if (event.kind !== "contact_tag" || !event.added) return false;
+        if (f.tagId && f.tagId !== event.tagId) return false;
+        return true;
+      case PipelineAutomationTriggerType.CONTACT_TAG_REMOVED:
+        if (event.kind !== "contact_tag" || event.added) return false;
+        if (f.tagId && f.tagId !== event.tagId) return false;
         return true;
       case PipelineAutomationTriggerType.DEAL_MARKED_WON:
         return event.kind === "won";
@@ -99,6 +160,22 @@ export class PipelineAutomationEngineService {
     });
   }
 
+  private triggersRequiringOpenDeal(
+    t: PipelineAutomationTriggerType,
+  ): boolean {
+    return (
+      t === PipelineAutomationTriggerType.DEAL_CREATED ||
+      t === PipelineAutomationTriggerType.DEAL_ENTERED_STAGE ||
+      t === PipelineAutomationTriggerType.DEAL_LEFT_STAGE ||
+      t === PipelineAutomationTriggerType.DEAL_STAGE_TRANSITION ||
+      t === PipelineAutomationTriggerType.DEAL_CUSTOM_FIELD_CHANGED ||
+      t === PipelineAutomationTriggerType.DEAL_ASSIGNEE_ASSIGNED ||
+      t === PipelineAutomationTriggerType.DEAL_ASSIGNEE_REMOVED ||
+      t === PipelineAutomationTriggerType.CONTACT_TAG_ADDED ||
+      t === PipelineAutomationTriggerType.CONTACT_TAG_REMOVED
+    );
+  }
+
   private async executeRule(
     rule: {
       id: string;
@@ -126,7 +203,11 @@ export class PipelineAutomationEngineService {
     }
 
     const deal = await this.prisma.deal.findFirst({
-      where: { id: dealId, tenantId: rule.tenantId, pipelineId: rule.pipelineId },
+      where: {
+        id: dealId,
+        tenantId: rule.tenantId,
+        pipelineId: rule.pipelineId,
+      },
       select: { id: true, stageId: true, status: true },
     });
     if (!deal) {
@@ -141,10 +222,7 @@ export class PipelineAutomationEngineService {
       return;
     }
 
-    const requireOpen =
-      matchedTriggerType === PipelineAutomationTriggerType.DEAL_CREATED ||
-      matchedTriggerType === PipelineAutomationTriggerType.DEAL_ENTERED_STAGE ||
-      matchedTriggerType === PipelineAutomationTriggerType.DEAL_LEFT_STAGE;
+    const requireOpen = this.triggersRequiringOpenDeal(matchedTriggerType);
 
     if (requireOpen && deal.status !== "OPEN") {
       await this.recordRun(
@@ -192,9 +270,7 @@ export class PipelineAutomationEngineService {
         }
       }
 
-      const allNoOp = executed.every(
-        (e) => e.result === "already_on_stage",
-      );
+      const allNoOp = executed.every((e) => e.result === "already_on_stage");
       await this.recordRun(
         rule.tenantId,
         rule.id,
@@ -221,10 +297,13 @@ export class PipelineAutomationEngineService {
     }
   }
 
-  async afterDealCreated(ctx: SimpleDealCtx): Promise<void> {
+  async afterDealCreated(ctx: CreatedDealCtx): Promise<void> {
     if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
     const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
-    const event = { kind: "created" as const };
+    const event: AutomationEvent = {
+      kind: "created",
+      campaignSourceId: ctx.campaignSourceId,
+    };
     for (const rule of rules) {
       if (rule.triggerType !== PipelineAutomationTriggerType.DEAL_CREATED)
         continue;
@@ -243,8 +322,8 @@ export class PipelineAutomationEngineService {
   async afterDealStageChanged(ctx: StageEventCtx): Promise<void> {
     if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
     const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
-    const event = {
-      kind: "stage" as const,
+    const event: AutomationEvent = {
+      kind: "stage",
       fromStageId: ctx.fromStageId,
       toStageId: ctx.toStageId,
     };
@@ -252,7 +331,9 @@ export class PipelineAutomationEngineService {
       if (
         rule.triggerType !==
           PipelineAutomationTriggerType.DEAL_ENTERED_STAGE &&
-        rule.triggerType !== PipelineAutomationTriggerType.DEAL_LEFT_STAGE
+        rule.triggerType !== PipelineAutomationTriggerType.DEAL_LEFT_STAGE &&
+        rule.triggerType !==
+          PipelineAutomationTriggerType.DEAL_STAGE_TRANSITION
       ) {
         continue;
       }
@@ -268,10 +349,174 @@ export class PipelineAutomationEngineService {
     }
   }
 
+  async afterDealCustomFieldChanged(ctx: {
+    tenantId: string;
+    actorUserId: string;
+    dealId: string;
+    pipelineId: string;
+    fieldKey: string;
+    fromValue: unknown;
+    toValue: unknown;
+    depth: number;
+  }): Promise<void> {
+    if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
+    const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
+    const event: AutomationEvent = {
+      kind: "custom_field",
+      fieldKey: ctx.fieldKey,
+      fromValue: ctx.fromValue,
+      toValue: ctx.toValue,
+    };
+    for (const rule of rules) {
+      if (
+        rule.triggerType !==
+        PipelineAutomationTriggerType.DEAL_CUSTOM_FIELD_CHANGED
+      )
+        continue;
+      if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
+        continue;
+      await this.executeRule(
+        rule,
+        ctx.dealId,
+        ctx.actorUserId,
+        PipelineAutomationTriggerType.DEAL_CUSTOM_FIELD_CHANGED,
+        ctx.depth,
+      );
+    }
+  }
+
+  async afterDealAssigneeAssigned(ctx: SimpleDealCtx): Promise<void> {
+    if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
+    const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
+    const event: AutomationEvent = { kind: "assignee", assigned: true };
+    for (const rule of rules) {
+      if (
+        rule.triggerType !==
+        PipelineAutomationTriggerType.DEAL_ASSIGNEE_ASSIGNED
+      )
+        continue;
+      if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
+        continue;
+      await this.executeRule(
+        rule,
+        ctx.dealId,
+        ctx.actorUserId,
+        PipelineAutomationTriggerType.DEAL_ASSIGNEE_ASSIGNED,
+        ctx.depth,
+      );
+    }
+  }
+
+  async afterDealAssigneeRemoved(ctx: SimpleDealCtx): Promise<void> {
+    if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
+    const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
+    const event: AutomationEvent = { kind: "assignee", assigned: false };
+    for (const rule of rules) {
+      if (
+        rule.triggerType !==
+        PipelineAutomationTriggerType.DEAL_ASSIGNEE_REMOVED
+      )
+        continue;
+      if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
+        continue;
+      await this.executeRule(
+        rule,
+        ctx.dealId,
+        ctx.actorUserId,
+        PipelineAutomationTriggerType.DEAL_ASSIGNEE_REMOVED,
+        ctx.depth,
+      );
+    }
+  }
+
+  async afterContactTagAdded(ctx: {
+    tenantId: string;
+    actorUserId: string;
+    contactId: string;
+    tagId: string;
+    depth: number;
+  }): Promise<void> {
+    if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
+    const deals = await this.prisma.deal.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        contactId: ctx.contactId,
+        status: "OPEN",
+      },
+      select: { id: true, pipelineId: true },
+    });
+    const event: AutomationEvent = {
+      kind: "contact_tag",
+      tagId: ctx.tagId,
+      added: true,
+    };
+    for (const d of deals) {
+      const rules = await this.loadEnabledRules(ctx.tenantId, d.pipelineId);
+      for (const rule of rules) {
+        if (
+          rule.triggerType !==
+          PipelineAutomationTriggerType.CONTACT_TAG_ADDED
+        )
+          continue;
+        if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
+          continue;
+        await this.executeRule(
+          rule,
+          d.id,
+          ctx.actorUserId,
+          PipelineAutomationTriggerType.CONTACT_TAG_ADDED,
+          ctx.depth,
+        );
+      }
+    }
+  }
+
+  async afterContactTagRemoved(ctx: {
+    tenantId: string;
+    actorUserId: string;
+    contactId: string;
+    tagId: string;
+    depth: number;
+  }): Promise<void> {
+    if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
+    const deals = await this.prisma.deal.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        contactId: ctx.contactId,
+        status: "OPEN",
+      },
+      select: { id: true, pipelineId: true },
+    });
+    const event: AutomationEvent = {
+      kind: "contact_tag",
+      tagId: ctx.tagId,
+      added: false,
+    };
+    for (const d of deals) {
+      const rules = await this.loadEnabledRules(ctx.tenantId, d.pipelineId);
+      for (const rule of rules) {
+        if (
+          rule.triggerType !==
+          PipelineAutomationTriggerType.CONTACT_TAG_REMOVED
+        )
+          continue;
+        if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
+          continue;
+        await this.executeRule(
+          rule,
+          d.id,
+          ctx.actorUserId,
+          PipelineAutomationTriggerType.CONTACT_TAG_REMOVED,
+          ctx.depth,
+        );
+      }
+    }
+  }
+
   async afterDealMarkedWon(ctx: SimpleDealCtx): Promise<void> {
     if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
     const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
-    const event = { kind: "won" as const };
+    const event: AutomationEvent = { kind: "won" };
     for (const rule of rules) {
       if (rule.triggerType !== PipelineAutomationTriggerType.DEAL_MARKED_WON)
         continue;
@@ -290,7 +535,7 @@ export class PipelineAutomationEngineService {
   async afterDealMarkedLost(ctx: SimpleDealCtx): Promise<void> {
     if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
     const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
-    const event = { kind: "lost" as const };
+    const event: AutomationEvent = { kind: "lost" };
     for (const rule of rules) {
       if (rule.triggerType !== PipelineAutomationTriggerType.DEAL_MARKED_LOST)
         continue;

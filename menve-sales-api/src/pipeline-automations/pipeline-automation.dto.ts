@@ -5,6 +5,12 @@ export const triggerFilterSchema = z
   .object({
     toStageId: z.string().optional(),
     fromStageId: z.string().optional(),
+    /** Se definido e não vazio, só dispara para essas origens de campanha. */
+    campaignSourceIds: z.array(z.string().min(1)).optional(),
+    customFieldKey: z.string().min(1).optional(),
+    fromCustomValue: z.unknown().optional(),
+    toCustomValue: z.unknown().optional(),
+    tagId: z.string().min(1).optional(),
   })
   .strict()
   .optional()

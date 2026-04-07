@@ -88,7 +88,7 @@ export class ContactsController {
     @Param("id") id: string,
     @Param("tagId") tagId: string,
   ) {
-    return this.contacts.addTag(u.tenantId, id, tagId);
+    return this.contacts.addTag(u.tenantId, u.userId, id, tagId);
   }
 
   @Delete(":id/tags/:tagId")
@@ -97,6 +97,6 @@ export class ContactsController {
     @Param("id") id: string,
     @Param("tagId") tagId: string,
   ) {
-    return this.contacts.removeTag(u.tenantId, id, tagId);
+    return this.contacts.removeTag(u.tenantId, u.userId, id, tagId);
   }
 }

@@ -9,6 +9,7 @@ export async function fetchPipelineAutomations(pipelineId: string) {
 }
 import type {
   PipelineAutomationAction,
+  PipelineAutomationTriggerFilter,
   PipelineAutomationTriggerType,
 } from "@/lib/pipeline-automation-types";
 import { revalidatePath } from "next/cache";
@@ -17,7 +18,7 @@ export async function createPipelineAutomationRule(input: {
   pipelineId: string;
   name: string;
   triggerType: PipelineAutomationTriggerType;
-  triggerFilter: { toStageId?: string; fromStageId?: string } | null;
+  triggerFilter: PipelineAutomationTriggerFilter | null;
   actions: PipelineAutomationAction[];
   enabled?: boolean;
 }) {

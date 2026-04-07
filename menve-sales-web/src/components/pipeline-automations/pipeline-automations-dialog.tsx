@@ -1,5 +1,6 @@
 "use client";
 
+import type { CustomField } from "@prisma/client";
 import type { Pipeline, Stage } from "@prisma/client";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -28,11 +29,17 @@ export function PipelineAutomationsDialog({
   onOpenChange,
   pipeline,
   canConfigure,
+  dealCustomFieldDefs = [],
+  campaignSources = [],
+  tenantTags = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pipeline: Pipeline & { stages: Stage[] };
   canConfigure: boolean;
+  dealCustomFieldDefs?: CustomField[];
+  campaignSources?: { id: string; name: string }[];
+  tenantTags?: { id: string; name: string }[];
 }) {
   const [rulesRaw, setRulesRaw] = useState<unknown>([]);
   const [loading, setLoading] = useState(false);
@@ -91,6 +98,9 @@ export function PipelineAutomationsDialog({
               canConfigure={canConfigure}
               variant="dialog"
               onRulesChanged={() => void loadRules()}
+              dealCustomFieldDefs={dealCustomFieldDefs}
+              campaignSources={campaignSources}
+              tenantTags={tenantTags}
             />
           )}
         </div>
