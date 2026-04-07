@@ -8,7 +8,6 @@ import {
   ChevronsUpDown,
   GitBranch,
   Info,
-  LayoutGrid,
   List,
   ListChecks,
   Plus,
@@ -29,6 +28,13 @@ import {
 import { fetchPipelineAutomations } from "@/actions/pipeline-automations";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -46,7 +52,6 @@ import {
   pipelineFieldSelectClass,
   pipelineSelectClass,
 } from "@/lib/pipeline-ui-tokens";
-import { cn } from "@/lib/utils";
 import { PipelineAutomationsDialog } from "@/components/pipeline-automations/pipeline-automations-dialog";
 import { PipelineBoard } from "./pipeline-board";
 import { PipelineListView } from "./pipeline-list-view";
@@ -124,16 +129,8 @@ function PipelineViewBody({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const viewMode = searchParams.get("view") === "list" ? "list" : "kanban";
 
-  function setViewMode(next: "kanban" | "list") {
-    const p = new URLSearchParams(searchParams.toString());
-    if (next === "list") p.set("view", "list");
-    else p.delete("view");
-    const qs = p.toString();
-    router.replace(qs ? `/pipeline?${qs}` : "/pipeline", { scroll: false });
-  }
-
+  const [listPanelOpen, setListPanelOpen] = useState(false);
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [automationMenuOpen, setAutomationMenuOpen] = useState(false);
   const [automationDialogMode, setAutomationDialogMode] = useState<
@@ -156,6 +153,15 @@ function PipelineViewBody({
   useEffect(() => {
     void refreshActiveAutomationCount();
   }, [refreshActiveAutomationCount]);
+
+  useEffect(() => {
+    if (searchParams.get("view") !== "list") return;
+    setListPanelOpen(true);
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete("view");
+    const qs = p.toString();
+    router.replace(qs ? `/pipeline?${qs}` : "/pipeline", { scroll: false });
+  }, [searchParams, router]);
 
   useEffect(() => {
     if (!openAutomationsFromUrl) return;
@@ -486,67 +492,80 @@ function PipelineViewBody({
           </div>
         </div>
         <div className="flex w-full gap-2 lg:w-auto lg:max-w-md lg:shrink-0">
-          <Popover open={automationMenuOpen} onOpenChange={setAutomationMenuOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="relative h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
-                aria-label={
-                  activeAutomationCount != null && activeAutomationCount > 0
-                    ? `Automações do funil, ${activeAutomationCount} ativas`
-                    : "Automações do funil"
-                }
-                title="Automações"
+          <div className="flex shrink-0 items-center gap-2">
+            <Popover open={automationMenuOpen} onOpenChange={setAutomationMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="relative h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
+                  aria-label={
+                    activeAutomationCount != null && activeAutomationCount > 0
+                      ? `Automações do funil, ${activeAutomationCount} ativas`
+                      : "Automações do funil"
+                  }
+                  title="Automações"
+                >
+                  <Zap className="size-[18px]" strokeWidth={2} />
+                  {activeAutomationCount != null && activeAutomationCount > 0 ? (
+                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground">
+                      {activeAutomationCount > 99
+                        ? "99+"
+                        : activeAutomationCount}
+                    </span>
+                  ) : null}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="w-[min(calc(100vw-1.5rem),16rem)] border-border/60 p-4"
               >
-                <Zap className="size-[18px]" strokeWidth={2} />
-                {activeAutomationCount != null && activeAutomationCount > 0 ? (
-                  <span className="absolute -right-0.5 -top-0.5 flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground">
-                    {activeAutomationCount > 99
-                      ? "99+"
-                      : activeAutomationCount}
-                  </span>
-                ) : null}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              className="w-[min(calc(100vw-1.5rem),16rem)] border-border/60 p-4"
+                <p className="text-sm font-semibold">Automações</p>
+                <div className="mt-3 flex flex-col gap-2 border-t border-border/40 pt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2"
+                    onClick={() => {
+                      setAutomationDialogMode("manage");
+                      setAutomationsOpen(true);
+                      setAutomationMenuOpen(false);
+                    }}
+                  >
+                    <ListChecks className="size-4 shrink-0" strokeWidth={2} />
+                    Gerenciar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2"
+                    onClick={() => {
+                      setAutomationDialogMode("create");
+                      setAutomationsOpen(true);
+                      setAutomationMenuOpen(false);
+                    }}
+                  >
+                    <Plus className="size-4 shrink-0" strokeWidth={2} />
+                    Criar
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
+              aria-label="Abrir lista por etapa"
+              title="Lista por etapa"
+              onClick={() => setListPanelOpen(true)}
             >
-              <p className="text-sm font-semibold">Automações</p>
-              <div className="mt-3 flex flex-col gap-2 border-t border-border/40 pt-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start gap-2"
-                  onClick={() => {
-                    setAutomationDialogMode("manage");
-                    setAutomationsOpen(true);
-                    setAutomationMenuOpen(false);
-                  }}
-                >
-                  <ListChecks className="size-4 shrink-0" strokeWidth={2} />
-                  Gerenciar
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start gap-2"
-                  onClick={() => {
-                    setAutomationDialogMode("create");
-                    setAutomationsOpen(true);
-                    setAutomationMenuOpen(false);
-                  }}
-                >
-                  <Plus className="size-4 shrink-0" strokeWidth={2} />
-                  Criar
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
+              <List className="size-[18px]" strokeWidth={2} />
+            </Button>
+          </div>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -708,68 +727,44 @@ function PipelineViewBody({
         </div>
       </header>
 
-      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[12px] text-muted-foreground">
-          {viewMode === "kanban"
-            ? "Arraste o card para mudar de etapa. Clique no card para abrir o detalhe (ganho, perda e demais ações)."
-            : "Lista agrupada por etapa com as cores do funil. Clique na linha para abrir o detalhe."}
-        </p>
-        <div
-          className="inline-flex shrink-0 rounded-xl border border-border/50 bg-muted/10 p-0.5 shadow-sm"
-          role="group"
-          aria-label="Tipo de visualização do pipeline"
-        >
-          <button
-            type="button"
-            onClick={() => setViewMode("kanban")}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-semibold transition-colors",
-              viewMode === "kanban"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            aria-pressed={viewMode === "kanban"}
-          >
-            <LayoutGrid className="size-3.5" strokeWidth={2} aria-hidden />
-            Quadro
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("list")}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-semibold transition-colors",
-              viewMode === "list"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            aria-pressed={viewMode === "list"}
-          >
-            <List className="size-3.5" strokeWidth={2} aria-hidden />
-            Lista
-          </button>
-        </div>
-      </div>
+      <p className="shrink-0 text-[12px] text-muted-foreground">
+        Arraste o card para mudar de etapa. Clique no card para abrir o detalhe
+        (ganho, perda e demais ações). Use o ícone de lista ao lado das
+        automações para ver os leads em lista por etapa.
+      </p>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {viewMode === "kanban" ? (
-          <PipelineBoard
-            pipeline={activePipeline}
-            deals={filteredDeals}
-            contacts={contacts}
-            dealCustomFieldDefs={dealCustomFieldDefs}
-            tenantMembers={tenantMembers}
-          />
-        ) : (
-          <PipelineListView
-            pipeline={activePipeline}
-            deals={filteredDeals}
-            contacts={contacts}
-            dealCustomFieldDefs={dealCustomFieldDefs}
-            tenantMembers={tenantMembers}
-            tenantTags={tenantTags}
-          />
-        )}
+        <PipelineBoard
+          pipeline={activePipeline}
+          deals={filteredDeals}
+          contacts={contacts}
+          dealCustomFieldDefs={dealCustomFieldDefs}
+          tenantMembers={tenantMembers}
+        />
       </div>
+
+      <Dialog open={listPanelOpen} onOpenChange={setListPanelOpen}>
+        <DialogContent className="flex max-h-[min(92vh,56rem)] w-[min(100vw-1rem,52rem)] max-w-[min(100vw-1rem,52rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl">
+          <DialogHeader className="shrink-0 space-y-1 border-b border-border/40 px-6 py-4 text-left">
+            <DialogTitle>Lista por etapa</DialogTitle>
+            <DialogDescription>
+              Leads do funil agrupados por etapa. Clique na linha para abrir o
+              detalhe; arraste para mudar de etapa.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2 pt-1 sm:px-4">
+            <PipelineListView
+              pipeline={activePipeline}
+              deals={filteredDeals}
+              contacts={contacts}
+              dealCustomFieldDefs={dealCustomFieldDefs}
+              tenantMembers={tenantMembers}
+              tenantTags={tenantTags}
+              toolbarDock="inline"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <PipelineAutomationsDialog
         open={automationsOpen}

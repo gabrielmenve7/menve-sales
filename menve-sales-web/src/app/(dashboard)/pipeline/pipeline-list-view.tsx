@@ -485,6 +485,7 @@ export function PipelineListView({
   dealCustomFieldDefs,
   tenantMembers = [],
   tenantTags = [],
+  toolbarDock = "fixed",
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   deals: DealRow[];
@@ -492,6 +493,7 @@ export function PipelineListView({
   dealCustomFieldDefs: CustomField[];
   tenantMembers?: TenantMemberOption[];
   tenantTags?: { id: string; name: string }[];
+  toolbarDock?: "fixed" | "inline";
 }) {
   const router = useRouter();
   const [detailDeal, setDetailDeal] = useState<DealRow | null>(null);
@@ -621,6 +623,7 @@ export function PipelineListView({
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-1",
+        toolbarDock === "inline" && "relative min-h-[min(55vh,28rem)]",
         selectedIds.size > 0 && "pb-24",
       )}
     >
@@ -709,6 +712,7 @@ export function PipelineListView({
           tenantTags={tenantTags}
           dealCustomFieldDefs={dealCustomFieldDefs}
           onClearSelection={() => setSelectedIds(new Set())}
+          dock={toolbarDock}
         />
       ) : null}
 

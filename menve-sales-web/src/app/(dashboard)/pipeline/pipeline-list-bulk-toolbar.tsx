@@ -49,6 +49,7 @@ export function PipelineListBulkToolbar({
   tenantTags,
   dealCustomFieldDefs,
   onClearSelection,
+  dock = "fixed",
 }: {
   selectedDeals: DealRow[];
   pipeline: Pipeline & { stages: Stage[] };
@@ -57,6 +58,8 @@ export function PipelineListBulkToolbar({
   tenantTags: { id: string; name: string }[];
   dealCustomFieldDefs: CustomField[];
   onClearSelection: () => void;
+  /** `inline`: barra presa ao rodapé do container (ex.: modal); `fixed`: viewport. */
+  dock?: "fixed" | "inline";
 }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<BulkDialog>(null);
@@ -160,7 +163,12 @@ export function PipelineListBulkToolbar({
   return (
     <>
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+        className={cn(
+          "pointer-events-none flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+          dock === "fixed"
+            ? "fixed inset-x-0 bottom-0 z-40"
+            : "absolute inset-x-0 bottom-0 z-20",
+        )}
         aria-live="polite"
       >
         <div
