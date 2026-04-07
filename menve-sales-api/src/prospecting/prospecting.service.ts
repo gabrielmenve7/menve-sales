@@ -391,8 +391,21 @@ export class ProspectingService {
     return { ok: true };
   }
 
+  /** Usuário do workspace que pode ser responsável por deal (mesma regra do PATCH /deals). */
+  private async assigneeUserIdForTenant(
+    tenantId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const u = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { id: true },
+    });
+    return u?.id ?? null;
+  }
+
   async convertResult(
     tenantId: string,
+    actorUserId: string,
     resultId: string,
     raw: unknown,
   ): Promise<
@@ -496,6 +509,11 @@ export class ProspectingService {
         ? data.title.trim()
         : `Prospecção: ${result.name}`;
 
+    const assignedToId = await this.assigneeUserIdForTenant(
+      tenantId,
+      actorUserId,
+    );
+
     await this.prisma.deal.create({
       data: {
         tenantId,
@@ -504,6 +522,7 @@ export class ProspectingService {
         stageId: stage0.id,
         title,
         value: data.value,
+        ...(assignedToId ? { assignedToId } : {}),
       },
     });
 
@@ -518,7 +537,7 @@ export class ProspectingService {
     return { ok: true, contactId: contact.id };
   }
 
-  async convertBulk(tenantId: string, raw: unknown) {
+  async convertBulk(tenantId: string, actorUserId: string, raw: unknown) {
     await this.ensureResearchEnabled(tenantId);
     const data = bulkConvertSchema.parse(raw);
     let converted = 0;
@@ -527,7 +546,7 @@ export class ProspectingService {
 
     for (const id of data.resultIds) {
       try {
-        const r = await this.convertResult(tenantId, id, {
+        const r = await this.convertResult(tenantId, actorUserId, id, {
           pipelineId: data.pipelineId,
         });
         if (r.ok) converted++;
