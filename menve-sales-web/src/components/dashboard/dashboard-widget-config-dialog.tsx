@@ -1082,7 +1082,7 @@ function DashFilterFieldPicker({
             />
           </div>
         </div>
-        <div className="max-h-64 overflow-y-auto p-1">
+        <div className="max-h-64 overflow-y-auto overscroll-contain p-1">
           {filtered.map((opt) => {
             const ok = columnOptionSelectable(opt.id, groupRows, rowId);
             const Icon = opt.Icon;
