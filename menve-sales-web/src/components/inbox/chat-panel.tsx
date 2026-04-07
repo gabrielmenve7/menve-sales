@@ -359,7 +359,7 @@ export function ChatPanel({
                           type="button"
                           variant="secondary"
                           size="sm"
-                          className="h-7 max-w-[12rem] shrink-0 gap-1 border-0 bg-muted/70 px-2 text-xs shadow-none hover:bg-muted dark:bg-muted/50"
+                          className="h-7 max-w-[12rem] shrink-0 select-none gap-1 border-0 bg-muted/70 px-2 text-xs shadow-none hover:bg-muted dark:bg-muted/50"
                           title={
                             openQuickReplyCategoryId === cat.id
                               ? `${cat.name} — fechar lista`
@@ -385,7 +385,7 @@ export function ChatPanel({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         align="start"
-                        className="max-h-[min(60vh,18rem)] w-[min(100vw-2rem,18rem)] overflow-y-auto"
+                        className="max-h-[min(60vh,18rem)] w-[min(100vw-2rem,18rem)] cursor-pointer overflow-y-auto"
                       >
                         {cat.replies.map((q) => (
                           <DropdownMenuItem
