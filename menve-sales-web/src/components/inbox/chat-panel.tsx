@@ -1,6 +1,13 @@
 "use client";
 
-import { FileText, Loader2, Mic, Paperclip, Send } from "lucide-react";
+import {
+  ChevronDown,
+  FileText,
+  Loader2,
+  Mic,
+  Paperclip,
+  Send,
+} from "lucide-react";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { addConversationNote } from "@/actions/conversation-notes";
 import {
@@ -338,10 +345,16 @@ export function ChatPanel({
                           type="button"
                           variant="secondary"
                           size="sm"
-                          className="h-7 max-w-[11rem] shrink-0 border-0 bg-muted/70 text-xs shadow-none hover:bg-muted dark:bg-muted/50"
-                          title={cat.name}
+                          className="h-7 max-w-[12rem] shrink-0 gap-1 border-0 bg-muted/70 px-2 text-xs shadow-none hover:bg-muted dark:bg-muted/50"
+                          title={`${cat.name} — abrir scripts`}
                         >
-                          <span className="truncate">{cat.name}</span>
+                          <span className="min-w-0 flex-1 truncate text-left">
+                            {cat.name}
+                          </span>
+                          <ChevronDown
+                            className="size-3.5 shrink-0 opacity-70"
+                            aria-hidden
+                          />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
