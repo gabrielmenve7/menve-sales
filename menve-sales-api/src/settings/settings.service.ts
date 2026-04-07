@@ -11,7 +11,7 @@ export class SettingsService {
     const [
       tenant,
       whatsAppConnections,
-      quickReplies,
+      quickReplyCategories,
       pipelines,
       tags,
       customFields,
@@ -22,9 +22,20 @@ export class SettingsService {
         where: { tenantId },
         orderBy: { createdAt: "desc" },
       }),
-      this.prisma.quickReply.findMany({
+      this.prisma.quickReplyCategory.findMany({
         where: { tenantId },
         orderBy: { sortOrder: "asc" },
+        include: {
+          replies: {
+            orderBy: { sortOrder: "asc" },
+            select: {
+              id: true,
+              title: true,
+              body: true,
+              sortOrder: true,
+            },
+          },
+        },
       }),
       this.prisma.pipeline.findMany({
         where: { tenantId },
@@ -38,14 +49,14 @@ export class SettingsService {
       findContactCustomFieldDefinitions(this.prisma, tenantId),
       this.prisma.user.findMany({
         where: { tenantId },
-        select: { id: true, name: true, email: true, role: true },
+        select: { id: true, name: true, email: true, role: true, image: true },
         orderBy: { name: "asc" },
       }),
     ]);
     return {
       tenant,
       whatsAppConnections,
-      quickReplies,
+      quickReplyCategories,
       pipelines,
       tags,
       customFields,
@@ -56,7 +67,7 @@ export class SettingsService {
   async getMembers(tenantId: string) {
     return this.prisma.user.findMany({
       where: { tenantId },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, image: true },
       orderBy: { name: "asc" },
     });
   }

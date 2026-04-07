@@ -3,7 +3,6 @@
 import type {
   CustomField,
   Pipeline,
-  QuickReply,
   Stage,
   Tag,
   WhatsAppConnection,
@@ -25,6 +24,7 @@ import { SettingsMembers } from "./settings-members";
 import { SettingsTagsCatalog } from "./settings-tags-catalog";
 import { SettingsNotifications } from "./settings-notifications";
 import { SettingsProfile } from "./settings-profile";
+import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 
 type TenantInfo = {
   id: string;
@@ -53,7 +53,7 @@ export function SettingsClient({
   defaultTab = "general",
   profile,
   connections,
-  quickReplies,
+  quickReplyCategories,
   webhookBaseUrl,
   pipelines,
   tags,
@@ -66,7 +66,7 @@ export function SettingsClient({
   defaultTab?: SettingsTabId;
   profile: { name: string | null; email: string; image: string | null };
   connections: WhatsAppConnection[];
-  quickReplies: QuickReply[];
+  quickReplyCategories: QuickReplyCategoryDTO[];
   webhookBaseUrl: string;
   pipelines: (Pipeline & { stages: Stage[] })[];
   tags: Tag[];
@@ -131,7 +131,7 @@ export function SettingsClient({
       <TabsContent value="channels">
         <SettingsChannels
           connections={connections}
-          quickReplies={quickReplies}
+          quickReplyCategories={quickReplyCategories}
           webhookBaseUrl={webhookBaseUrl}
         />
       </TabsContent>

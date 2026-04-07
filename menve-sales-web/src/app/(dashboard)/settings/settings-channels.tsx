@@ -1,17 +1,24 @@
 "use client";
 
-import type { QuickReply, WhatsAppConnection } from "@prisma/client";
-import { Loader2, Plus, Radio, Trash2 } from "lucide-react";
+import type { WhatsAppConnection } from "@prisma/client";
+import { Loader2, Plus, Radio, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createMetaChannel, createInstagramChannel } from "@/actions/channels";
 import {
   deleteWhatsAppConnection,
   pollEvolutionStatus,
+  reapplyEvolutionWebhook,
   refreshEvolutionQr,
   startEvolutionPairing,
 } from "@/actions/whatsapp-connections";
-import { createQuickReply, deleteQuickReply } from "@/actions/quick-replies";
+import {
+  createQuickReply,
+  createQuickReplyCategory,
+  deleteQuickReply,
+  deleteQuickReplyCategory,
+} from "@/actions/quick-replies";
+import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
 import { cn } from "@/lib/utils";
 
 type ChannelOption = "evolution" | "meta" | "instagram";
@@ -44,10 +52,7 @@ function providerIcon(provider: string) {
   if (provider === "EVOLUTION" || provider === "META") {
     return (
       <span className="flex size-8 items-center justify-center rounded-lg bg-green-500/10 text-green-600">
-        <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
-          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-          <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a8 8 0 01-4.243-1.216l-.257-.154-2.879.856.856-2.879-.154-.257A8 8 0 1112 20z" />
-        </svg>
+        <WhatsAppLogo className="size-4" />
       </span>
     );
   }
@@ -64,11 +69,11 @@ const QR_COUNTDOWN = 60;
 
 export function SettingsChannels({
   connections,
-  quickReplies,
+  quickReplyCategories,
   webhookBaseUrl,
 }: {
   connections: WhatsAppConnection[];
-  quickReplies: QuickReply[];
+  quickReplyCategories: QuickReplyCategoryDTO[];
   webhookBaseUrl: string;
 }) {
   const router = useRouter();
@@ -85,6 +90,7 @@ export function SettingsChannels({
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(QR_COUNTDOWN);
   const [refreshQrLoading, setRefreshQrLoading] = useState(false);
+  const [reapplyWebhookId, setReapplyWebhookId] = useState<string | null>(null);
 
   // Meta form
   const [metaOpen, setMetaOpen] = useState(false);
@@ -100,9 +106,10 @@ export function SettingsChannels({
   const [igAccessToken, setIgAccessToken] = useState("");
   const [igUserId, setIgUserId] = useState("");
 
-  // Quick replies
-  const [qrTitle, setQrTitle] = useState("");
-  const [qrBody, setQrBody] = useState("");
+  // Respostas rápidas (categorias + scripts)
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [scriptTitles, setScriptTitles] = useState<Record<string, string>>({});
+  const [scriptBodies, setScriptBodies] = useState<Record<string, string>>({});
 
   function selectChannelType(type: ChannelOption) {
     setNewOpen(false);
@@ -219,6 +226,18 @@ export function SettingsChannels({
     }
   }
 
+  async function onReapplyEvolutionWebhook(connectionId: string) {
+    setReapplyWebhookId(connectionId);
+    try {
+      await reapplyEvolutionWebhook(connectionId);
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Falha ao reaplicar webhook");
+    } finally {
+      setReapplyWebhookId(null);
+    }
+  }
+
   async function onRemove(id: string) {
     if (!confirm("Remover este canal? As conversas vinculadas serão apagadas.")) return;
     setLoading(true);
@@ -230,14 +249,29 @@ export function SettingsChannels({
     }
   }
 
-  async function onCreateQr(e: React.FormEvent) {
+  async function onCreateCategory(e: React.FormEvent) {
     e.preventDefault();
-    if (!qrTitle.trim() || !qrBody.trim()) return;
+    if (!newCategoryName.trim()) return;
     setLoading(true);
     try {
-      await createQuickReply({ title: qrTitle.trim(), body: qrBody.trim() });
-      setQrTitle("");
-      setQrBody("");
+      await createQuickReplyCategory(newCategoryName.trim());
+      setNewCategoryName("");
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onCreateScript(e: React.FormEvent, categoryId: string) {
+    e.preventDefault();
+    const title = (scriptTitles[categoryId] ?? "").trim();
+    const body = (scriptBodies[categoryId] ?? "").trim();
+    if (!title || !body) return;
+    setLoading(true);
+    try {
+      await createQuickReply({ categoryId, title, body });
+      setScriptTitles((m) => ({ ...m, [categoryId]: "" }));
+      setScriptBodies((m) => ({ ...m, [categoryId]: "" }));
       router.refresh();
     } finally {
       setLoading(false);
@@ -323,9 +357,33 @@ export function SettingsChannels({
               <div key={c.id} className="rounded-lg border p-3">
                 <p className="font-medium">{c.name} — {PROVIDER_LABELS[c.provider] ?? c.provider}</p>
                 {c.provider === "EVOLUTION" ? (
-                  <p className="mt-1 break-all text-xs text-muted-foreground">
-                    POST <code>{webhookBaseUrl}/webhooks/whatsapp/evolution/{c.id}</code>
-                  </p>
+                  <div className="mt-2 space-y-2">
+                    <p className="break-all text-xs text-muted-foreground">
+                      POST{" "}
+                      <code>
+                        {webhookBaseUrl}/webhooks/whatsapp/evolution/{c.id}
+                      </code>
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={reapplyWebhookId === c.id}
+                      onClick={() => void onReapplyEvolutionWebhook(c.id)}
+                    >
+                      {reapplyWebhookId === c.id ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="size-3.5" />
+                      )}
+                      Reaplicar webhook na Evolution
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground">
+                      Use após mudar a URL pública da API (ex.: túnel ngrok) em{" "}
+                      <code className="rounded bg-muted px-1">PUBLIC_APP_URL</code>.
+                    </p>
+                  </div>
                 ) : c.provider === "META" ? (
                   <p className="mt-1 break-all text-xs text-muted-foreground">
                     Callback: <code>{webhookBaseUrl}/webhooks/whatsapp/meta</code> + verify token
@@ -341,62 +399,153 @@ export function SettingsChannels({
         </Card>
       )}
 
-      {/* Quick Replies */}
+      {/* Respostas rápidas por categoria (etapa) */}
       <Card>
         <CardHeader>
           <CardTitle>Respostas rápidas</CardTitle>
-          <CardDescription>Atalhos para preencher mensagens comuns no Inbox</CardDescription>
+          <CardDescription>
+            Crie categorias (ex.: Qualificação, Proposta) e, em cada uma, scripts com título e
+            texto. No Inbox, cada categoria abre um submenu com os títulos.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <form onSubmit={onCreateQr} className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="qr-title">Título do botão</Label>
-                <Input
-                  id="qr-title"
-                  value={qrTitle}
-                  onChange={(e) => setQrTitle(e.target.value)}
-                  placeholder="Ex: Saudação"
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="qr-body">Texto da mensagem</Label>
-              <textarea
-                id="qr-body"
-                value={qrBody}
-                onChange={(e) => setQrBody(e.target.value)}
-                className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                placeholder="Texto enviado ao clicar no atalho…"
+          <form onSubmit={onCreateCategory} className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[12rem] flex-1">
+              <Label htmlFor="qr-cat-name">Nova categoria (etapa)</Label>
+              <Input
+                id="qr-cat-name"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="Ex.: Qualificação"
               />
             </div>
-            <Button type="submit" disabled={loading || !qrTitle.trim() || !qrBody.trim()}>
-              {loading ? "Salvando…" : "Adicionar"}
+            <Button type="submit" disabled={loading || !newCategoryName.trim()}>
+              {loading ? "Salvando…" : "Criar categoria"}
             </Button>
           </form>
-          {quickReplies.length > 0 && (
-            <ul className="space-y-2">
-              {quickReplies.map((q) => (
+
+          {quickReplyCategories.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhuma categoria ainda. Crie a primeira para começar a cadastrar scripts.
+            </p>
+          ) : (
+            <ul className="space-y-4">
+              {quickReplyCategories.map((cat) => (
                 <li
-                  key={q.id}
-                  className="flex items-start justify-between gap-2 rounded-lg border p-3 text-sm"
+                  key={cat.id}
+                  className="rounded-xl border border-border/60 bg-muted/20 p-4 dark:bg-muted/10"
                 >
-                  <div>
-                    <p className="font-medium">{q.title}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{q.body}</p>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">{cat.name}</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      disabled={loading}
+                      onClick={async () => {
+                        if (
+                          !confirm(
+                            `Excluir a categoria "${cat.name}" e todos os ${cat.replies.length} script(s) dentro dela?`,
+                          )
+                        ) {
+                          return;
+                        }
+                        setLoading(true);
+                        try {
+                          await deleteQuickReplyCategory(cat.id);
+                          router.refresh();
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                    >
+                      Excluir categoria
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0 text-destructive"
-                    onClick={async () => {
-                      if (!confirm("Remover esta resposta rápida?")) return;
-                      setLoading(true);
-                      try { await deleteQuickReply(q.id); router.refresh(); } finally { setLoading(false); }
-                    }}
+
+                  {cat.replies.length > 0 ? (
+                    <ul className="mb-4 space-y-2">
+                      {cat.replies.map((q) => (
+                        <li
+                          key={q.id}
+                          className="flex items-start justify-between gap-2 rounded-lg border bg-background/80 p-3 text-sm dark:bg-background/40"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium">{q.title}</p>
+                            <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground line-clamp-3">
+                              {q.body}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0 text-destructive"
+                            disabled={loading}
+                            onClick={async () => {
+                              if (!confirm("Remover este script?")) return;
+                              setLoading(true);
+                              try {
+                                await deleteQuickReply(q.id);
+                                router.refresh();
+                              } finally {
+                                setLoading(false);
+                              }
+                            }}
+                          >
+                            Excluir
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Nenhum script nesta categoria ainda.
+                    </p>
+                  )}
+
+                  <form
+                    onSubmit={(e) => void onCreateScript(e, cat.id)}
+                    className="space-y-2 border-t border-border/40 pt-3"
                   >
-                    Excluir
-                  </Button>
+                    <p className="text-xs font-medium text-muted-foreground">Novo script</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor={`qr-title-${cat.id}`}>Título (no menu)</Label>
+                        <Input
+                          id={`qr-title-${cat.id}`}
+                          value={scriptTitles[cat.id] ?? ""}
+                          onChange={(e) =>
+                            setScriptTitles((m) => ({ ...m, [cat.id]: e.target.value }))
+                          }
+                          placeholder="Ex.: Cadência 01"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor={`qr-body-${cat.id}`}>Mensagem</Label>
+                      <textarea
+                        id={`qr-body-${cat.id}`}
+                        value={scriptBodies[cat.id] ?? ""}
+                        onChange={(e) =>
+                          setScriptBodies((m) => ({ ...m, [cat.id]: e.target.value }))
+                        }
+                        className="min-h-[72px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                        placeholder="Texto inserido no campo ao escolher o script…"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={
+                        loading ||
+                        !(scriptTitles[cat.id] ?? "").trim() ||
+                        !(scriptBodies[cat.id] ?? "").trim()
+                      }
+                    >
+                      Adicionar script
+                    </Button>
+                  </form>
                 </li>
               ))}
             </ul>

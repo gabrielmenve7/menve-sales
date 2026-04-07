@@ -33,7 +33,7 @@ export default async function InboxPage({
   ] = await Promise.all([
     apiServer<{
       whatsAppConnections: unknown[];
-      quickReplies: unknown[];
+      quickReplyCategories: unknown[];
       conversations: unknown[];
     }>("/inbox"),
     apiServer<unknown>("/custom-fields?entity=DEAL")
@@ -44,13 +44,13 @@ export default async function InboxPage({
     ),
   ]);
 
-  const { whatsAppConnections, quickReplies, conversations } = inboxBundle;
+  const { whatsAppConnections, quickReplyCategories, conversations } = inboxBundle;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <InboxClient
         connections={whatsAppConnections as never}
-        quickReplies={quickReplies as never}
+        quickReplyCategories={quickReplyCategories as never}
         initialConversations={conversations as never}
         initialContactId={initialContactId}
         initialConversationId={initialConversationId}

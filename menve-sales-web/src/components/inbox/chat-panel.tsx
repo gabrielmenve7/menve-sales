@@ -1,7 +1,6 @@
 "use client";
 
-import type { QuickReply } from "@prisma/client";
-import { FileText, Loader2, Mic, Paperclip, Send } from "lucide-react";
+import { ChevronRight, FileText, Loader2, Mic, Paperclip, Send } from "lucide-react";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { addConversationNote } from "@/actions/conversation-notes";
 import {
@@ -9,8 +8,19 @@ import {
   sendWhatsAppMessage,
 } from "@/actions/messages";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
+import { quickRepliesHaveScripts } from "@/lib/quick-reply-types";
 import type { InboxConversation } from "./inbox-types";
 import { getContactPhotoUrl, initials } from "./inbox-utils";
 import { MessageBubble } from "./message-bubble";
@@ -37,11 +47,11 @@ function attachmentKind(file: File): "image" | "document" | null {
 
 export function ChatPanel({
   conversation,
-  quickReplies,
+  quickReplyCategories,
   onRefetch,
 }: {
   conversation: InboxConversation;
-  quickReplies: QuickReply[];
+  quickReplyCategories: QuickReplyCategoryDTO[];
   onRefetch: () => void;
 }) {
   const [text, setText] = useState("");
@@ -65,6 +75,8 @@ export function ChatPanel({
   const photo = getContactPhotoUrl(conversation.contact);
   const conn = conversation.whatsappConnection;
   const phone = conversation.contact.phone;
+
+  const showQuickReplies = quickRepliesHaveScripts(quickReplyCategories);
 
   const sendMedia = useCallback(
     async (args: {
@@ -319,24 +331,51 @@ export function ChatPanel({
 
           {/* Quick replies + composer: fixos na base; só as mensagens rolam acima */}
           <div className="shrink-0 border-t border-border/20 bg-card dark:border-border/30">
-            {quickReplies.length > 0 ? (
-              <div className="px-3 py-2">
-                <div className="flex flex-wrap gap-1">
-                  {quickReplies.map((q) => (
+            {showQuickReplies ? (
+              <div className="flex items-center gap-2 px-3 py-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <Button
-                      key={q.id}
                       type="button"
                       variant="secondary"
                       size="sm"
                       className="h-7 border-0 bg-muted/70 text-xs shadow-none hover:bg-muted dark:bg-muted/50"
-                      onClick={() =>
-                        setText((t) => (t ? `${t}\n${q.body}` : q.body))
-                      }
                     >
-                      {q.title}
+                      Respostas rápidas
                     </Button>
-                  ))}
-                </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    className="max-h-[min(70vh,22rem)] w-[min(100vw-2rem,16rem)] overflow-y-auto"
+                  >
+                    {quickReplyCategories.map((cat) =>
+                      cat.replies.length === 0 ? null : (
+                        <DropdownMenuSub key={cat.id}>
+                          <DropdownMenuSubTrigger className="gap-2 text-sm">
+                            <span className="truncate">{cat.name}</span>
+                            <ChevronRight className="ml-auto size-4 shrink-0 opacity-60" />
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="max-h-[min(60vh,18rem)] overflow-y-auto">
+                            {cat.replies.map((q) => (
+                              <DropdownMenuItem
+                                key={q.id}
+                                className="cursor-pointer flex-col items-start gap-0.5 py-2"
+                                onSelect={() =>
+                                  setText((t) => (t ? `${t}\n${q.body}` : q.body))
+                                }
+                              >
+                                <span className="font-medium">{q.title}</span>
+                                <span className="line-clamp-2 text-xs font-normal text-muted-foreground">
+                                  {q.body}
+                                </span>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      ),
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ) : null}
             {mediaError ? (
@@ -346,7 +385,7 @@ export function ChatPanel({
               onSubmit={onSend}
               className={cn(
                 "flex items-center gap-1.5 p-3",
-                quickReplies.length > 0 &&
+                showQuickReplies &&
                   "border-t border-border/15 dark:border-border/25",
               )}
             >

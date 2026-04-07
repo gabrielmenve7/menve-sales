@@ -1,6 +1,6 @@
 "use client";
 
-import type { CustomField, QuickReply, WhatsAppConnection } from "@prisma/client";
+import type { CustomField, WhatsAppConnection } from "@prisma/client";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchInboxBundle } from "@/actions/inbox-fetch";
@@ -13,6 +13,7 @@ import {
 } from "@/components/inbox/inbox-lead-sidebar";
 import type { InboxConversation } from "@/components/inbox/inbox-types";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
+import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 
 export type { InboxConversation } from "@/components/inbox/inbox-types";
 
@@ -84,7 +85,7 @@ function resolveDeepLinkConversationId(
 
 export function InboxClient({
   connections,
-  quickReplies,
+  quickReplyCategories,
   initialConversations,
   initialContactId = null,
   initialConversationId = null,
@@ -92,7 +93,7 @@ export function InboxClient({
   tenantMembers,
 }: {
   connections: WhatsAppConnection[];
-  quickReplies: QuickReply[];
+  quickReplyCategories: QuickReplyCategoryDTO[];
   initialConversations: InboxConversation[];
   /** Abre a conversa deste contato (ex.: vindo do funil `?contact=`). */
   initialContactId?: string | null;
@@ -183,7 +184,7 @@ export function InboxClient({
         {selected ? (
           <ChatPanel
             conversation={selected}
-            quickReplies={quickReplies}
+            quickReplyCategories={quickReplyCategories}
             onRefetch={() => void refetch()}
           />
         ) : (

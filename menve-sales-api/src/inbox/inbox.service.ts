@@ -69,15 +69,26 @@ export class InboxService {
   }
 
   async getInbox(tenantId: string) {
-    const [whatsAppConnections, quickReplies, conversations] =
+    const [whatsAppConnections, quickReplyCategories, conversations] =
       await Promise.all([
         this.prisma.whatsAppConnection.findMany({
           where: { tenantId },
           orderBy: { createdAt: "desc" },
         }),
-        this.prisma.quickReply.findMany({
+        this.prisma.quickReplyCategory.findMany({
           where: { tenantId },
           orderBy: { sortOrder: "asc" },
+          include: {
+            replies: {
+              orderBy: { sortOrder: "asc" },
+              select: {
+                id: true,
+                title: true,
+                body: true,
+                sortOrder: true,
+              },
+            },
+          },
         }),
         this.prisma.conversation.findMany({
           where: { tenantId },
@@ -108,6 +119,6 @@ export class InboxService {
           },
         }),
       ]);
-    return { whatsAppConnections, quickReplies, conversations };
+    return { whatsAppConnections, quickReplyCategories, conversations };
   }
 }

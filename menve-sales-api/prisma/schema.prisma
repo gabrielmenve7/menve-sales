@@ -98,22 +98,39 @@ model Tenant {
   deals               Deal[]
   activities          Activity[]
   messages            Message[]
-  quickReplies        QuickReply[]
-  prospectSearches    ProspectSearch[]
+  quickReplies           QuickReply[]
+  quickReplyCategories   QuickReplyCategory[]
+  prospectSearches       ProspectSearch[]
   prospectResults     ProspectResult[]
   dashboardBoards     DashboardBoard[]
 }
 
-model QuickReply {
-  id        String   @id @default(cuid())
+/// Etapa / macro-fase (ex.: Qualificação) — agrupa scripts de resposta rápida no Inbox.
+model QuickReplyCategory {
+  id        String       @id @default(cuid())
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  title     String
-  body      String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+  replies   QuickReply[]
 
   @@index([tenantId, sortOrder])
+}
+
+model QuickReply {
+  id         String             @id @default(cuid())
+  tenantId   String
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   QuickReplyCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  title      String
+  body       String
+  sortOrder  Int                @default(0)
+  createdAt  DateTime           @default(now())
+
+  @@index([tenantId, sortOrder])
+  @@index([categoryId, sortOrder])
 }
 
 model User {

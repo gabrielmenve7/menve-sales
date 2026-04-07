@@ -4,7 +4,7 @@ import { apiServer } from "@/lib/api-server";
 
 export type InboxBundle = {
   whatsAppConnections: unknown[];
-  quickReplies: unknown[];
+  quickReplyCategories: unknown[];
   conversations: unknown[];
 };
 

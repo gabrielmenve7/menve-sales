@@ -13,7 +13,7 @@ type SettingsBundle = {
     researchEnabled?: boolean;
   };
   whatsAppConnections: unknown[];
-  quickReplies: unknown[];
+  quickReplyCategories: unknown[];
   pipelines: unknown[];
   tags: unknown[];
   customFields: unknown[];
@@ -74,7 +74,7 @@ export default async function SettingsPage({
           image: session?.user?.image ?? null,
         }}
         connections={data.whatsAppConnections as never}
-        quickReplies={data.quickReplies as never}
+        quickReplyCategories={data.quickReplyCategories as never}
         webhookBaseUrl={webhookBaseUrl}
         pipelines={data.pipelines as never}
         tags={data.tags as never}
