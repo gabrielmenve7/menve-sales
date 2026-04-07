@@ -10,6 +10,7 @@ import {
   Info,
   List,
   ListChecks,
+  ListFilter,
   Plus,
   Search,
   Settings,
@@ -131,6 +132,11 @@ function PipelineViewBody({
   const searchParams = useSearchParams();
 
   const [listPanelOpen, setListPanelOpen] = useState(false);
+  const [listStageFilterOpen, setListStageFilterOpen] = useState(false);
+  /** `null` = todas as etapas; senão apenas os ids listados. */
+  const [listStagePickIds, setListStagePickIds] = useState<string[] | null>(
+    null,
+  );
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [automationMenuOpen, setAutomationMenuOpen] = useState(false);
   const [automationDialogMode, setAutomationDialogMode] = useState<
@@ -207,6 +213,35 @@ function PipelineViewBody({
         (d.contact.email?.toLowerCase().includes(q) ?? false),
     );
   }, [preFilteredDeals, search]);
+
+  const sortedPipelineStages = useMemo(
+    () =>
+      [...activePipeline.stages].sort((a, b) => a.sortOrder - b.sortOrder),
+    [activePipeline.stages],
+  );
+
+  const listVisibleStageIds = useMemo(() => {
+    if (!listStagePickIds?.length) return null;
+    return new Set(listStagePickIds);
+  }, [listStagePickIds]);
+
+  const hasListStageFilter =
+    listStagePickIds != null && listStagePickIds.length > 0;
+
+  useEffect(() => {
+    setListStagePickIds(null);
+  }, [activePipeline.id]);
+
+  const toggleListStageFilter = useCallback((stageId: string) => {
+    setListStagePickIds((prev) => {
+      if (prev == null) return [stageId];
+      if (prev.includes(stageId)) {
+        const next = prev.filter((id) => id !== stageId);
+        return next.length === 0 ? null : next;
+      }
+      return [...prev, stageId];
+    });
+  }, []);
 
   function patchRow(
     groupId: string,
@@ -744,13 +779,92 @@ function PipelineViewBody({
       </div>
 
       <Dialog open={listPanelOpen} onOpenChange={setListPanelOpen}>
-        <DialogContent className="flex max-h-[min(92vh,56rem)] w-[min(100vw-1rem,78rem)] max-w-[min(100vw-1rem,78rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[78rem]">
-          <DialogHeader className="shrink-0 space-y-1 border-b border-border/40 px-6 py-4 text-left">
-            <DialogTitle>Lista por etapa</DialogTitle>
-            <DialogDescription>
-              Leads do funil agrupados por etapa. Clique na linha para abrir o
-              detalhe; arraste para mudar de etapa.
-            </DialogDescription>
+        <DialogContent className="flex max-h-[min(92vh,70rem)] w-[min(100vw-1rem,98rem)] max-w-[min(100vw-1rem,98rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[98rem]">
+          <DialogHeader className="shrink-0 space-y-0 border-b border-border/40 px-6 py-4 pr-16 text-left sm:pr-20">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0 flex-1 space-y-1">
+                <DialogTitle>Lista por etapa</DialogTitle>
+                <DialogDescription>
+                  Leads do funil agrupados por etapa. Clique na linha para abrir
+                  o detalhe; arraste para mudar de etapa.
+                </DialogDescription>
+              </div>
+              <Popover
+                open={listStageFilterOpen}
+                onOpenChange={setListStageFilterOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="relative mr-1 h-11 w-11 shrink-0 self-start rounded-xl border-border/50 shadow-sm sm:mr-2"
+                    aria-label="Filtrar etapas na lista"
+                    title="Etapas na lista"
+                  >
+                    <ListFilter className="size-[18px]" strokeWidth={2} />
+                    {hasListStageFilter ? (
+                      <span
+                        className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary"
+                        aria-hidden
+                      />
+                    ) : null}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  className="w-[min(calc(100vw-1.5rem),22rem)] border-border/60 p-4"
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    <p className="text-sm font-semibold">Etapas na lista</p>
+                    <span
+                      className="inline-flex text-muted-foreground"
+                      title="Sem marcação, todas as etapas aparecem. Marque uma ou mais para restringir a lista."
+                    >
+                      <Info className="size-3.5" strokeWidth={2} aria-hidden />
+                    </span>
+                  </div>
+                  <p className="text-[12px] leading-snug text-muted-foreground">
+                    Deixe em branco para ver todas. Marque as etapas que quer
+                    exibir.
+                  </p>
+                  <div className="mt-3 max-h-[min(50vh,20rem)] space-y-2 overflow-y-auto border-t border-border/40 pt-3">
+                    {sortedPipelineStages.map((stage) => {
+                      const checked =
+                        listStagePickIds != null &&
+                        listStagePickIds.includes(stage.id);
+                      return (
+                        <label
+                          key={stage.id}
+                          className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-transparent px-1 py-1.5 hover:bg-muted/40"
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-4 shrink-0 rounded border border-border accent-primary"
+                            checked={checked}
+                            onChange={() => toggleListStageFilter(stage.id)}
+                          />
+                          <span className="min-w-0 flex-1 text-[13px] font-medium leading-snug">
+                            {stage.name}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {hasListStageFilter ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="mt-3 w-full"
+                      onClick={() => setListStagePickIds(null)}
+                    >
+                      Mostrar todas as etapas
+                    </Button>
+                  ) : null}
+                </PopoverContent>
+              </Popover>
+            </div>
           </DialogHeader>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2 pt-1 sm:px-4">
             <PipelineListView
@@ -761,6 +875,7 @@ function PipelineViewBody({
               tenantMembers={tenantMembers}
               tenantTags={tenantTags}
               toolbarDock="inline"
+              visibleStageIds={listVisibleStageIds}
             />
           </div>
         </DialogContent>

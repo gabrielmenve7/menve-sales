@@ -164,7 +164,7 @@ function DealListRow({
         )}
       >
         <td
-          className="align-middle py-4 pl-3 pr-2 sm:pl-4"
+          className="align-middle py-4 pl-3 pr-1 sm:pl-4 sm:pr-1"
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -266,7 +266,7 @@ function DealListRow({
             }}
           >
             <div className="min-h-0 overflow-hidden">
-              <div className="border-0 bg-transparent px-4 pb-4 pl-[8.5rem] pt-0 text-[12px] leading-relaxed text-muted-foreground sm:pl-[9rem]">
+              <div className="border-0 bg-transparent px-4 pb-4 pl-[8rem] pt-0 text-[12px] leading-relaxed text-muted-foreground sm:pl-[8.5rem]">
                 {phone ? (
                   <p>
                     <span className="font-medium text-foreground/80">
@@ -307,7 +307,7 @@ const COL_COUNT = 6;
 
 /** Alinha barra da etapa com as colunas da tabela (mesmas larguras do colgroup). */
 const STAGE_BAR_GRID =
-  "grid grid-cols-[3rem_2.75rem_2.5rem_minmax(0,1fr)_10rem_4rem] items-center gap-x-1";
+  "grid grid-cols-[3rem_2.25rem_2.25rem_minmax(0,1fr)_10rem_4rem] items-center gap-x-0";
 
 function ListStageTbody({
   stage,
@@ -383,7 +383,7 @@ function ListStageTbody({
             <button
               type="button"
               aria-expanded={!collapsed}
-              className="flex min-h-[2.75rem] min-w-0 items-center gap-2.5 rounded-md px-1 py-1.5 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-[2.75rem] min-w-0 items-center gap-2 rounded-md px-1 py-1.5 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
               onClick={onToggleCollapsed}
             >
               <ChevronDown
@@ -486,6 +486,7 @@ export function PipelineListView({
   tenantMembers = [],
   tenantTags = [],
   toolbarDock = "fixed",
+  visibleStageIds = null,
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   deals: DealRow[];
@@ -494,6 +495,8 @@ export function PipelineListView({
   tenantMembers?: TenantMemberOption[];
   tenantTags?: { id: string; name: string }[];
   toolbarDock?: "fixed" | "inline";
+  /** Quando definido e não vazio, exibe apenas essas etapas (ordem do funil preservada). */
+  visibleStageIds?: Set<string> | null;
 }) {
   const router = useRouter();
   const [detailDeal, setDetailDeal] = useState<DealRow | null>(null);
@@ -518,6 +521,17 @@ export function PipelineListView({
     () => [...pipeline.stages].sort((a, b) => a.sortOrder - b.sortOrder),
     [pipeline.stages],
   );
+
+  const stagesForTable = useMemo(() => {
+    if (!visibleStageIds || visibleStageIds.size === 0) return sortedStages;
+    return sortedStages.filter((s) => visibleStageIds.has(s.id));
+  }, [sortedStages, visibleStageIds]);
+
+  const stageIndexInPipeline = useMemo(() => {
+    const m = new Map<string, number>();
+    sortedStages.forEach((s, i) => m.set(s.id, i));
+    return m;
+  }, [sortedStages]);
 
   const displayedDeals = useMemo(() => {
     return deals.map((d) => {
@@ -623,7 +637,7 @@ export function PipelineListView({
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-1",
-        toolbarDock === "inline" && "relative min-h-[min(55vh,28rem)]",
+        toolbarDock === "inline" && "relative min-h-[min(69vh,35rem)]",
         selectedIds.size > 0 && "pb-24",
       )}
     >
@@ -635,11 +649,11 @@ export function PipelineListView({
       >
         <div className="px-4 pb-4 pt-1 sm:px-8">
           <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/50 shadow-sm">
-            <table className="mx-auto w-full max-w-[78rem] min-w-[30rem] table-fixed border-collapse text-[13px]">
+            <table className="mx-auto w-full max-w-[98rem] min-w-[30rem] table-fixed border-collapse text-[13px]">
               <colgroup>
                 <col style={{ width: "3rem" }} />
-                <col style={{ width: "2.75rem" }} />
-                <col style={{ width: "2.5rem" }} />
+                <col style={{ width: "2.25rem" }} />
+                <col style={{ width: "2.25rem" }} />
                 <col />
                 <col style={{ width: "10rem" }} />
                 <col style={{ width: "4rem" }} />
@@ -675,12 +689,12 @@ export function PipelineListView({
                   </th>
                 </tr>
               </thead>
-              {sortedStages.map((stage, stageIndex) => (
+              {stagesForTable.map((stage, stageIndex) => (
                 <ListStageTbody
                   key={stage.id}
                   isFirst={stageIndex === 0}
                   stage={stage}
-                  stageIndex={stageIndex}
+                  stageIndex={stageIndexInPipeline.get(stage.id) ?? 0}
                   stageDeals={byStage.get(stage.id) ?? []}
                   pipeline={pipeline}
                   contacts={contacts}
