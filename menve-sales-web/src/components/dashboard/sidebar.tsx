@@ -95,7 +95,10 @@ export function Sidebar({
               pathname === href || pathname.startsWith(href + "/"),
             )}
           >
-            <Icon className="size-[18px] shrink-0 opacity-80" strokeWidth={1.75} />
+            <Icon
+              className="size-[18px] shrink-0 text-primary"
+              strokeWidth={1.75}
+            />
             {collapsed ? (
               <span className="sr-only">{label}</span>
             ) : (
@@ -109,7 +112,10 @@ export function Sidebar({
             title={collapsed ? "Admin" : undefined}
             className={linkClass(pathname.startsWith("/admin"))}
           >
-            <Shield className="size-[18px] shrink-0 opacity-80" strokeWidth={1.75} />
+            <Shield
+              className="size-[18px] shrink-0 text-primary"
+              strokeWidth={1.75}
+            />
             {collapsed ? <span className="sr-only">Admin</span> : "Admin"}
           </Link>
         ) : null}
