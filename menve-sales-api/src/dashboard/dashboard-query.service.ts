@@ -233,7 +233,31 @@ export class DashboardQueryService {
       }
       case "customField": {
         const k = row.customKey?.trim();
-        if (!k || row.customValue === undefined || row.customValue === "") return null;
+        if (!k) return null;
+        const df = row.customDateFrom?.trim();
+        const dt = row.customDateTo?.trim();
+        if (df || dt) {
+          const parts: Prisma.DealWhereInput[] = [];
+          if (df) {
+            parts.push({
+              customData: {
+                path: [k],
+                gte: df,
+              },
+            });
+          }
+          if (dt) {
+            parts.push({
+              customData: {
+                path: [k],
+                lte: dt,
+              },
+            });
+          }
+          if (parts.length === 0) return null;
+          return parts.length === 1 ? parts[0]! : { AND: parts };
+        }
+        if (row.customValue === undefined || row.customValue === "") return null;
         return {
           customData: {
             path: [k],

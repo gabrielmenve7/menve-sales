@@ -16,6 +16,9 @@ export type WidgetFilterRowSaved = {
   createdTo?: string;
   customKey?: string;
   customValue?: string | number | boolean;
+  /** Filtro por intervalo em campo DATE (customData como string YYYY-MM-DD). */
+  customDateFrom?: string;
+  customDateTo?: string;
 };
 
 /** Grupo de filtros; `groupJoin` liga este grupo ao anterior (filtro agrupado). */

@@ -19,6 +19,8 @@ const widgetFilterRowSchema = z.object({
   createdTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   customKey: z.string().min(1).max(64).optional(),
   customValue: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  customDateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  customDateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 const widgetFilterGroupSchema = z.object({

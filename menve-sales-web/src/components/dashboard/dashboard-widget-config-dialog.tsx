@@ -1,7 +1,26 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Filter, Info, Plus, Trash2, X } from "lucide-react";
+import {
+  Calendar,
+  ChevronsUpDown,
+  CircleDot,
+  Filter,
+  Hash,
+  Info,
+  Link2,
+  ListOrdered,
+  Mail,
+  Phone,
+  Plus,
+  Search,
+  Tag,
+  Trash2,
+  Type,
+  User,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +30,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +57,11 @@ import type {
 import { defaultBarChartConfig } from "@/lib/dashboard-builder-types";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
+import {
+  getDealCreatedInterval,
+  parseDateInputString,
+  type PipelineDatePreset,
+} from "@/app/(dashboard)/pipeline/pipeline-filter-utils";
 
 const DIMENSION_OPTIONS: {
   value: NonNullable<WidgetQuerySpec["dimension"]> | "";
@@ -166,6 +195,28 @@ function dealCustomFieldSelectOptions(cf: DealCustomFieldDef | undefined) {
   return raw.map((x) => String(x)).filter((s) => s.length > 0);
 }
 
+function toIsoDateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Presets do pipeline + data exata (equals no JSON). */
+type DashCustomDatePreset = PipelineDatePreset | "exact";
+
+const DASH_DATE_PRESET_LABELS: { id: DashCustomDatePreset; label: string }[] = [
+  { id: "all", label: "Selecionar período…" },
+  { id: "today", label: "Hoje" },
+  { id: "yesterday", label: "Ontem" },
+  { id: "last7", label: "Últimos 7 dias" },
+  { id: "thisWeek", label: "Esta semana" },
+  { id: "thisMonth", label: "Este mês" },
+  { id: "lastMonth", label: "Mês passado" },
+  { id: "custom", label: "Intervalo personalizado" },
+  { id: "exact", label: "Data exata" },
+];
+
 /**
  * Converte o valor digitado na UI para o tipo persistido na API / JSON do deal.
  */
@@ -193,6 +244,86 @@ function parseCustomFieldFilterValueForApi(
     default:
       return trimmed;
   }
+}
+
+function DashCustomDateSubfilter({
+  datePreset,
+  dateCustomFrom,
+  dateCustomTo,
+  exactValue,
+  selectClass,
+  onChange,
+}: {
+  datePreset: DashCustomDatePreset;
+  dateCustomFrom: string;
+  dateCustomTo: string;
+  exactValue: string;
+  selectClass: string;
+  onChange: (p: {
+    datePreset?: DashCustomDatePreset;
+    dateCustomFrom?: string;
+    dateCustomTo?: string;
+    value?: string;
+  }) => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+      <select
+        className={cn(selectClass, "min-w-[11rem]")}
+        value={datePreset}
+        onChange={(e) =>
+          onChange({
+            datePreset: e.target.value as DashCustomDatePreset,
+            value: "",
+            dateCustomFrom: "",
+            dateCustomTo: "",
+          })
+        }
+        aria-label="Período"
+      >
+        {DASH_DATE_PRESET_LABELS.map(({ id, label }) => (
+          <option
+            key={id}
+            value={id}
+            className="bg-popover text-popover-foreground"
+          >
+            {label}
+          </option>
+        ))}
+      </select>
+      {datePreset === "custom" ? (
+        <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+          <div className="grid min-w-[8.5rem] flex-1 gap-1">
+            <span className="text-[10px] text-muted-foreground">De</span>
+            <Input
+              type="date"
+              value={dateCustomFrom}
+              onChange={(e) => onChange({ dateCustomFrom: e.target.value })}
+              className="h-9 text-xs"
+            />
+          </div>
+          <div className="grid min-w-[8.5rem] flex-1 gap-1">
+            <span className="text-[10px] text-muted-foreground">Até</span>
+            <Input
+              type="date"
+              value={dateCustomTo}
+              onChange={(e) => onChange({ dateCustomTo: e.target.value })}
+              className="h-9 text-xs"
+            />
+          </div>
+        </div>
+      ) : null}
+      {datePreset === "exact" ? (
+        <Input
+          type="date"
+          className={cn(selectClass, "h-10 min-w-[10rem]")}
+          value={exactValue}
+          onChange={(e) => onChange({ value: e.target.value })}
+          aria-label="Data exata"
+        />
+      ) : null}
+    </div>
+  );
 }
 
 function DashCustomFieldValueByType({
@@ -263,15 +394,7 @@ function DashCustomFieldValueByType({
         />
       );
     case "DATE":
-      return (
-        <Input
-          type="date"
-          className={cn(selectClass, "h-10 min-w-[10rem]")}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label="Data"
-        />
-      );
+      return null;
     case "USER": {
       const sorted = [...tenantMembers].sort((a, b) =>
         (a.name ?? a.email).localeCompare(b.name ?? b.email, "pt-BR"),
@@ -345,6 +468,9 @@ function DashCustomFieldValueByType({
 function DashCustomFieldFilterControls({
   rowKey,
   rowValue,
+  datePreset,
+  dateCustomFrom,
+  dateCustomTo,
   dealCustomFields,
   tenantMembers,
   selectClass,
@@ -353,20 +479,22 @@ function DashCustomFieldFilterControls({
 }: {
   rowKey: string;
   rowValue: string;
+  datePreset: DashCustomDatePreset;
+  dateCustomFrom: string;
+  dateCustomTo: string;
   dealCustomFields: DealCustomFieldDef[];
   tenantMembers: TenantMemberOption[];
   selectClass: string;
   mutedClass: string;
-  onPatch: (key: string, value: string) => void;
+  onPatch: (patch: {
+    key?: string;
+    value?: string;
+    datePreset?: DashCustomDatePreset;
+    dateCustomFrom?: string;
+    dateCustomTo?: string;
+  }) => void;
 }) {
-  const sortedFields = useMemo(
-    () =>
-      [...dealCustomFields].sort((a, b) =>
-        a.name.localeCompare(b.name, "pt-BR"),
-      ),
-    [dealCustomFields],
-  );
-  const cf = sortedFields.find((f) => f.key === rowKey);
+  const cf = dealCustomFields.find((f) => f.key === rowKey);
 
   if (dealCustomFields.length === 0) {
     return (
@@ -375,38 +503,40 @@ function DashCustomFieldFilterControls({
       </p>
     );
   }
-
+  if (!rowKey) {
+    return (
+      <p className={cn(mutedClass, "py-1")}>
+        Escolha um campo na primeira lista.
+      </p>
+    );
+  }
+  if (!cf) {
+    return (
+      <p className={cn(mutedClass, "py-1")}>
+        Este campo não existe mais nas configurações.
+      </p>
+    );
+  }
+  if (cf.fieldType === "DATE") {
+    return (
+      <DashCustomDateSubfilter
+        datePreset={datePreset}
+        dateCustomFrom={dateCustomFrom}
+        dateCustomTo={dateCustomTo}
+        exactValue={rowValue}
+        selectClass={selectClass}
+        onChange={(p) => onPatch(p)}
+      />
+    );
+  }
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-      <select
-        className={cn(selectClass, "min-w-[12rem]")}
-        value={rowKey}
-        onChange={(e) => onPatch(e.target.value, "")}
-        aria-label="Campo personalizado"
-      >
-        <option value="" className="bg-popover text-popover-foreground">
-          Selecionar campo
-        </option>
-        {sortedFields.map((f) => (
-          <option
-            key={f.id}
-            value={f.key}
-            className="bg-popover text-popover-foreground"
-          >
-            {f.name}
-          </option>
-        ))}
-      </select>
-      {cf ? (
-        <DashCustomFieldValueByType
-          cf={cf}
-          value={rowValue}
-          onChange={(v) => onPatch(rowKey, v)}
-          tenantMembers={tenantMembers}
-          selectClass={selectClass}
-        />
-      ) : null}
-    </div>
+    <DashCustomFieldValueByType
+      cf={cf}
+      value={rowValue}
+      onChange={(v) => onPatch({ value: v })}
+      tenantMembers={tenantMembers}
+      selectClass={selectClass}
+    />
   );
 }
 
@@ -417,11 +547,6 @@ function numericFieldTypes(f: DealCustomFieldDef) {
 /** Mesmo padrão visual do filtro do pipeline (`pipeline-view`). */
 const selectClass = cn(
   "min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-2 text-sm shadow-sm",
-  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-);
-
-const fieldSelectClass = cn(
-  "min-w-[15rem] shrink-0 rounded-md border border-input bg-background px-2 py-2 text-sm shadow-sm",
   "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 );
 
@@ -448,11 +573,13 @@ type DashFilterOp = "IS" | "OR";
 type DashRowJoin = "AND" | "OR";
 type DashGroupJoin = "AND" | "OR";
 
-const DASH_FIELD_LABELS: Record<DashFilterField, string> = {
+const DASH_BUILTIN_LABELS: Record<
+  Exclude<DashFilterField, "customField">,
+  string
+> = {
   status: "Status",
   tags: "Tags",
   createdAt: "Data de criação",
-  customField: "Campo personalizado",
 };
 
 type DashFilterRow =
@@ -485,6 +612,9 @@ type DashFilterRow =
       op: "IS";
       key: string;
       value: string;
+      datePreset: DashCustomDatePreset;
+      dateCustomFrom: string;
+      dateCustomTo: string;
     };
 
 type DashFilterGroupState = {
@@ -527,7 +657,16 @@ function createDashFilterRowWithId(
     case "createdAt":
       return { id, field: "createdAt", op: "IS", createdFrom: "", createdTo: "" };
     case "customField":
-      return { id, field: "customField", op: "IS", key: "", value: "" };
+      return {
+        id,
+        field: "customField",
+        op: "IS",
+        key: "",
+        value: "",
+        datePreset: "all",
+        dateCustomFrom: "",
+        dateCustomTo: "",
+      };
   }
 }
 
@@ -568,12 +707,19 @@ function legacyFlatRowsFromSpec(spec: WidgetQuerySpec): DashFilterRow[] {
         typeof f.value === "boolean"
           ? String(f.value)
           : String(f.value ?? ""),
+      datePreset: "all",
+      dateCustomFrom: "",
+      dateCustomTo: "",
     });
   }
   return rows;
 }
 
-function savedRowToDashRow(id: string, r: WidgetFilterRowSaved): DashFilterRow {
+function savedRowToDashRow(
+  id: string,
+  r: WidgetFilterRowSaved,
+  dealCustomFields: DealCustomFieldDef[],
+): DashFilterRow {
   switch (r.field) {
     case "status":
       return {
@@ -598,17 +744,50 @@ function savedRowToDashRow(id: string, r: WidgetFilterRowSaved): DashFilterRow {
         createdFrom: r.createdFrom ?? "",
         createdTo: r.createdTo ?? "",
       };
-    case "customField":
-      return {
+    case "customField": {
+      const key = r.customKey ?? "";
+      const base = {
         id,
-        field: "customField",
-        op: "IS",
-        key: r.customKey ?? "",
+        field: "customField" as const,
+        op: "IS" as const,
+        key,
+        value: "",
+        datePreset: "all" as DashCustomDatePreset,
+        dateCustomFrom: "",
+        dateCustomTo: "",
+      };
+      if (!key) return base;
+      const cf = dealCustomFields.find((c) => c.key === key);
+      if (cf?.fieldType === "DATE") {
+        if (r.customDateFrom?.trim() || r.customDateTo?.trim()) {
+          return {
+            ...base,
+            datePreset: "custom",
+            dateCustomFrom: r.customDateFrom ?? "",
+            dateCustomTo: r.customDateTo ?? "",
+          };
+        }
+        if (
+          r.customValue !== undefined &&
+          r.customValue !== null &&
+          r.customValue !== ""
+        ) {
+          return {
+            ...base,
+            datePreset: "exact",
+            value: String(r.customValue),
+          };
+        }
+        return base;
+      }
+      return {
+        ...base,
         value:
           r.customValue === undefined || r.customValue === null
             ? ""
             : String(r.customValue),
       };
+    }
   }
 }
 
@@ -646,6 +825,58 @@ function dashRowToSaved(
       if (!key) {
         return { rowJoin, field: "customField", op: "IS" };
       }
+      const cf = dealCustomFields.find((c) => c.key === key);
+      if (cf?.fieldType === "DATE") {
+        if (row.datePreset === "exact") {
+          const parsed = parseCustomFieldFilterValueForApi(
+            key,
+            row.value,
+            dealCustomFields,
+          );
+          return {
+            rowJoin,
+            field: "customField",
+            op: "IS",
+            customKey: key,
+            ...(parsed !== undefined ? { customValue: parsed } : {}),
+          };
+        }
+        if (row.datePreset === "custom") {
+          const a = parseDateInputString(row.dateCustomFrom);
+          const b = parseDateInputString(row.dateCustomTo);
+          if (!a || !b || a.getTime() > b.getTime()) {
+            return { rowJoin, field: "customField", op: "IS", customKey: key };
+          }
+          return {
+            rowJoin,
+            field: "customField",
+            op: "IS",
+            customKey: key,
+            customDateFrom: toIsoDateLocal(a),
+            customDateTo: toIsoDateLocal(b),
+          };
+        }
+        if (row.datePreset !== "all") {
+          const interval = getDealCreatedInterval(
+            new Date(),
+            row.datePreset,
+            null,
+            null,
+          );
+          if (!interval) {
+            return { rowJoin, field: "customField", op: "IS", customKey: key };
+          }
+          return {
+            rowJoin,
+            field: "customField",
+            op: "IS",
+            customKey: key,
+            customDateFrom: toIsoDateLocal(interval.start),
+            customDateTo: toIsoDateLocal(interval.end),
+          };
+        }
+        return { rowJoin, field: "customField", op: "IS", customKey: key };
+      }
       const parsed = parseCustomFieldFilterValueForApi(
         key,
         row.value,
@@ -662,14 +893,17 @@ function dashRowToSaved(
   }
 }
 
-function specToFilterGroups(spec: WidgetQuerySpec): DashFilterGroupState[] {
+function specToFilterGroups(
+  spec: WidgetQuerySpec,
+  dealCustomFields: DealCustomFieldDef[],
+): DashFilterGroupState[] {
   if (spec.filterGroups && spec.filterGroups.length > 0) {
     return spec.filterGroups.map((g, gi) => ({
       id: newRowId(),
       groupJoin: gi === 0 ? undefined : g.groupJoin ?? "OR",
       rows: g.rows.map((r, ri) => {
         const id = newRowId();
-        const dr = savedRowToDashRow(id, r);
+        const dr = savedRowToDashRow(id, r, dealCustomFields);
         return ri === 0 ? dr : { ...dr, rowJoin: r.rowJoin ?? "AND" };
       }),
     }));
@@ -710,6 +944,181 @@ function nextFieldToAdd(rows: DashFilterRow[]): DashFilterField | null {
   if (!taken.has("tags")) return "tags";
   if (!taken.has("createdAt")) return "createdAt";
   return "customField";
+}
+
+function iconForDealCustomFieldType(ft: string): LucideIcon {
+  switch (ft) {
+    case "DATE":
+      return Calendar;
+    case "USER":
+      return User;
+    case "NUMBER":
+    case "MONEY_BRL":
+      return Hash;
+    case "SELECT":
+      return ListOrdered;
+    case "EMAIL":
+      return Mail;
+    case "URL":
+      return Link2;
+    case "PHONE":
+      return Phone;
+    default:
+      return Type;
+  }
+}
+
+const DASH_BUILTIN_COLUMN_OPTIONS: {
+  id: string;
+  label: string;
+  Icon: LucideIcon;
+}[] = [
+  { id: "builtin:status", label: DASH_BUILTIN_LABELS.status, Icon: CircleDot },
+  { id: "builtin:tags", label: DASH_BUILTIN_LABELS.tags, Icon: Tag },
+  {
+    id: "builtin:createdAt",
+    label: DASH_BUILTIN_LABELS.createdAt,
+    Icon: Calendar,
+  },
+];
+
+function dashColumnIdFromRow(row: DashFilterRow): string {
+  if (row.field === "customField") {
+    return row.key ? `custom:${row.key}` : "";
+  }
+  return `builtin:${row.field}`;
+}
+
+function labelForDashColumnId(
+  columnId: string,
+  dealCustomFields: DealCustomFieldDef[],
+): string {
+  if (!columnId) return "Selecionar campo…";
+  if (columnId.startsWith("builtin:")) {
+    const k = columnId.slice(8) as Exclude<DashFilterField, "customField">;
+    return DASH_BUILTIN_LABELS[k];
+  }
+  const ck = columnId.slice(7);
+  return dealCustomFields.find((c) => c.key === ck)?.name ?? ck;
+}
+
+function columnOptionSelectable(
+  columnId: string,
+  rows: DashFilterRow[],
+  selfRowId: string,
+): boolean {
+  if (columnId.startsWith("custom:")) return true;
+  const taken = fieldsTakenByOthers(rows, selfRowId);
+  const cur = rows.find((r) => r.id === selfRowId);
+  const currentId = cur ? dashColumnIdFromRow(cur) : "";
+  if (columnId === currentId) return true;
+  const bf = columnId.slice(8) as Exclude<DashFilterField, "customField">;
+  return !taken.has(bf);
+}
+
+function DashFilterFieldPicker({
+  columnId,
+  groupRows,
+  rowId,
+  dealCustomFields,
+  onSelect,
+}: {
+  columnId: string;
+  groupRows: DashFilterRow[];
+  rowId: string;
+  dealCustomFields: DealCustomFieldDef[];
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const flat = useMemo(() => {
+    const customs = [...dealCustomFields]
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+      .map((f) => ({
+        id: `custom:${f.key}`,
+        label: f.name,
+        Icon: iconForDealCustomFieldType(f.fieldType),
+        search: `${f.name} ${f.key}`.toLowerCase(),
+      }));
+    const builtins = DASH_BUILTIN_COLUMN_OPTIONS.map((b) => ({
+      ...b,
+      search: b.label.toLowerCase(),
+    }));
+    return [...builtins, ...customs];
+  }, [dealCustomFields]);
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return flat;
+    return flat.filter((x) => x.search.includes(t));
+  }, [flat, q]);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-10 min-w-[12rem] max-w-[16rem] justify-between rounded-md border border-input bg-background px-2 text-left text-sm font-normal shadow-sm ring-offset-background"
+        >
+          <span className="min-w-0 flex-1 truncate">
+            {labelForDashColumnId(columnId, dealCustomFields)}
+          </span>
+          <ChevronsUpDown className="ml-1 size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[min(20rem,calc(100vw-2rem))] border-border/60 p-0 shadow-lg"
+        align="start"
+      >
+        <div className="border-b border-border/60 p-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Pesquisar…"
+              className="h-9 pl-9"
+            />
+          </div>
+        </div>
+        <div className="max-h-64 overflow-y-auto p-1">
+          {filtered.map((opt) => {
+            const ok = columnOptionSelectable(opt.id, groupRows, rowId);
+            const Icon = opt.Icon;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                disabled={!ok}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-40",
+                  columnId === opt.id && "bg-muted/60",
+                )}
+                onClick={() => {
+                  if (!ok) return;
+                  onSelect(opt.id);
+                  setOpen(false);
+                  setQ("");
+                }}
+              >
+                <Icon
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+              </button>
+            );
+          })}
+          {filtered.length === 0 ? (
+            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+              Nada encontrado.
+            </p>
+          ) : null}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 /** Estilos alinhados ao tema (light/dark via tokens do app). */
@@ -792,7 +1201,7 @@ export function DashboardWidgetConfigDialog({
       s.dimension === null || s.dimension === undefined ? "" : s.dimension,
     );
     setDays(s.days ?? 30);
-    setFilterGroups(specToFilterGroups(s));
+    setFilterGroups(specToFilterGroups(s, dealCustomFields));
     if (widget.type === "BAR") {
       const bc = { ...defaultBarChartConfig(), ...widget.barChart };
       setBarShowAverage(bc.showAverageLine ?? true);
@@ -803,7 +1212,7 @@ export function DashboardWidgetConfigDialog({
       setBarXGroupBy(bc.xGroupBy ?? "DAY");
       setBarCustomDays(s.days ?? 30);
     }
-  }, [widget, open]);
+  }, [widget, open, dealCustomFields]);
 
   const filtersAreDefault = useMemo(() => {
     if (filterGroups.length !== 1) return false;
@@ -843,25 +1252,6 @@ export function DashboardWidgetConfigDialog({
     return raw;
   }
 
-  function selectableFieldsForRow(
-    groupRows: DashFilterRow[],
-    rowId: string,
-  ): DashFilterField[] {
-    const taken = fieldsTakenByOthers(groupRows, rowId);
-    const current = groupRows.find((r) => r.id === rowId)?.field;
-    const all: DashFilterField[] = [
-      "status",
-      "tags",
-      "createdAt",
-      "customField",
-    ];
-    return all.filter((f) => {
-      if (f === "customField") return true;
-      if (f === current) return true;
-      return !taken.has(f);
-    });
-  }
-
   function removeFilterRow(groupId: string, rowId: string) {
     setFilterGroups((prev) => {
       const next = prev
@@ -879,10 +1269,10 @@ export function DashboardWidgetConfigDialog({
     });
   }
 
-  function onDashRowFieldChange(
+  function onDashUnifiedColumnSelect(
     groupId: string,
     rowId: string,
-    field: DashFilterField,
+    columnId: string,
   ) {
     setFilterGroups((prev) =>
       prev.map((g) => {
@@ -891,8 +1281,28 @@ export function DashboardWidgetConfigDialog({
           ...g,
           rows: g.rows.map((r) => {
             if (r.id !== rowId) return r;
-            const next = createDashFilterRowWithId(rowId, field);
-            return r.rowJoin ? { ...next, rowJoin: r.rowJoin } : next;
+            const rowJoin = r.rowJoin;
+            if (columnId.startsWith("builtin:")) {
+              const bf = columnId.slice(8) as DashFilterField;
+              if (bf === "customField") return r;
+              const next = createDashFilterRowWithId(rowId, bf);
+              return rowJoin ? { ...next, rowJoin } : next;
+            }
+            if (columnId.startsWith("custom:")) {
+              const key = columnId.slice(7);
+              const next: DashFilterRow = {
+                id: rowId,
+                field: "customField",
+                op: "IS",
+                key,
+                value: "",
+                datePreset: "all",
+                dateCustomFrom: "",
+                dateCustomTo: "",
+              };
+              return rowJoin ? { ...next, rowJoin } : next;
+            }
+            return r;
           }),
         };
       }),
@@ -1709,28 +2119,15 @@ export function DashboardWidgetConfigDialog({
                       )}
                     </div>
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                      <select
-                        className={fieldSelectClass}
-                        value={row.field}
-                        onChange={(e) =>
-                          onDashRowFieldChange(
-                            group.id,
-                            row.id,
-                            e.target.value as DashFilterField,
-                          )
+                      <DashFilterFieldPicker
+                        columnId={dashColumnIdFromRow(row)}
+                        groupRows={group.rows}
+                        rowId={row.id}
+                        dealCustomFields={dealCustomFields}
+                        onSelect={(id) =>
+                          onDashUnifiedColumnSelect(group.id, row.id, id)
                         }
-                        aria-label="Categoria do filtro"
-                      >
-                        {selectableFieldsForRow(group.rows, row.id).map((f) => (
-                          <option
-                            key={f}
-                            value={f}
-                            className="bg-popover text-popover-foreground"
-                          >
-                            {DASH_FIELD_LABELS[f]}
-                          </option>
-                        ))}
-                      </select>
+                      />
                       {row.field === "status" || row.field === "tags" ? (
                         <select
                           className={opSelectClass}
@@ -1954,11 +2351,14 @@ export function DashboardWidgetConfigDialog({
                         <DashCustomFieldFilterControls
                           rowKey={row.key}
                           rowValue={row.value}
+                          datePreset={row.datePreset}
+                          dateCustomFrom={row.dateCustomFrom}
+                          dateCustomTo={row.dateCustomTo}
                           dealCustomFields={dealCustomFields}
                           tenantMembers={tenantMembers}
                           selectClass={selectClass}
                           mutedClass={panel.muted}
-                          onPatch={(key, value) =>
+                          onPatch={(patch) =>
                             setFilterGroups((prev) =>
                               prev.map((g) => {
                                 if (g.id !== group.id) return g;
@@ -1967,7 +2367,7 @@ export function DashboardWidgetConfigDialog({
                                   rows: g.rows.map((r) =>
                                     r.id === row.id &&
                                     r.field === "customField"
-                                      ? { ...r, key, value }
+                                      ? { ...r, ...patch }
                                       : r,
                                   ),
                                 };
