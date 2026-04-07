@@ -31,37 +31,14 @@ import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import { PipelineDealDetailDialog } from "./pipeline-deal-detail-dialog";
 import { PipelineNewDeal } from "./pipeline-new-deal";
+import {
+  columnSurfaceStyle,
+  stageAccentHex,
+  stageBadgeStyle,
+} from "./pipeline-stage-visual";
 import type { DealRow } from "./pipeline-types";
 
 export type { DealRow } from "./pipeline-types";
-
-const FALLBACK_STAGE_HEX = [
-  "#2563eb",
-  "#7c3aed",
-  "#d97706",
-  "#e11d48",
-  "#059669",
-  "#0284c7",
-];
-
-function stageAccentHex(stage: Stage, index: number) {
-  const c = stage.color?.trim();
-  if (c && /^#[0-9A-Fa-f]{6}$/.test(c)) return c;
-  return FALLBACK_STAGE_HEX[index % FALLBACK_STAGE_HEX.length];
-}
-
-function columnSurfaceStyle(hex: string) {
-  return {
-    backgroundColor: `color-mix(in srgb, var(--background) 98.5%, ${hex} 1.5%)`,
-  } as const;
-}
-
-function stageBadgeStyle(hex: string) {
-  return {
-    backgroundColor: `color-mix(in srgb, var(--card) 78%, ${hex} 22%)`,
-    color: `color-mix(in srgb, ${hex} 72%, var(--foreground) 28%)`,
-  } as const;
-}
 
 function relativeShort(iso: Date | string): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;

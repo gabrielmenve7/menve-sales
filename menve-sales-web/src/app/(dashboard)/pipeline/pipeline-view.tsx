@@ -2,12 +2,14 @@
 
 import type { CustomField, Pipeline, Stage } from "@prisma/client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Check,
   ChevronsUpDown,
   GitBranch,
   Info,
+  LayoutGrid,
+  List,
   ListChecks,
   Plus,
   Search,
@@ -17,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import {
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -46,6 +49,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PipelineAutomationsDialog } from "@/components/pipeline-automations/pipeline-automations-dialog";
 import { PipelineBoard } from "./pipeline-board";
+import { PipelineListView } from "./pipeline-list-view";
 import {
   createEmptyFilterGroup,
   createEmptyFilterRow,
@@ -78,7 +82,16 @@ function countEnabledAutomationsFromApi(raw: unknown): number {
   return n;
 }
 
-export function PipelineView({
+export function PipelineViewSkeleton() {
+  return (
+    <div
+      className="flex min-h-[min(50vh,24rem)] flex-1 animate-pulse flex-col gap-4 rounded-2xl bg-muted/15"
+      aria-hidden
+    />
+  );
+}
+
+function PipelineViewBody({
   pipelines,
   activePipeline,
   deals,
@@ -110,6 +123,17 @@ export function PipelineView({
   canConfigureAutomations?: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const viewMode = searchParams.get("view") === "list" ? "list" : "kanban";
+
+  function setViewMode(next: "kanban" | "list") {
+    const p = new URLSearchParams(searchParams.toString());
+    if (next === "list") p.set("view", "list");
+    else p.delete("view");
+    const qs = p.toString();
+    router.replace(qs ? `/pipeline?${qs}` : "/pipeline", { scroll: false });
+  }
+
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [automationMenuOpen, setAutomationMenuOpen] = useState(false);
   const [automationDialogMode, setAutomationDialogMode] = useState<
@@ -684,19 +708,66 @@ export function PipelineView({
         </div>
       </header>
 
-      <p className="shrink-0 text-[12px] text-muted-foreground">
-        Arraste o card para mudar de etapa. Clique no card para abrir o detalhe
-        (ganho, perda e demais ações).
-      </p>
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[12px] text-muted-foreground">
+          {viewMode === "kanban"
+            ? "Arraste o card para mudar de etapa. Clique no card para abrir o detalhe (ganho, perda e demais ações)."
+            : "Lista agrupada por etapa com as cores do funil. Clique na linha para abrir o detalhe."}
+        </p>
+        <div
+          className="inline-flex shrink-0 rounded-xl border border-border/50 bg-muted/10 p-0.5 shadow-sm"
+          role="group"
+          aria-label="Tipo de visualização do pipeline"
+        >
+          <button
+            type="button"
+            onClick={() => setViewMode("kanban")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-semibold transition-colors",
+              viewMode === "kanban"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            aria-pressed={viewMode === "kanban"}
+          >
+            <LayoutGrid className="size-3.5" strokeWidth={2} aria-hidden />
+            Quadro
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-semibold transition-colors",
+              viewMode === "list"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            aria-pressed={viewMode === "list"}
+          >
+            <List className="size-3.5" strokeWidth={2} aria-hidden />
+            Lista
+          </button>
+        </div>
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <PipelineBoard
-          pipeline={activePipeline}
-          deals={filteredDeals}
-          contacts={contacts}
-          dealCustomFieldDefs={dealCustomFieldDefs}
-          tenantMembers={tenantMembers}
-        />
+        {viewMode === "kanban" ? (
+          <PipelineBoard
+            pipeline={activePipeline}
+            deals={filteredDeals}
+            contacts={contacts}
+            dealCustomFieldDefs={dealCustomFieldDefs}
+            tenantMembers={tenantMembers}
+          />
+        ) : (
+          <PipelineListView
+            pipeline={activePipeline}
+            deals={filteredDeals}
+            contacts={contacts}
+            dealCustomFieldDefs={dealCustomFieldDefs}
+            tenantMembers={tenantMembers}
+          />
+        )}
       </div>
 
       <PipelineAutomationsDialog
@@ -714,5 +785,15 @@ export function PipelineView({
         tenantMembers={tenantMembers}
       />
     </div>
+  );
+}
+
+export function PipelineView(
+  props: React.ComponentProps<typeof PipelineViewBody>,
+) {
+  return (
+    <Suspense fallback={<PipelineViewSkeleton />}>
+      <PipelineViewBody {...props} />
+    </Suspense>
   );
 }
