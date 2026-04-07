@@ -866,7 +866,7 @@ function PipelineViewBody({
               </Popover>
             </div>
           </DialogHeader>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2 pt-1 sm:px-4">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-1.5 pb-1.5 pt-0.5 sm:px-3">
             <PipelineListView
               pipeline={activePipeline}
               deals={filteredDeals}

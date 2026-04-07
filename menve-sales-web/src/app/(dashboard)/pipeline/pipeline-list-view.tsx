@@ -111,7 +111,7 @@ function StageSelectAllCheckbox({
 function ListDragOverlayFace({ deal }: { deal: DealRow }) {
   const phone = deal.contact.phone?.trim();
   return (
-    <div className="pointer-events-none flex min-w-[16rem] max-w-[min(100vw-2rem,24rem)] items-center gap-3 rounded-md border border-border/60 bg-card px-4 py-2.5 text-[13px] shadow-lg ring-2 ring-foreground/10">
+    <div className="pointer-events-none flex min-w-[16rem] max-w-[min(100vw-2rem,24rem)] items-center gap-2.5 rounded-md border border-border/60 bg-card px-3 py-1.5 text-[13px] shadow-lg ring-2 ring-foreground/10">
       <GripVertical className="size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-foreground">
@@ -164,7 +164,7 @@ function DealListRow({
         )}
       >
         <td
-          className="align-middle py-2 pl-3 pr-1 sm:pl-4 sm:pr-1"
+          className="align-middle py-1.5 pl-3 pr-1 sm:pl-4 sm:pr-1"
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -176,7 +176,7 @@ function DealListRow({
             onClick={(e) => e.stopPropagation()}
           />
         </td>
-        <td className="align-middle px-2 py-2">
+        <td className="align-middle px-2 py-1.5">
           <button
             type="button"
             className="flex size-8 touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -188,7 +188,7 @@ function DealListRow({
             <GripVertical className="size-4" strokeWidth={2} />
           </button>
         </td>
-        <td className="align-middle px-2 py-2">
+        <td className="align-middle px-2 py-1.5">
           <button
             type="button"
             className="flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -210,7 +210,7 @@ function DealListRow({
           </button>
         </td>
         <td
-          className="cursor-pointer align-middle py-2 pl-1 pr-3"
+          className="cursor-pointer align-middle py-1.5 pl-1 pr-3"
           onClick={onOpenDetail}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -222,7 +222,7 @@ function DealListRow({
           role="button"
           aria-label={`Abrir lead ${deal.contact.name}`}
         >
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
             <span
               className="size-2 shrink-0 rounded-full"
               style={{ backgroundColor: accent }}
@@ -234,18 +234,18 @@ function DealListRow({
           </div>
         </td>
         <td
-          className="cursor-pointer align-middle py-2 pl-2 pr-2"
+          className="cursor-pointer align-middle py-1.5 pl-2 pr-2"
           onClick={onOpenDetail}
         >
           <span
-            className="inline-block max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold uppercase leading-tight tracking-wide"
+            className="inline-block max-w-full truncate rounded-md px-2 py-px text-[10px] font-bold uppercase leading-tight tracking-wide"
             style={stageSolidPillStyle(accent)}
           >
             {stage.name}
           </span>
         </td>
         <td
-          className="cursor-pointer align-middle py-2 pl-2 pr-3 sm:pr-4"
+          className="cursor-pointer align-middle py-1.5 pl-2 pr-3 sm:pr-4"
           onClick={onOpenDetail}
         >
           <div className="flex justify-start">
@@ -266,7 +266,7 @@ function DealListRow({
             }}
           >
             <div className="min-h-0 overflow-hidden">
-              <div className="border-0 bg-transparent px-4 pb-2 pl-[8rem] pt-0 text-[12px] leading-snug text-muted-foreground sm:pl-[8.5rem]">
+              <div className="border-0 bg-transparent px-3 pb-1.5 pl-[8rem] pt-0 text-[12px] leading-snug text-muted-foreground sm:pl-[8.5rem]">
                 {phone ? (
                   <p>
                     <span className="font-medium text-foreground/80">
@@ -366,7 +366,7 @@ function ListStageTbody({
     >
       <tr className="bg-muted/40">
         <td colSpan={COL_COUNT} className="p-0">
-          <div className={cn(STAGE_BAR_GRID, "border-b border-border/25 py-2")}>
+          <div className={cn(STAGE_BAR_GRID, "border-b border-border/25 py-1.5")}>
             <div
               className="flex items-center justify-center pl-3 sm:pl-4"
               onClick={(e) => e.stopPropagation()}
@@ -383,7 +383,7 @@ function ListStageTbody({
             <button
               type="button"
               aria-expanded={!collapsed}
-              className="flex min-h-10 min-w-0 items-center gap-2 rounded-md px-1 py-1 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-9 min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
               onClick={onToggleCollapsed}
             >
               <ChevronDown
@@ -397,7 +397,7 @@ function ListStageTbody({
               />
               <span
                 className={cn(
-                  "inline-flex min-w-0 max-w-full truncate rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide",
+                  "inline-flex min-w-0 max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
                   collapsed ? "border-2 bg-background/60" : "border-0 shadow-sm",
                 )}
                 style={
@@ -414,7 +414,7 @@ function ListStageTbody({
             </button>
             <div className="min-w-0" aria-hidden />
             <div className="flex justify-end pr-3 sm:pr-4">
-              <span className="min-w-[2rem] rounded-md bg-muted/60 px-2.5 py-1 text-center text-xs font-semibold tabular-nums text-muted-foreground">
+              <span className="min-w-[2rem] rounded-md bg-muted/60 px-2 py-0.5 text-center text-xs font-semibold tabular-nums text-muted-foreground">
                 {stageDeals.length}
               </span>
             </div>
@@ -427,7 +427,7 @@ function ListStageTbody({
             <tr>
               <td
                 colSpan={COL_COUNT}
-                className="border-b border-border/20 bg-muted/15 px-4 py-4 text-center text-[13px] leading-snug text-muted-foreground"
+                className="border-b border-border/20 bg-muted/15 px-3 py-3 text-center text-[13px] leading-snug text-muted-foreground"
               >
                 Nenhum lead nesta etapa
               </td>
@@ -463,7 +463,7 @@ function ListStageTbody({
             ))
           )}
           <tr className="border-b border-border/25 bg-muted/10">
-            <td colSpan={COL_COUNT} className="p-2 pt-2">
+            <td colSpan={COL_COUNT} className="p-1.5 pt-1.5">
               <PipelineNewDeal
                 pipeline={pipeline}
                 contacts={contacts}
@@ -647,7 +647,7 @@ export function PipelineListView({
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="px-4 pb-2 pt-0.5 sm:px-8">
+        <div className="px-3 pb-1.5 pt-0.5 sm:px-6">
           <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/50 shadow-sm">
             <table className="mx-auto w-full max-w-[98rem] min-w-[30rem] table-fixed border-collapse text-[13px]">
               <colgroup>
@@ -662,28 +662,28 @@ export function PipelineListView({
                 <tr>
                   <th
                     scope="col"
-                    className="py-2 pl-3 pr-1 align-middle sm:pl-4 sm:pr-1"
+                    className="py-1.5 pl-3 pr-1 align-middle sm:pl-4 sm:pr-1"
                   >
                     <span className="sr-only">Seleção por etapa</span>
                   </th>
                   <th
                     scope="col"
-                    className="px-2 py-2 align-middle text-center font-semibold"
+                    className="px-2 py-1.5 align-middle text-center font-semibold"
                   >
                     <span className="sr-only">Arrastar</span>
                   </th>
-                  <th scope="col" className="px-2 py-2 align-middle font-semibold">
+                  <th scope="col" className="px-2 py-1.5 align-middle font-semibold">
                     <span className="sr-only">Expandir</span>
                   </th>
-                  <th scope="col" className="py-2 pl-1 pr-3 align-middle font-semibold">
+                  <th scope="col" className="py-1.5 pl-1 pr-3 align-middle font-semibold">
                     Nome
                   </th>
-                  <th scope="col" className="py-2 pl-2 pr-2 align-middle font-semibold">
+                  <th scope="col" className="py-1.5 pl-2 pr-2 align-middle font-semibold">
                     Status
                   </th>
                   <th
                     scope="col"
-                    className="py-2 pl-2 pr-3 align-middle font-semibold sm:pr-4"
+                    className="py-1.5 pl-2 pr-3 align-middle font-semibold sm:pr-4"
                   >
                     Responsável
                   </th>
