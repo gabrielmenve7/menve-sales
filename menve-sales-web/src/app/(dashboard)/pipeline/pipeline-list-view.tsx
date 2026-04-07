@@ -158,11 +158,12 @@ function DealListRow({
         ref={setNodeRef}
         data-pipeline-list-row
         className={cn(
+          "transition-colors duration-75 hover:bg-muted/20",
           isDragging && "opacity-45",
         )}
       >
         <td
-          className="w-10 py-2.5 pl-2 pr-1 sm:pl-4"
+          className="w-10 align-middle py-3 pl-3 pr-1 sm:pl-4"
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -174,10 +175,10 @@ function DealListRow({
             onClick={(e) => e.stopPropagation()}
           />
         </td>
-        <td className="w-10 px-1 py-2.5">
+        <td className="w-10 align-middle px-0.5 py-3">
           <button
             type="button"
-            className="flex size-8 touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-9 touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Arrastar ${deal.contact.name} para outra etapa`}
             {...listeners}
             {...attributes}
@@ -186,10 +187,10 @@ function DealListRow({
             <GripVertical className="size-4" strokeWidth={2} />
           </button>
         </td>
-        <td className="w-9 px-0 py-2.5">
+        <td className="w-9 align-middle px-0 py-3">
           <button
             type="button"
-            className="flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-expanded={expanded}
             aria-label={expanded ? "Recolher detalhes" : "Expandir detalhes"}
             onClick={(e) => {
@@ -208,7 +209,7 @@ function DealListRow({
           </button>
         </td>
         <td
-          className="cursor-pointer py-2.5 pl-2 pr-3"
+          className="cursor-pointer align-middle py-3 pl-2 pr-2"
           onClick={onOpenDetail}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -220,30 +221,35 @@ function DealListRow({
           role="button"
           aria-label={`Abrir lead ${deal.contact.name}`}
         >
-          <div className="flex min-w-0 items-center gap-4">
+          <div className="flex min-w-0 items-center gap-2">
             <span
               className="size-2 shrink-0 rounded-full"
               style={{ backgroundColor: accent }}
               aria-hidden
             />
-            <span className="min-w-0 truncate font-medium text-foreground">
+            <span className="min-w-0 truncate text-[13px] font-medium leading-snug text-foreground">
               {deal.contact.name}
             </span>
           </div>
         </td>
-        <td className="cursor-pointer px-3 py-2.5" onClick={onOpenDetail}>
+        <td
+          className="cursor-pointer align-middle py-3 pl-1 pr-2"
+          onClick={onOpenDetail}
+        >
           <span
-            className="inline-block max-w-[10rem] truncate rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+            className="inline-block max-w-full truncate rounded-md px-2 py-1 text-[10px] font-bold uppercase leading-tight tracking-wide"
             style={stageSolidPillStyle(accent)}
           >
             {stage.name}
           </span>
         </td>
         <td
-          className="cursor-pointer px-3 py-2 pr-2 sm:pr-4"
+          className="cursor-pointer align-middle py-3 pl-1 pr-3 sm:pr-4"
           onClick={onOpenDetail}
         >
-          <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
+          <div className="flex justify-start">
+            <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
+          </div>
         </td>
       </tr>
       <tr aria-hidden={!expanded}>
@@ -256,7 +262,7 @@ function DealListRow({
             }}
           >
             <div className="min-h-0 overflow-hidden">
-              <div className="border-0 bg-transparent px-4 pb-2.5 pl-[calc(2rem+2.25rem+2rem+0.5rem)] pt-0 text-[12px] leading-relaxed text-muted-foreground sm:pl-[calc(2.5rem+2.25rem+2.5rem+0.5rem)]">
+              <div className="border-0 bg-transparent px-4 pb-3 pl-[7.75rem] pt-0 text-[12px] leading-relaxed text-muted-foreground sm:pl-[8rem]">
                 {phone ? (
                   <p>
                     <span className="font-medium text-foreground/80">
@@ -351,7 +357,7 @@ function ListStageSection({
       <button
         type="button"
         aria-expanded={!collapsed}
-        className="flex w-full items-center gap-4 px-4 py-2.5 text-left transition-colors duration-75 hover:bg-muted/15 sm:px-8"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-75 hover:bg-muted/15 sm:gap-4 sm:px-8"
         onClick={onToggleCollapsed}
       >
         <ChevronDown
@@ -379,7 +385,7 @@ function ListStageSection({
         >
           {stage.name}
         </span>
-        <span className="ml-auto shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">
+        <span className="ml-auto shrink-0 min-w-[1.75rem] rounded-md bg-muted/50 px-2 py-0.5 text-center text-xs font-semibold tabular-nums text-muted-foreground">
           {stageDeals.length}
         </span>
       </button>
@@ -394,15 +400,25 @@ function ListStageSection({
         <div className="min-h-0 overflow-hidden">
           <div className="px-4 pb-3 pt-0.5 sm:px-8">
             {stageDeals.length === 0 ? (
-              <p className="py-4 text-center text-[13px] text-muted-foreground">
-                Nenhum lead nesta etapa
-              </p>
+              <div className="rounded-lg border border-dashed border-border/40 bg-muted/20 px-4 py-5 text-center">
+                <p className="text-[13px] text-muted-foreground">
+                  Nenhum lead nesta etapa
+                </p>
+              </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[34rem] border-collapse text-[13px]">
+              <div className="overflow-x-auto rounded-lg border border-border/30 bg-card/30">
+                <table className="w-full min-w-[32rem] table-fixed border-collapse text-[13px]">
+                  <colgroup>
+                    <col style={{ width: "2.75rem" }} />
+                    <col style={{ width: "2.5rem" }} />
+                    <col style={{ width: "2.25rem" }} />
+                    <col />
+                    <col style={{ width: "9rem" }} />
+                    <col style={{ width: "3.5rem" }} />
+                  </colgroup>
                   <thead>
-                    <tr className="border-b border-border/15 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      <th className="w-10 py-2 pl-2 pr-1 sm:pl-4">
+                    <tr className="border-b border-border/25 bg-muted/25 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <th className="align-middle py-3 pl-3 pr-1 sm:pl-4">
                         <StageSelectAllCheckbox
                           dealIds={dealIds}
                           selectedIds={selectedIds}
@@ -410,26 +426,26 @@ function ListStageSection({
                         />
                       </th>
                       <th
-                        className="w-10 px-1 py-2 text-center font-semibold"
+                        className="align-middle px-0.5 py-3 text-center font-semibold"
                         scope="col"
                       >
                         <span className="sr-only">Arrastar</span>
                       </th>
-                      <th className="w-9 py-2 font-semibold" scope="col">
+                      <th className="w-9 align-middle py-3 font-semibold" scope="col">
                         <span className="sr-only">Expandir</span>
                       </th>
-                      <th className="py-2 pl-2 pr-3 font-semibold" scope="col">
+                      <th className="align-middle py-3 pl-2 pr-2 font-semibold" scope="col">
                         Nome
                       </th>
-                      <th className="px-3 py-2 font-semibold" scope="col">
+                      <th className="align-middle py-3 pl-1 pr-2 font-semibold" scope="col">
                         Status
                       </th>
-                      <th className="px-3 py-2 pr-2 font-semibold sm:pr-4" scope="col">
+                      <th className="align-middle py-3 pl-1 pr-3 font-semibold sm:pr-4" scope="col">
                         Responsável
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-border/20">
                     {stageDeals.map((deal) => (
                       <DealListRow
                         key={deal.id}
