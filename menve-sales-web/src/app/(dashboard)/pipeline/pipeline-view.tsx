@@ -15,7 +15,14 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { fetchPipelineAutomations } from "@/actions/pipeline-automations";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -60,6 +67,16 @@ const FIELD_LABELS: Record<PipelineFilterFieldId, string> = {
   assignee: "Responsável",
 };
 
+function countEnabledAutomationsFromApi(raw: unknown): number {
+  if (!Array.isArray(raw)) return 0;
+  let n = 0;
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    if (Boolean((item as { enabled?: unknown }).enabled)) n += 1;
+  }
+  return n;
+}
+
 export function PipelineView({
   pipelines,
   activePipeline,
@@ -93,7 +110,23 @@ export function PipelineView({
 }) {
   const router = useRouter();
   const [automationsOpen, setAutomationsOpen] = useState(false);
+  const [activeAutomationCount, setActiveAutomationCount] = useState<
+    number | null
+  >(null);
   const [search, setSearch] = useState("");
+
+  const refreshActiveAutomationCount = useCallback(async () => {
+    try {
+      const raw = await fetchPipelineAutomations(activePipeline.id);
+      setActiveAutomationCount(countEnabledAutomationsFromApi(raw));
+    } catch {
+      setActiveAutomationCount(0);
+    }
+  }, [activePipeline.id]);
+
+  useEffect(() => {
+    void refreshActiveAutomationCount();
+  }, [refreshActiveAutomationCount]);
 
   useEffect(() => {
     if (!openAutomationsFromUrl) return;
@@ -426,11 +459,20 @@ export function PipelineView({
           <button
             type="button"
             onClick={() => setAutomationsOpen(true)}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-muted/40 hover:text-foreground"
-            aria-label="Automações do funil"
+            className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-muted/40 hover:text-foreground"
+            aria-label={
+              activeAutomationCount != null && activeAutomationCount > 0
+                ? `Automações do funil, ${activeAutomationCount} ativas`
+                : "Automações do funil"
+            }
             title="Automações"
           >
             <Zap className="size-[18px]" strokeWidth={2} />
+            {activeAutomationCount != null && activeAutomationCount > 0 ? (
+              <span className="absolute -right-0.5 -top-0.5 flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground">
+                {activeAutomationCount > 99 ? "99+" : activeAutomationCount}
+              </span>
+            ) : null}
           </button>
           <Popover>
             <PopoverTrigger asChild>
@@ -610,7 +652,10 @@ export function PipelineView({
 
       <PipelineAutomationsDialog
         open={automationsOpen}
-        onOpenChange={setAutomationsOpen}
+        onOpenChange={(open) => {
+          setAutomationsOpen(open);
+          if (!open) void refreshActiveAutomationCount();
+        }}
         pipeline={activePipeline}
         canConfigure={canConfigureAutomations ?? false}
         dealCustomFieldDefs={dealCustomFieldDefs}

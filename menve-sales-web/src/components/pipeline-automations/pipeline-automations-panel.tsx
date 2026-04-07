@@ -1163,11 +1163,14 @@ export function PipelineAutomationsPanel({
   campaignSources = [],
   tenantTags = [],
   tenantMembers = [],
+  dialogAppearance,
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   rulesRaw: unknown;
   canConfigure: boolean;
   variant?: "page" | "dialog";
+  /** Modal: aparência do cromado (claro = tema do app). */
+  dialogAppearance?: "light" | "dark";
   onRulesChanged?: () => void;
   /** Modal: fecha sem salvar (botão Cancelar). */
   onCancel?: () => void;
@@ -1415,11 +1418,13 @@ export function PipelineAutomationsPanel({
 
   const formShell =
     "rounded-lg border border-border/60 bg-muted/20 p-4 shadow-sm dark:bg-muted/10";
-  const isDialog = variant === "dialog";
-  const sel = isDialog ? dialogSelectFull : selectFullWidth;
-  const trigBtn = isDialog ? dialogTriggerBtn : triggerTypeButtonClass;
-  const dashV = isDialog ? dialogDashedV : dashedV;
-  const lbl = isDialog
+  const isDialogLayout = variant === "dialog";
+  const dialogChromeDark =
+    isDialogLayout && (dialogAppearance ?? "dark") === "dark";
+  const sel = dialogChromeDark ? dialogSelectFull : selectFullWidth;
+  const trigBtn = dialogChromeDark ? dialogTriggerBtn : triggerTypeButtonClass;
+  const dashV = dialogChromeDark ? dialogDashedV : dashedV;
+  const lbl = dialogChromeDark
     ? "text-[11px] font-medium text-zinc-500"
     : fieldLabelClass;
 
@@ -1436,7 +1441,7 @@ export function PipelineAutomationsPanel({
     [actionSteps, stages],
   );
 
-  const previewPillClass = isDialog
+  const previewPillClass = dialogChromeDark
     ? "max-w-full truncate rounded-md border border-zinc-600/90 bg-zinc-950/55 px-2.5 py-1 text-left text-xs font-medium text-zinc-100"
     : "max-w-full truncate rounded-md border border-border/80 bg-background px-2.5 py-1 text-left text-xs font-medium text-foreground shadow-sm";
 
@@ -1444,11 +1449,16 @@ export function PipelineAutomationsPanel({
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col space-y-6",
-        isDialog && "text-zinc-100",
+        dialogChromeDark && "text-zinc-100",
       )}
     >
       {variant === "dialog" ? (
-        <p className="text-[12px] text-zinc-500">
+        <p
+          className={cn(
+            "text-[12px]",
+            dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
+          )}
+        >
           As regras são avaliadas na ordem abaixo quando o evento ocorre.
         </p>
       ) : (
@@ -1461,16 +1471,16 @@ export function PipelineAutomationsPanel({
 
       {canConfigure ? (
         <form
-          id={isDialog ? "pipeline-automation-form" : undefined}
+          id={isDialogLayout ? "pipeline-automation-form" : undefined}
           onSubmit={onSubmit}
-          className={cn("shrink-0 space-y-5", !isDialog && formShell)}
+          className={cn("shrink-0 space-y-5", (!isDialogLayout || !dialogChromeDark) && formShell)}
         >
           <div className="space-y-1.5">
             <Label
               htmlFor="auto-name"
               className={cn(
                 "text-[11px] font-medium",
-                isDialog ? "text-zinc-500" : "text-muted-foreground",
+                dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
               )}
             >
               Nome da automação
@@ -1482,7 +1492,7 @@ export function PipelineAutomationsPanel({
               onChange={(e) => setName(e.target.value)}
               className={cn(
                 "h-11 text-[14px]",
-                isDialog
+                dialogChromeDark
                   ? "rounded-lg border-zinc-700/90 bg-zinc-900/45 text-zinc-100 shadow-none placeholder:text-zinc-600 focus-visible:ring-zinc-500/35"
                   : "rounded-xl border-border/50 bg-background shadow-sm placeholder:text-muted-foreground/70",
               )}
@@ -1492,10 +1502,10 @@ export function PipelineAutomationsPanel({
           <div
             className={cn(
               "grid gap-6 lg:items-start",
-              isDialog
+              isDialogLayout
                 ? "lg:grid-cols-[minmax(0,1.25fr)_auto_minmax(0,1.25fr)]"
                 : "lg:grid-cols-[1fr_auto_1fr]",
-              isDialog ? "text-zinc-100" : "text-foreground",
+              dialogChromeDark ? "text-zinc-100" : "text-foreground",
             )}
           >
             {/* Acionar */}
@@ -1505,7 +1515,7 @@ export function PipelineAutomationsPanel({
               </div>
               <div
                 className={cn(
-                  isDialog
+                  dialogChromeDark
                     ? "flex items-center justify-between gap-3 py-0.5"
                     : groupHeaderClass,
                 )}
@@ -1514,7 +1524,7 @@ export function PipelineAutomationsPanel({
                   <span
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center rounded-md",
-                      isDialog
+                      dialogChromeDark
                         ? "bg-violet-500/20 text-violet-300"
                         : "bg-violet-500/15 text-violet-600 dark:text-violet-400",
                     )}
@@ -1524,7 +1534,7 @@ export function PipelineAutomationsPanel({
                   <span
                     className={cn(
                       "truncate text-sm font-semibold",
-                      isDialog ? "text-zinc-50" : "text-foreground",
+                      dialogChromeDark ? "text-zinc-50" : "text-foreground",
                     )}
                   >
                     Acionar
@@ -1533,7 +1543,7 @@ export function PipelineAutomationsPanel({
                 <span
                   className={cn(
                     "hidden shrink-0 rounded-md border px-2 py-1 text-[11px] sm:inline",
-                    isDialog
+                    dialogChromeDark
                       ? "border-zinc-700 bg-zinc-900/50 text-zinc-400"
                       : "border-border/60 bg-background text-muted-foreground shadow-sm",
                   )}
@@ -1548,7 +1558,7 @@ export function PipelineAutomationsPanel({
               <div
                 className={cn(
                   "space-y-4",
-                  !isDialog && "rounded-lg border border-border/60 bg-muted/20 p-3 shadow-sm dark:bg-muted/10",
+                  (!isDialogLayout || !dialogChromeDark) && "rounded-lg border border-border/60 bg-muted/20 p-3 shadow-sm dark:bg-muted/10",
                 )}
               >
                 {triggerSteps.map((step, stepIndex) => {
@@ -1568,7 +1578,7 @@ export function PipelineAutomationsPanel({
                       <div
                         className={cn(
                           "relative space-y-3",
-                          isDialog ? "" : "rounded-md border border-border/50 bg-background/40 p-3",
+                          dialogChromeDark ? "" : "rounded-md border border-border/50 bg-background/40 p-3",
                         )}
                       >
                         {triggerSteps.length > 1 ? (
@@ -1577,7 +1587,7 @@ export function PipelineAutomationsPanel({
                               type="button"
                               className={cn(
                                 "rounded-md p-1.5",
-                                isDialog
+                                dialogChromeDark
                                   ? "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
                                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
                               )}
@@ -1612,7 +1622,7 @@ export function PipelineAutomationsPanel({
                                 <StepTriggerIcon
                                   className={cn(
                                     "size-4 shrink-0",
-                                    isDialog
+                                    dialogChromeDark
                                       ? "text-zinc-400"
                                       : "text-muted-foreground",
                                   )}
@@ -1630,7 +1640,7 @@ export function PipelineAutomationsPanel({
                               <ChevronDown
                                 className={cn(
                                   "size-4 shrink-0",
-                                  isDialog
+                                  dialogChromeDark
                                     ? "text-zinc-500"
                                     : "text-muted-foreground",
                                 )}
@@ -1642,7 +1652,7 @@ export function PipelineAutomationsPanel({
                             align="start"
                             className={cn(
                               "p-0 shadow-lg",
-                              isDialog
+                              dialogChromeDark
                                 ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
                                 : "w-[min(100vw-2rem,20rem)] border-border/60",
                             )}
@@ -1650,7 +1660,7 @@ export function PipelineAutomationsPanel({
                             <div
                               className={cn(
                                 "border-b p-2",
-                                isDialog
+                                dialogChromeDark
                                   ? "border-zinc-800"
                                   : "border-border/40",
                               )}
@@ -1659,7 +1669,7 @@ export function PipelineAutomationsPanel({
                                 <Search
                                   className={cn(
                                     "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
-                                    isDialog
+                                    dialogChromeDark
                                       ? "text-zinc-500"
                                       : "text-muted-foreground",
                                   )}
@@ -1672,7 +1682,7 @@ export function PipelineAutomationsPanel({
                                   placeholder="Pesquisar…"
                                   className={cn(
                                     "h-9 pl-8 text-sm shadow-none",
-                                    isDialog
+                                    dialogChromeDark
                                       ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
                                       : "border-border/50 bg-background placeholder:text-muted-foreground/70",
                                   )}
@@ -1685,7 +1695,7 @@ export function PipelineAutomationsPanel({
                                   <p
                                     className={cn(
                                       "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
-                                      isDialog
+                                      dialogChromeDark
                                         ? "text-zinc-500"
                                         : "text-muted-foreground",
                                     )}
@@ -1701,7 +1711,7 @@ export function PipelineAutomationsPanel({
                                         type="button"
                                         className={cn(
                                           "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
-                                          isDialog
+                                          dialogChromeDark
                                             ? cn(
                                                 "hover:bg-zinc-800/80",
                                                 selected && "bg-zinc-800",
@@ -1723,7 +1733,7 @@ export function PipelineAutomationsPanel({
                                         <Icon
                                           className={cn(
                                             "size-4 shrink-0",
-                                            isDialog
+                                            dialogChromeDark
                                               ? "text-zinc-400"
                                               : "text-muted-foreground",
                                           )}
@@ -1736,7 +1746,7 @@ export function PipelineAutomationsPanel({
                                         {selected ? (
                                           <span
                                             className={
-                                              isDialog
+                                              dialogChromeDark
                                                 ? "text-zinc-200"
                                                 : "text-foreground"
                                             }
@@ -1756,7 +1766,7 @@ export function PipelineAutomationsPanel({
                         <AutomationKindConfigFields
                           kind={step.triggerType}
                           bundle={triggerBundleFor(step)}
-                          isDialog={isDialog}
+                          isDialog={dialogChromeDark}
                           lbl={lbl}
                           sel={sel}
                           stages={stages}
@@ -1779,7 +1789,7 @@ export function PipelineAutomationsPanel({
                   disabled={triggerSteps.length >= MAX_GROUPED_TRIGGERS}
                   className={cn(
                     "flex size-8 items-center justify-center rounded-lg border border-dashed transition-colors",
-                    isDialog
+                    dialogChromeDark
                       ? "border-zinc-600 bg-zinc-900/40 text-zinc-300 hover:bg-zinc-800/80 disabled:cursor-not-allowed disabled:opacity-40"
                       : "border-border/60 bg-muted/30 text-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40",
                   )}
@@ -1802,7 +1812,7 @@ export function PipelineAutomationsPanel({
               <div
                 className={cn(
                   "flex size-10 items-center justify-center rounded-lg border text-lg",
-                  isDialog
+                  dialogChromeDark
                     ? "border-zinc-700 bg-zinc-900/50 text-zinc-400"
                     : "border-border/60 bg-muted/20 text-muted-foreground shadow-sm dark:bg-muted/10",
                 )}
@@ -1818,7 +1828,7 @@ export function PipelineAutomationsPanel({
               </div>
               <div
                 className={cn(
-                  isDialog
+                  dialogChromeDark
                     ? "flex items-center justify-between gap-3 py-0.5"
                     : groupHeaderClass,
                 )}
@@ -1827,7 +1837,7 @@ export function PipelineAutomationsPanel({
                   <span
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center rounded-md",
-                      isDialog
+                      dialogChromeDark
                         ? "bg-emerald-500/20 text-emerald-300"
                         : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
                     )}
@@ -1837,7 +1847,7 @@ export function PipelineAutomationsPanel({
                   <span
                     className={cn(
                       "truncate text-sm font-semibold",
-                      isDialog ? "text-zinc-50" : "text-foreground",
+                      dialogChromeDark ? "text-zinc-50" : "text-foreground",
                     )}
                   >
                     Ação
@@ -1846,7 +1856,7 @@ export function PipelineAutomationsPanel({
                 <span
                   className={cn(
                     "hidden shrink-0 rounded-md border px-2 py-1 text-[11px] sm:inline",
-                    isDialog
+                    dialogChromeDark
                       ? "border-zinc-700 bg-zinc-900/50 text-zinc-400"
                       : "border-border/60 bg-background text-muted-foreground shadow-sm",
                   )}
@@ -1861,7 +1871,7 @@ export function PipelineAutomationsPanel({
               <div
                 className={cn(
                   "space-y-4",
-                  !isDialog && "rounded-lg border border-border/60 bg-muted/20 p-3 shadow-sm dark:bg-muted/10",
+                  !dialogChromeDark && "rounded-lg border border-border/60 bg-muted/20 p-3 shadow-sm dark:bg-muted/10",
                 )}
               >
                 {actionSteps.map((step, stepIndex) => {
@@ -1884,7 +1894,7 @@ export function PipelineAutomationsPanel({
                       <div
                         className={cn(
                           "relative space-y-3",
-                          isDialog ? "" : "rounded-md border border-border/50 bg-background/40 p-3",
+                          dialogChromeDark ? "" : "rounded-md border border-border/50 bg-background/40 p-3",
                         )}
                       >
                         {actionSteps.length > 1 ? (
@@ -1893,7 +1903,7 @@ export function PipelineAutomationsPanel({
                               type="button"
                               className={cn(
                                 "rounded-md p-1.5",
-                                isDialog
+                                dialogChromeDark
                                   ? "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
                                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
                               )}
@@ -1929,7 +1939,7 @@ export function PipelineAutomationsPanel({
                                 <StepActionIcon
                                   className={cn(
                                     "size-4 shrink-0",
-                                    isDialog
+                                    dialogChromeDark
                                       ? "text-zinc-400"
                                       : "text-muted-foreground",
                                   )}
@@ -1945,7 +1955,7 @@ export function PipelineAutomationsPanel({
                               <ChevronDown
                                 className={cn(
                                   "size-4 shrink-0",
-                                  isDialog
+                                  dialogChromeDark
                                     ? "text-zinc-500"
                                     : "text-muted-foreground",
                                 )}
@@ -1957,7 +1967,7 @@ export function PipelineAutomationsPanel({
                             align="start"
                             className={cn(
                               "p-0 shadow-lg",
-                              isDialog
+                              dialogChromeDark
                                 ? "w-[min(100vw-2rem,25rem)] border-zinc-700 bg-zinc-900 text-zinc-100"
                                 : "w-[min(100vw-2rem,20rem)] border-border/60",
                             )}
@@ -1965,7 +1975,7 @@ export function PipelineAutomationsPanel({
                             <div
                               className={cn(
                                 "border-b p-2",
-                                isDialog
+                                dialogChromeDark
                                   ? "border-zinc-800"
                                   : "border-border/40",
                               )}
@@ -1974,7 +1984,7 @@ export function PipelineAutomationsPanel({
                                 <Search
                                   className={cn(
                                     "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
-                                    isDialog
+                                    dialogChromeDark
                                       ? "text-zinc-500"
                                       : "text-muted-foreground",
                                   )}
@@ -1987,7 +1997,7 @@ export function PipelineAutomationsPanel({
                                   placeholder="Pesquisar…"
                                   className={cn(
                                     "h-9 pl-8 text-sm shadow-none",
-                                    isDialog
+                                    dialogChromeDark
                                       ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
                                       : "border-border/50 bg-background placeholder:text-muted-foreground/70",
                                   )}
@@ -2000,7 +2010,7 @@ export function PipelineAutomationsPanel({
                                   <p
                                     className={cn(
                                       "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
-                                      isDialog
+                                      dialogChromeDark
                                         ? "text-zinc-500"
                                         : "text-muted-foreground",
                                     )}
@@ -2016,7 +2026,7 @@ export function PipelineAutomationsPanel({
                                         type="button"
                                         className={cn(
                                           "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
-                                          isDialog
+                                          dialogChromeDark
                                             ? cn(
                                                 "hover:bg-zinc-800/80",
                                                 selected && "bg-zinc-800",
@@ -2038,7 +2048,7 @@ export function PipelineAutomationsPanel({
                                         <Icon
                                           className={cn(
                                             "size-4 shrink-0",
-                                            isDialog
+                                            dialogChromeDark
                                               ? "text-zinc-400"
                                               : "text-muted-foreground",
                                           )}
@@ -2051,7 +2061,7 @@ export function PipelineAutomationsPanel({
                                         {selected ? (
                                           <span
                                             className={
-                                              isDialog
+                                              dialogChromeDark
                                                 ? "text-zinc-200"
                                                 : "text-foreground"
                                             }
@@ -2085,7 +2095,7 @@ export function PipelineAutomationsPanel({
                             }
                             lbl={lbl}
                             sel={sel}
-                            isDialog={isDialog}
+                            isDialog={dialogChromeDark}
                           />
                         ) : step.actionKindType ===
                             "DEAL_CUSTOM_FIELD_CHANGED" &&
@@ -2114,7 +2124,7 @@ export function PipelineAutomationsPanel({
                             }
                             lbl={lbl}
                             sel={sel}
-                            isDialog={isDialog}
+                            isDialog={dialogChromeDark}
                             valueTrigBtn={trigBtn}
                           />
                         ) : (
@@ -2123,7 +2133,7 @@ export function PipelineAutomationsPanel({
                               step.actionKindType as PipelineAutomationTriggerType
                             }
                             bundle={actionBundleFor(step)}
-                            isDialog={isDialog}
+                            isDialog={dialogChromeDark}
                             lbl={lbl}
                             sel={sel}
                             stages={stages}
@@ -2147,7 +2157,7 @@ export function PipelineAutomationsPanel({
                   disabled={actionSteps.length >= MAX_GROUPED_ACTIONS}
                   className={cn(
                     "flex size-8 items-center justify-center rounded-lg border border-dashed transition-colors",
-                    isDialog
+                    dialogChromeDark
                       ? "border-zinc-600 bg-zinc-900/40 text-zinc-300 hover:bg-zinc-800/80 disabled:cursor-not-allowed disabled:opacity-40"
                       : "border-border/60 bg-muted/30 text-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-40",
                   )}
@@ -2170,7 +2180,7 @@ export function PipelineAutomationsPanel({
             aria-live="polite"
             className={cn(
               "mt-6 rounded-lg border px-4 py-3",
-              isDialog
+              dialogChromeDark
                 ? "border-zinc-700/80 bg-zinc-950/40"
                 : "border-border/60 bg-muted/15",
             )}
@@ -2178,11 +2188,11 @@ export function PipelineAutomationsPanel({
             <p
               className={cn(
                 "flex flex-wrap items-center gap-x-1.5 gap-y-2 text-[13px] leading-snug",
-                isDialog ? "text-zinc-300" : "text-foreground",
+                dialogChromeDark ? "text-zinc-300" : "text-foreground",
               )}
             >
               <span
-                className={isDialog ? "text-zinc-500" : "text-muted-foreground"}
+                className={dialogChromeDark ? "text-zinc-500" : "text-muted-foreground"}
               >
                 Quando
               </span>
@@ -2190,7 +2200,7 @@ export function PipelineAutomationsPanel({
                 {previewTriggerText}
               </span>
               <span
-                className={isDialog ? "text-zinc-500" : "text-muted-foreground"}
+                className={dialogChromeDark ? "text-zinc-500" : "text-muted-foreground"}
               >
                 então
               </span>
@@ -2202,13 +2212,13 @@ export function PipelineAutomationsPanel({
               <p
                 className={cn(
                   "mt-2 text-[11px] leading-snug",
-                  isDialog ? "text-zinc-500" : "text-muted-foreground",
+                  dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
                 )}
               >
                 <span
                   className={cn(
                     "font-medium",
-                    isDialog ? "text-zinc-400" : "text-foreground/80",
+                    dialogChromeDark ? "text-zinc-400" : "text-foreground/80",
                   )}
                 >
                   Movimentação:
@@ -2219,7 +2229,7 @@ export function PipelineAutomationsPanel({
             <p
               className={cn(
                 "mt-2 text-[11px]",
-                isDialog ? "text-zinc-600" : "text-muted-foreground/90",
+                dialogChromeDark ? "text-zinc-600" : "text-muted-foreground/90",
               )}
             >
               {name.trim() ? (
@@ -2227,7 +2237,7 @@ export function PipelineAutomationsPanel({
                   <span
                     className={cn(
                       "font-medium",
-                      isDialog ? "text-zinc-500" : "text-muted-foreground",
+                      dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
                     )}
                   >
                     Nome:
@@ -2246,7 +2256,7 @@ export function PipelineAutomationsPanel({
             <p
               className={cn(
                 "text-sm",
-                isDialog ? "text-rose-400" : "text-destructive",
+                dialogChromeDark ? "text-rose-400" : "text-destructive",
               )}
               role="alert"
             >
@@ -2257,16 +2267,23 @@ export function PipelineAutomationsPanel({
           <div
             className={cn(
               "flex gap-2",
-              isDialog
-                ? "mt-8 justify-end border-t border-zinc-800 pt-5"
+              isDialogLayout
+                ? cn(
+                    "mt-8 justify-end border-t pt-5",
+                    dialogChromeDark ? "border-zinc-800" : "border-border",
+                  )
                 : "justify-start",
             )}
           >
-            {isDialog && onCancel ? (
+            {isDialogLayout && onCancel ? (
               <Button
                 type="button"
                 variant="ghost"
-                className="text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                className={cn(
+                  dialogChromeDark
+                    ? "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
                 onClick={onCancel}
               >
                 Cancelar
@@ -2277,7 +2294,7 @@ export function PipelineAutomationsPanel({
               disabled={pending}
               className={cn(
                 "font-medium",
-                isDialog &&
+                dialogChromeDark &&
                   "bg-zinc-100 text-zinc-950 hover:bg-white dark:bg-zinc-200",
               )}
             >
@@ -2289,7 +2306,7 @@ export function PipelineAutomationsPanel({
         <div
           className={cn(
             "rounded-lg border px-4 py-3 text-sm",
-            isDialog
+            dialogChromeDark
               ? "border-zinc-800 bg-zinc-900/40 text-zinc-400"
               : "border-border/60 bg-muted/15 text-muted-foreground",
           )}
@@ -2299,7 +2316,7 @@ export function PipelineAutomationsPanel({
             href="/settings"
             className={cn(
               "font-medium underline-offset-4 hover:underline",
-              isDialog
+              dialogChromeDark
                 ? "text-zinc-200 hover:text-white"
                 : "text-foreground",
             )}
@@ -2313,7 +2330,7 @@ export function PipelineAutomationsPanel({
         <p
           className={cn(
             "text-sm font-semibold",
-            isDialog ? "text-zinc-200" : "text-foreground",
+            dialogChromeDark ? "text-zinc-200" : "text-foreground",
           )}
         >
           Regras ativas
@@ -2322,7 +2339,7 @@ export function PipelineAutomationsPanel({
           <p
             className={cn(
               "text-sm",
-              isDialog ? "text-zinc-500" : "text-muted-foreground",
+              dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
             )}
           >
             Nenhuma automação ainda. {canConfigure ? "Crie uma regra acima." : ""}
@@ -2334,7 +2351,7 @@ export function PipelineAutomationsPanel({
                 key={r.id}
                 className={cn(
                   "rounded-lg border p-3",
-                  isDialog
+                  dialogChromeDark
                     ? "border-zinc-800 bg-zinc-900/35"
                     : "border-border/60 bg-muted/15 dark:bg-muted/10",
                 )}

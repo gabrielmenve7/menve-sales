@@ -3,6 +3,7 @@
 import type { CustomField } from "@prisma/client";
 import type { Pipeline, Stage } from "@prisma/client";
 import { X } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
 import { fetchPipelineAutomations } from "@/actions/pipeline-automations";
 import { Button } from "@/components/ui/button";
@@ -17,9 +18,7 @@ import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import { PipelineAutomationsPanel } from "./pipeline-automations-panel";
 
-/** Shell do modal + área de trabalho estilo ClickUp (fundo contínuo escuro). */
-const centralDialogClass = cn(
-  "flex flex-col gap-0 overflow-hidden border border-zinc-800 bg-[#111] p-0 text-zinc-100 shadow-2xl duration-200",
+const dialogAnim = cn(
   "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
   "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
   "left-[50%] top-[50%] max-h-[min(94vh,920px)] w-[min(100vw-1rem,80rem)] max-w-none translate-x-[-50%] translate-y-[-50%] sm:rounded-lg",
@@ -44,6 +43,9 @@ export function PipelineAutomationsDialog({
   tenantTags?: { id: string; name: string }[];
   tenantMembers?: TenantMemberOption[];
 }) {
+  const { resolvedTheme } = useTheme();
+  const dialogChromeDark = resolvedTheme === "dark";
+
   const [rulesRaw, setRulesRaw] = useState<unknown>([]);
   const [loading, setLoading] = useState(false);
 
@@ -67,17 +69,51 @@ export function PipelineAutomationsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideClose
-        overlayClassName="bg-black/30 backdrop-blur-md"
-        className={centralDialogClass}
+        overlayClassName={
+          dialogChromeDark
+            ? "bg-black/30 backdrop-blur-md"
+            : "bg-black/20 backdrop-blur-sm"
+        }
+        className={cn(
+          "flex flex-col gap-0 overflow-hidden p-0 shadow-2xl duration-200",
+          dialogAnim,
+          dialogChromeDark
+            ? "border border-zinc-800 bg-[#111] text-zinc-100"
+            : "border border-border bg-background text-foreground",
+        )}
       >
-        <DialogHeader className="space-y-1 border-b border-zinc-800/80 bg-[#111] px-[3.75rem] pb-4 pt-6 text-left">
+        <DialogHeader
+          className={cn(
+            "space-y-1 border-b px-[3.75rem] pb-4 pt-6 text-left",
+            dialogChromeDark
+              ? "border-zinc-800/80 bg-[#111]"
+              : "border-border bg-background",
+          )}
+        >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <DialogTitle className="text-2xl font-semibold tracking-tight text-zinc-50">
+              <DialogTitle
+                className={cn(
+                  "text-2xl font-semibold tracking-tight",
+                  dialogChromeDark ? "text-zinc-50" : "text-foreground",
+                )}
+              >
                 Automações
               </DialogTitle>
-              <p className="text-sm text-zinc-500">
-                Localizado em: <span className="text-zinc-400">{pipeline.name}</span>
+              <p
+                className={cn(
+                  "text-sm",
+                  dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
+                )}
+              >
+                Localizado em:{" "}
+                <span
+                  className={
+                    dialogChromeDark ? "text-zinc-400" : "text-foreground"
+                  }
+                >
+                  {pipeline.name}
+                </span>
               </p>
             </div>
             <DialogClose asChild>
@@ -85,7 +121,12 @@ export function PipelineAutomationsDialog({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8 shrink-0 rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                className={cn(
+                  "size-8 shrink-0 rounded-md",
+                  dialogChromeDark
+                    ? "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
               >
                 <X className="size-4" />
                 <span className="sr-only">Fechar</span>
@@ -93,15 +134,28 @@ export function PipelineAutomationsDialog({
             </DialogClose>
           </div>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#0e0e0e] px-[3.75rem] pb-6 pt-5">
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto px-[3.75rem] pb-6 pt-5",
+            dialogChromeDark ? "bg-[#0e0e0e]" : "bg-muted/15",
+          )}
+        >
           {loading ? (
-            <p className="text-sm text-zinc-500">Carregando…</p>
+            <p
+              className={cn(
+                "text-sm",
+                dialogChromeDark ? "text-zinc-500" : "text-muted-foreground",
+              )}
+            >
+              Carregando…
+            </p>
           ) : (
             <PipelineAutomationsPanel
               pipeline={pipeline}
               rulesRaw={rulesRaw}
               canConfigure={canConfigure}
               variant="dialog"
+              dialogAppearance={dialogChromeDark ? "dark" : "light"}
               onRulesChanged={() => void loadRules()}
               onCancel={() => onOpenChange(false)}
               dealCustomFieldDefs={dealCustomFieldDefs}
