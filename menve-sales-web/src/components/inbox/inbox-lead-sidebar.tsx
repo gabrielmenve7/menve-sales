@@ -288,8 +288,8 @@ export function InboxLeadSidebar({
           title={
             canGoToNextInQueue
               ? queueMeta
-                ? `Próximo na etapa (${queueMeta.position} de ${queueMeta.total}). No último card, volta ao primeiro do quadro.`
-                : "Próximo lead na mesma etapa, ordem do quadro"
+                ? `Próximo na etapa (${queueMeta.position} de ${queueMeta.total}), só leads com telefone no Inbox. No último, volta ao primeiro da fila.`
+                : "Próximo lead na mesma etapa (com telefone), ordem do quadro"
               : !pipelineDealId
                 ? "Selecione uma oportunidade aberta"
                 : nextInStageLoading
@@ -297,11 +297,11 @@ export function InboxLeadSidebar({
                   : nextInStageError
                     ? "Não foi possível carregar a fila. Atualize a página."
                     : queueMeta && queueMeta.total > 1 && queueMeta.position < 1
-                      ? "Oportunidade fora da fila desta etapa — atualize o Inbox"
+                      ? "Fora da fila com telefone nesta etapa — cadastre telefone ou atualize o Inbox"
                       : queueMeta && queueMeta.total === 0
                         ? "Esta oportunidade não está em aberto no servidor — atualize o Inbox ou confira o funil"
                       : queueMeta && queueMeta.total === 1
-                        ? "Só há um lead OPEN nesta etapa neste funil"
+                        ? "Só há um lead com telefone nesta etapa neste funil (demais estão sem WhatsApp/Inbox)"
                       : !queueMeta
                         ? "Fila indisponível — confira se a API está atualizada"
                         : "Carregando fila…"

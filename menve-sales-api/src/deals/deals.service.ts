@@ -52,6 +52,11 @@ export class DealsService {
     return u.email?.trim() ?? "";
   }
 
+  /** Mesmo critério do Inbox / `ensureConversationForContact` (WhatsApp). */
+  private contactHasPhoneForInbox(phone: string | null | undefined): boolean {
+    return Boolean(phone?.trim());
+  }
+
   async getById(tenantId: string, dealId: string) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, tenantId },
@@ -515,9 +520,9 @@ export class DealsService {
   }
 
   /**
-   * Próximo deal OPEN na mesma etapa — mesma sequência do quadro do funil:
-   * ordena todos os OPEN do funil como `getPipelineDeals` e, na etapa, mantém a ordem
-   * em que os cards aparecem na coluna (topo → base).
+   * Próximo deal OPEN na mesma etapa — mesma sequência do quadro (topo → base),
+   * apenas entre contatos com telefone (atendíveis no Inbox / WhatsApp).
+   * Fila circular: no último card elegível, o próximo é o do topo.
    */
   async nextOpenDealInSameStageQueue(tenantId: string, dealId: string) {
     const current = await this.prisma.deal.findFirst({
@@ -525,7 +530,10 @@ export class DealsService {
       select: { id: true, pipelineId: true, stageId: true },
     });
     if (!current) {
-      return { next: null };
+      return {
+        next: null,
+        queueMeta: { position: 0, total: 0 },
+      };
     }
 
     const pipelineDeals = await this.prisma.deal.findMany({
@@ -535,19 +543,43 @@ export class DealsService {
         status: "OPEN",
       },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      select: { id: true, contactId: true, stageId: true },
+      select: {
+        id: true,
+        contactId: true,
+        stageId: true,
+        contact: { select: { phone: true } },
+      },
     });
 
-    const stageDeals = pipelineDeals.filter(
+    const pipelineDealsInbox = pipelineDeals.filter((d) =>
+      this.contactHasPhoneForInbox(d.contact.phone),
+    );
+
+    const stageDeals = pipelineDealsInbox.filter(
       (d) => d.stageId === current.stageId,
     );
+    const total = stageDeals.length;
     const idx = stageDeals.findIndex((d) => d.id === dealId);
-    if (idx < 0 || idx >= stageDeals.length - 1) {
-      return { next: null };
+
+    if (idx < 0) {
+      return {
+        next: null,
+        queueMeta: { position: 0, total },
+      };
     }
-    const next = stageDeals[idx + 1]!;
+
+    if (total <= 1) {
+      return {
+        next: null,
+        queueMeta: { position: idx + 1, total },
+      };
+    }
+
+    const nextIdx = (idx + 1) % total;
+    const next = stageDeals[nextIdx]!;
     return {
       next: { dealId: next.id, contactId: next.contactId },
+      queueMeta: { position: idx + 1, total },
     };
   }
 }
