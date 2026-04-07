@@ -14,7 +14,6 @@ import {
   Tag as TagIcon,
   Bell,
   ClipboardList,
-  UserCircle,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SettingsCampos } from "./settings-campos";
@@ -23,7 +22,6 @@ import { SettingsChannels } from "./settings-channels";
 import { SettingsMembers } from "./settings-members";
 import { SettingsTagsCatalog } from "./settings-tags-catalog";
 import { SettingsNotifications } from "./settings-notifications";
-import { SettingsProfile } from "./settings-profile";
 import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 
 type TenantInfo = {
@@ -37,7 +35,6 @@ type Member = { id: string; name: string | null; email: string; role: string };
 
 const SETTINGS_TABS = [
   "general",
-  "perfil",
   "campos",
   "channels",
   "members",
@@ -51,7 +48,6 @@ export function SettingsClient({
   tenant,
   canManageWorkspace,
   defaultTab = "general",
-  profile,
   connections,
   quickReplyCategories,
   webhookBaseUrl,
@@ -64,7 +60,6 @@ export function SettingsClient({
   tenant: TenantInfo;
   canManageWorkspace: boolean;
   defaultTab?: SettingsTabId;
-  profile: { name: string | null; email: string; image: string | null };
   connections: WhatsAppConnection[];
   quickReplyCategories: QuickReplyCategoryDTO[];
   webhookBaseUrl: string;
@@ -83,10 +78,7 @@ export function SettingsClient({
     <Tabs defaultValue={tab}>
       <TabsList>
         <TabsTrigger value="general">
-          <Settings2 className="size-3.5" /> Geral
-        </TabsTrigger>
-        <TabsTrigger value="perfil">
-          <UserCircle className="size-3.5" /> Perfil
+          <Settings2 className="size-3.5" /> Configurações
         </TabsTrigger>
         <TabsTrigger value="campos">
           <ClipboardList className="size-3.5" /> Campos
@@ -110,14 +102,6 @@ export function SettingsClient({
           tenant={tenant}
           canManageWorkspace={canManageWorkspace}
           pipelines={pipelines}
-        />
-      </TabsContent>
-
-      <TabsContent value="perfil">
-        <SettingsProfile
-          initialName={profile.name}
-          initialEmail={profile.email}
-          initialImage={profile.image}
         />
       </TabsContent>
 

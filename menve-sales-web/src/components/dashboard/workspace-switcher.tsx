@@ -158,7 +158,7 @@ export function WorkspaceSwitcher({
             Configurações
           </Link>
           <Link
-            href="/settings?tab=perfil"
+            href="/perfil"
             onClick={() => setOpen(false)}
             className={cn(
               "flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent bg-muted/70 py-3 text-center text-xs font-medium transition-colors",
