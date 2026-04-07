@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown, Settings2, UserCircle, Users } from "lucide-react";
+import { ChevronDown, Settings2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -145,7 +145,7 @@ export function WorkspaceSwitcher({
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 p-3">
+        <div className="grid grid-cols-2 gap-2 p-3">
           <Link
             href="/settings"
             onClick={() => setOpen(false)}
@@ -156,19 +156,6 @@ export function WorkspaceSwitcher({
           >
             <Settings2 className="size-[18px] shrink-0 opacity-90" strokeWidth={1.75} />
             <span className="break-words">Configurações</span>
-          </Link>
-          <Link
-            href="/perfil"
-            aria-label="Perfil"
-            title="Perfil"
-            onClick={() => setOpen(false)}
-            className={cn(
-              "flex min-h-[4.25rem] flex-col items-center justify-center gap-0 rounded-lg border border-transparent bg-muted/70 px-2 py-3 text-center text-xs font-medium transition-colors",
-              "hover:bg-muted hover:text-foreground dark:bg-muted/40 dark:hover:bg-muted/60",
-            )}
-          >
-            <UserCircle className="size-[22px] shrink-0 opacity-90" strokeWidth={1.75} />
-            <span className="sr-only">Perfil</span>
           </Link>
           <Link
             href="/settings?tab=members"
