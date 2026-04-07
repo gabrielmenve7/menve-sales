@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Filter, Info, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ import type {
   WidgetType,
 } from "@/lib/dashboard-builder-types";
 import { defaultBarChartConfig } from "@/lib/dashboard-builder-types";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 
 const DIMENSION_OPTIONS: {
@@ -165,100 +166,247 @@ function dealCustomFieldSelectOptions(cf: DealCustomFieldDef | undefined) {
   return raw.map((x) => String(x)).filter((s) => s.length > 0);
 }
 
-/** Um único `<select>`: valor da opção codifica par chave + opção do campo SELECT. */
-function encodeDashCustomFieldPair(key: string, value: string): string {
-  return JSON.stringify([key, value]);
-}
-
-function decodeDashCustomFieldPair(
-  raw: string,
-): { key: string; value: string } | null {
-  if (!raw) return null;
-  try {
-    const a = JSON.parse(raw) as unknown;
-    if (
-      Array.isArray(a) &&
-      a.length === 2 &&
-      typeof a[0] === "string" &&
-      typeof a[1] === "string"
-    ) {
-      return { key: a[0], value: a[1] };
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function dashCustomFieldPairIsValid(
+/**
+ * Converte o valor digitado na UI para o tipo persistido na API / JSON do deal.
+ */
+function parseCustomFieldFilterValueForApi(
   key: string,
-  value: string,
-  dealCustomFields: DealCustomFieldDef[],
-): boolean {
-  if (!key || !value) return false;
-  const f = dealCustomFields.find((c) => c.key === key);
-  return dealCustomFieldSelectOptions(f).includes(value);
+  valueStr: string,
+  defs: DealCustomFieldDef[],
+): string | number | boolean | undefined {
+  const trimmed = valueStr.trim();
+  if (!trimmed) return undefined;
+  const cf = defs.find((c) => c.key === key);
+  const ft = cf?.fieldType ?? "TEXT";
+  switch (ft) {
+    case "NUMBER":
+    case "MONEY_BRL": {
+      const n = Number(trimmed.replace(",", "."));
+      if (!Number.isFinite(n)) return undefined;
+      return n;
+    }
+    case "DATE":
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return undefined;
+      return trimmed;
+    case "EMAIL":
+      return trimmed.toLowerCase();
+    default:
+      return trimmed;
+  }
 }
 
-function DashCustomFieldFilterSelect({
+function DashCustomFieldValueByType({
+  cf,
+  value,
+  onChange,
+  tenantMembers,
+  selectClass,
+}: {
+  cf: DealCustomFieldDef;
+  value: string;
+  onChange: (v: string) => void;
+  tenantMembers: TenantMemberOption[];
+  selectClass: string;
+}): ReactNode {
+  const opts = dealCustomFieldSelectOptions(cf);
+  switch (cf.fieldType) {
+    case "SELECT":
+      if (opts.length === 0) {
+        return (
+          <p className="max-w-[14rem] text-xs text-muted-foreground">
+            Defina opções deste campo em Configurações → Campos.
+          </p>
+        );
+      }
+      return (
+        <select
+          className={cn(selectClass, "min-w-[10rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Valor da lista"
+        >
+          <option value="" className="bg-popover text-popover-foreground">
+            Selecionar opção
+          </option>
+          {opts.map((o) => (
+            <option
+              key={o}
+              value={o}
+              className="bg-popover text-popover-foreground"
+            >
+              {o}
+            </option>
+          ))}
+        </select>
+      );
+    case "NUMBER":
+      return (
+        <Input
+          type="number"
+          className={cn(selectClass, "h-10 min-w-[8rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Valor numérico"
+        />
+      );
+    case "MONEY_BRL":
+      return (
+        <Input
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          min={0}
+          className={cn(selectClass, "h-10 min-w-[8rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Valor em reais"
+        />
+      );
+    case "DATE":
+      return (
+        <Input
+          type="date"
+          className={cn(selectClass, "h-10 min-w-[10rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Data"
+        />
+      );
+    case "USER": {
+      const sorted = [...tenantMembers].sort((a, b) =>
+        (a.name ?? a.email).localeCompare(b.name ?? b.email, "pt-BR"),
+      );
+      return (
+        <select
+          className={cn(selectClass, "min-w-[12rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Usuário"
+        >
+          <option value="" className="bg-popover text-popover-foreground">
+            Selecionar pessoa
+          </option>
+          {sorted.map((m) => (
+            <option
+              key={m.id}
+              value={m.id}
+              className="bg-popover text-popover-foreground"
+            >
+              {m.name?.trim() || m.email}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    case "EMAIL":
+      return (
+        <Input
+          type="email"
+          className={cn(selectClass, "h-10 min-w-[11rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="E-mail"
+        />
+      );
+    case "URL":
+      return (
+        <Input
+          type="url"
+          className={cn(selectClass, "h-10 min-w-[12rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="https://"
+          aria-label="URL"
+        />
+      );
+    case "PHONE":
+      return (
+        <Input
+          type="tel"
+          className={cn(selectClass, "h-10 min-w-[10rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Telefone"
+        />
+      );
+    case "TEXT":
+    default:
+      return (
+        <Input
+          className={cn(selectClass, "h-10 min-w-[10rem]")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Valor"
+        />
+      );
+  }
+}
+
+function DashCustomFieldFilterControls({
   rowKey,
   rowValue,
   dealCustomFields,
+  tenantMembers,
   selectClass,
   mutedClass,
-  onPick,
+  onPatch,
 }: {
   rowKey: string;
   rowValue: string;
   dealCustomFields: DealCustomFieldDef[];
+  tenantMembers: TenantMemberOption[];
   selectClass: string;
   mutedClass: string;
-  onPick: (key: string, value: string) => void;
+  onPatch: (key: string, value: string) => void;
 }) {
-  const fieldsWithOpts = dealCustomFields.filter(
-    (f) => dealCustomFieldSelectOptions(f).length > 0,
+  const sortedFields = useMemo(
+    () =>
+      [...dealCustomFields].sort((a, b) =>
+        a.name.localeCompare(b.name, "pt-BR"),
+      ),
+    [dealCustomFields],
   );
-  if (fieldsWithOpts.length === 0) {
+  const cf = sortedFields.find((f) => f.key === rowKey);
+
+  if (dealCustomFields.length === 0) {
     return (
-      <p className={cn(mutedClass, "py-2")}>
-        Nenhum campo em lista no funil para filtrar.
+      <p className={cn(mutedClass, "max-w-md py-1")}>
+        Cadastre campos personalizados do deal em Configurações → Campos.
       </p>
     );
   }
-  const selectValue = dashCustomFieldPairIsValid(
-    rowKey,
-    rowValue,
-    dealCustomFields,
-  )
-    ? encodeDashCustomFieldPair(rowKey, rowValue)
-    : "";
+
   return (
-    <select
-      className={cn(selectClass, "min-w-[12rem]")}
-      value={selectValue}
-      onChange={(e) => {
-        const parsed = decodeDashCustomFieldPair(e.target.value);
-        onPick(parsed?.key ?? "", parsed?.value ?? "");
-      }}
-      aria-label="Campo e valor"
-    >
-      <option value="" className="bg-popover text-popover-foreground">
-        Selecionar opção
-      </option>
-      {fieldsWithOpts.map((f) => (
-        <optgroup key={f.id} label={f.name}>
-          {dealCustomFieldSelectOptions(f).map((opt) => (
-            <option
-              key={`${f.key}:${opt}`}
-              value={encodeDashCustomFieldPair(f.key, opt)}
-              className="bg-popover text-popover-foreground"
-            >
-              {opt}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
+    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+      <select
+        className={cn(selectClass, "min-w-[12rem]")}
+        value={rowKey}
+        onChange={(e) => onPatch(e.target.value, "")}
+        aria-label="Campo personalizado"
+      >
+        <option value="" className="bg-popover text-popover-foreground">
+          Selecionar campo
+        </option>
+        {sortedFields.map((f) => (
+          <option
+            key={f.id}
+            value={f.key}
+            className="bg-popover text-popover-foreground"
+          >
+            {f.name}
+          </option>
+        ))}
+      </select>
+      {cf ? (
+        <DashCustomFieldValueByType
+          cf={cf}
+          value={rowValue}
+          onChange={(v) => onPatch(rowKey, v)}
+          tenantMembers={tenantMembers}
+          selectClass={selectClass}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -304,7 +452,7 @@ const DASH_FIELD_LABELS: Record<DashFilterField, string> = {
   status: "Status",
   tags: "Tags",
   createdAt: "Data de criação",
-  customField: "Campo customizado",
+  customField: "Campo personalizado",
 };
 
 type DashFilterRow =
@@ -464,7 +612,10 @@ function savedRowToDashRow(id: string, r: WidgetFilterRowSaved): DashFilterRow {
   }
 }
 
-function dashRowToSaved(row: DashFilterRow): WidgetFilterRowSaved {
+function dashRowToSaved(
+  row: DashFilterRow,
+  dealCustomFields: DealCustomFieldDef[],
+): WidgetFilterRowSaved {
   const rowJoin = row.rowJoin;
   switch (row.field) {
     case "status":
@@ -490,14 +641,24 @@ function dashRowToSaved(row: DashFilterRow): WidgetFilterRowSaved {
         createdFrom: row.createdFrom || undefined,
         createdTo: row.createdTo || undefined,
       };
-    case "customField":
+    case "customField": {
+      const key = row.key?.trim();
+      if (!key) {
+        return { rowJoin, field: "customField", op: "IS" };
+      }
+      const parsed = parseCustomFieldFilterValueForApi(
+        key,
+        row.value,
+        dealCustomFields,
+      );
       return {
         rowJoin,
         field: "customField",
         op: "IS",
-        customKey: row.key || undefined,
-        customValue: row.value || undefined,
+        customKey: key,
+        ...(parsed !== undefined ? { customValue: parsed } : {}),
       };
+    }
   }
 }
 
@@ -569,6 +730,7 @@ export function DashboardWidgetConfigDialog({
   pipelines,
   tags,
   dealCustomFields,
+  tenantMembers = [],
   onSave,
 }: {
   open: boolean;
@@ -577,6 +739,7 @@ export function DashboardWidgetConfigDialog({
   pipelines: PipelineListItem[];
   tags: TagListItem[];
   dealCustomFields: DealCustomFieldDef[];
+  tenantMembers?: TenantMemberOption[];
   onSave: (next: LayoutWidget) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -844,7 +1007,7 @@ export function DashboardWidgetConfigDialog({
       (g, gi) => ({
         groupJoin: gi === 0 ? undefined : g.groupJoin ?? "OR",
         rows: g.rows.map((r, ri) => {
-          const s = dashRowToSaved(r);
+          const s = dashRowToSaved(r, dealCustomFields);
           if (ri === 0) {
             const { rowJoin: _rj, ...rest } = s;
             return rest;
@@ -1788,13 +1951,14 @@ export function DashboardWidgetConfigDialog({
                         </div>
                       ) : null}
                       {row.field === "customField" ? (
-                        <DashCustomFieldFilterSelect
+                        <DashCustomFieldFilterControls
                           rowKey={row.key}
                           rowValue={row.value}
                           dealCustomFields={dealCustomFields}
+                          tenantMembers={tenantMembers}
                           selectClass={selectClass}
                           mutedClass={panel.muted}
-                          onPick={(key, value) =>
+                          onPatch={(key, value) =>
                             setFilterGroups((prev) =>
                               prev.map((g) => {
                                 if (g.id !== group.id) return g;

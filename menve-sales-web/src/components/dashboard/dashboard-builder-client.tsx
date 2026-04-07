@@ -42,6 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardWidgetConfigDialog, widgetTypeLabel } from "@/components/dashboard/dashboard-widget-config-dialog";
 import { DashboardWidgetRenderer } from "@/components/dashboard/dashboard-widget-renderer";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import type {
   DashboardBoardDto,
   DealCustomFieldDef,
@@ -87,11 +88,13 @@ export function DashboardBuilderClient({
   initialPipelines,
   initialTags,
   initialDealCustomFields,
+  initialTenantMembers = [],
 }: {
   initialBoards: DashboardBoardDto[];
   initialPipelines: PipelineListItem[];
   initialTags: TagListItem[];
   initialDealCustomFields: DealCustomFieldDef[];
+  initialTenantMembers?: TenantMemberOption[];
 }) {
   const [boards, setBoards] = useState<BoardVm[]>(() =>
     initialBoards.map(toVm),
@@ -103,6 +106,7 @@ export function DashboardBuilderClient({
   const [pipelines] = useState(initialPipelines);
   const [tags] = useState(initialTags);
   const [dealCustomFields] = useState(initialDealCustomFields);
+  const [tenantMembers] = useState(initialTenantMembers);
   const [dataByWidget, setDataByWidget] = useState<
     Record<string, WidgetDataResult | null>
   >({});
@@ -520,6 +524,7 @@ export function DashboardBuilderClient({
         pipelines={pipelines}
         tags={tags}
         dealCustomFields={dealCustomFields}
+        tenantMembers={tenantMembers}
         onSave={saveWidgetConfig}
       />
 
