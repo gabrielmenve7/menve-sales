@@ -19,6 +19,7 @@ import { WhatsappConnectionsModule } from "./whatsapp-connections/whatsapp-conne
 import { WebhooksModule } from "./webhooks/webhooks.module";
 import { TenantsModule } from "./tenants/tenants.module";
 import { ProspectingModule } from "./prospecting/prospecting.module";
+import { PipelineAutomationsModule } from "./pipeline-automations/pipeline-automations.module";
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ProspectingModule } from "./prospecting/prospecting.module";
     WebhooksModule,
     TenantsModule,
     ProspectingModule,
+    PipelineAutomationsModule,
   ],
 })
 export class AppModule {}

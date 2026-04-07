@@ -33,6 +33,20 @@ enum ActivityType {
   WHATSAPP
 }
 
+enum PipelineAutomationTriggerType {
+  DEAL_CREATED
+  DEAL_ENTERED_STAGE
+  DEAL_LEFT_STAGE
+  DEAL_MARKED_WON
+  DEAL_MARKED_LOST
+}
+
+enum PipelineAutomationRunStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
 enum WhatsAppProvider {
   META
   EVOLUTION
@@ -102,7 +116,8 @@ model Tenant {
   quickReplyCategories   QuickReplyCategory[]
   prospectSearches       ProspectSearch[]
   prospectResults     ProspectResult[]
-  dashboardBoards     DashboardBoard[]
+  dashboardBoards            DashboardBoard[]
+  pipelineAutomationRules    PipelineAutomationRule[]
 }
 
 /// Etapa / macro-fase (ex.: Qualificação) — agrupa scripts de resposta rápida no Inbox.
@@ -152,7 +167,8 @@ model User {
   conversations    Conversation[] @relation("AssignedConversations")
   internalNotes    InternalNote[]
   prospectSearches ProspectSearch[] @relation("ProspectSearches")
-  dashboardBoards  DashboardBoard[]
+  dashboardBoards                DashboardBoard[]
+  createdPipelineAutomationRules PipelineAutomationRule[] @relation("PipelineAutomationCreatedBy")
 }
 
 model DashboardBoard {
@@ -264,8 +280,9 @@ model Pipeline {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stages Stage[]
-  deals  Deal[]
+  stages            Stage[]
+  deals             Deal[]
+  automationRules   PipelineAutomationRule[]
 }
 
 model Stage {
@@ -303,10 +320,49 @@ model Deal {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  activities Activity[]
-  dealTags   DealTag[]
+  activities               Activity[]
+  dealTags                 DealTag[]
+  pipelineAutomationRuns   PipelineAutomationRun[]
 
   @@index([tenantId, stageId])
+}
+
+model PipelineAutomationRule {
+  id              String                        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pipelineId      String
+  pipeline        Pipeline                      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name            String
+  enabled         Boolean                       @default(true)
+  sortOrder       Int                           @default(0)
+  triggerType     PipelineAutomationTriggerType
+  triggerFilter   Json?
+  actions         Json
+  createdByUserId String?
+  createdBy       User?                         @relation("PipelineAutomationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+  runs            PipelineAutomationRun[]
+
+  @@index([tenantId, pipelineId, enabled])
+}
+
+model PipelineAutomationRun {
+  id              String                        @id @default(cuid())
+  tenantId        String
+  ruleId          String
+  rule            PipelineAutomationRule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  dealId          String
+  deal            Deal                          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  triggerType     PipelineAutomationTriggerType
+  status          PipelineAutomationRunStatus
+  errorMessage    String?
+  executedActions Json?
+  createdAt       DateTime                      @default(now())
+
+  @@index([tenantId, ruleId])
+  @@index([tenantId, dealId, createdAt])
 }
 
 model DealTag {

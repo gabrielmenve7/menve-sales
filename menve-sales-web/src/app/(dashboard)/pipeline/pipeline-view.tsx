@@ -30,7 +30,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
+import {
+  pipelineFieldSelectClass,
+  pipelineSelectClass,
+} from "@/lib/pipeline-ui-tokens";
 import { cn } from "@/lib/utils";
+import { PipelineAutomationsPanel } from "@/components/pipeline-automations/pipeline-automations-panel";
 import { PipelineBoard } from "./pipeline-board";
 import {
   createEmptyFilterGroup,
@@ -45,15 +50,8 @@ import {
 } from "./pipeline-filter-utils";
 import type { DealRow } from "./pipeline-types";
 
-const selectClass = cn(
-  "min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-2 text-sm shadow-sm",
-  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-);
-
-const fieldSelectClass = cn(
-  "min-w-[13.5rem] shrink-0 rounded-md border border-input bg-background px-2 py-2 text-sm shadow-sm",
-  "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-);
+const selectClass = pipelineSelectClass;
+const fieldSelectClass = pipelineFieldSelectClass;
 
 const FIELD_LABELS: Record<PipelineFilterFieldId, string> = {
   createdAt: "Data de criação",
@@ -70,6 +68,9 @@ export function PipelineView({
   dealCustomFieldDefs,
   tenantMembers,
   campaignSources,
+  viewTab = "board",
+  automationRulesRaw,
+  canConfigureAutomations,
 }: {
   pipelines: Pipeline[];
   activePipeline: Pipeline & { stages: Stage[] };
@@ -84,6 +85,9 @@ export function PipelineView({
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   campaignSources: { id: string; name: string }[];
+  viewTab?: "board" | "automations";
+  automationRulesRaw?: unknown;
+  canConfigureAutomations?: boolean;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -352,8 +356,12 @@ export function PipelineView({
                       key={p.id}
                       className="flex cursor-pointer gap-2 rounded-xl px-2.5 py-2.5 focus:bg-muted/80 data-[highlighted]:bg-muted/80"
                       onSelect={() => {
+                        const tabQ =
+                          viewTab === "automations"
+                            ? `&tab=automations`
+                            : "";
                         router.push(
-                          `/pipeline?pipelineId=${encodeURIComponent(p.id)}`,
+                          `/pipeline?pipelineId=${encodeURIComponent(p.id)}${tabQ}`,
                         );
                       }}
                     >
@@ -391,6 +399,34 @@ export function PipelineView({
               <Settings className="size-[18px]" strokeWidth={1.75} />
             </Link>
           </div>
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Visão do pipeline">
+            <Link
+              href={`/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}`}
+              role="tab"
+              aria-selected={viewTab === "board"}
+              className={cn(
+                "inline-flex h-10 items-center rounded-xl border px-4 text-sm font-medium transition-colors",
+                viewTab === "board"
+                  ? "border-border/50 bg-muted/50 text-foreground shadow-sm"
+                  : "border-transparent text-muted-foreground hover:bg-muted/40",
+              )}
+            >
+              Quadro
+            </Link>
+            <Link
+              href={`/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}&tab=automations`}
+              role="tab"
+              aria-selected={viewTab === "automations"}
+              className={cn(
+                "inline-flex h-10 items-center rounded-xl border px-4 text-sm font-medium transition-colors",
+                viewTab === "automations"
+                  ? "border-border/50 bg-muted/50 text-foreground shadow-sm"
+                  : "border-transparent text-muted-foreground hover:bg-muted/40",
+              )}
+            >
+              Automações
+            </Link>
+          </div>
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px] leading-snug">
             <span className="text-muted-foreground">
               {stats.openCount} leads
@@ -406,7 +442,12 @@ export function PipelineView({
             </span>
           </div>
         </div>
-        <div className="flex w-full gap-2 lg:w-auto lg:max-w-md lg:shrink-0">
+        <div
+          className={cn(
+            "flex w-full gap-2 lg:w-auto lg:max-w-md lg:shrink-0",
+            viewTab === "automations" && "hidden",
+          )}
+        >
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -568,19 +609,29 @@ export function PipelineView({
         </div>
       </header>
 
-      <p className="shrink-0 text-[12px] text-muted-foreground">
-        Arraste o card para mudar de etapa. Clique no card para abrir o detalhe
-        (ganho, perda e demais ações).
-      </p>
+      {viewTab === "board" ? (
+        <p className="shrink-0 text-[12px] text-muted-foreground">
+          Arraste o card para mudar de etapa. Clique no card para abrir o detalhe
+          (ganho, perda e demais ações).
+        </p>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <PipelineBoard
-          pipeline={activePipeline}
-          deals={filteredDeals}
-          contacts={contacts}
-          dealCustomFieldDefs={dealCustomFieldDefs}
-          tenantMembers={tenantMembers}
-        />
+        {viewTab === "board" ? (
+          <PipelineBoard
+            pipeline={activePipeline}
+            deals={filteredDeals}
+            contacts={contacts}
+            dealCustomFieldDefs={dealCustomFieldDefs}
+            tenantMembers={tenantMembers}
+          />
+        ) : (
+          <PipelineAutomationsPanel
+            pipeline={activePipeline}
+            rulesRaw={automationRulesRaw ?? []}
+            canConfigure={canConfigureAutomations ?? false}
+          />
+        )}
       </div>
     </div>
   );
