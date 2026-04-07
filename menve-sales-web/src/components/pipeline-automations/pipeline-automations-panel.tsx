@@ -1473,7 +1473,11 @@ export function PipelineAutomationsPanel({
         <form
           id={isDialogLayout ? "pipeline-automation-form" : undefined}
           onSubmit={onSubmit}
-          className={cn("shrink-0 space-y-5", (!isDialogLayout || !dialogChromeDark) && formShell)}
+          className={cn(
+            "shrink-0 space-y-5",
+            isDialogLayout && "scroll-mt-4",
+            (!isDialogLayout || !dialogChromeDark) && formShell,
+          )}
         >
           <div className="space-y-1.5">
             <Label
@@ -2326,7 +2330,10 @@ export function PipelineAutomationsPanel({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 space-y-3">
+      <div
+        id="pipeline-automation-rules"
+        className="min-h-0 flex-1 space-y-3 scroll-mt-4"
+      >
         <p
           className={cn(
             "text-sm font-semibold",

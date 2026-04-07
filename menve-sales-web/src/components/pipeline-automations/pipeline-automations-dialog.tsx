@@ -29,6 +29,7 @@ export function PipelineAutomationsDialog({
   onOpenChange,
   pipeline,
   canConfigure,
+  initialScrollSection = "create",
   dealCustomFieldDefs = [],
   campaignSources = [],
   tenantTags = [],
@@ -38,6 +39,8 @@ export function PipelineAutomationsDialog({
   onOpenChange: (open: boolean) => void;
   pipeline: Pipeline & { stages: Stage[] };
   canConfigure: boolean;
+  /** Ao abrir: rolar para o formulário novo ou para a lista de regras. */
+  initialScrollSection?: "create" | "manage";
   dealCustomFieldDefs?: CustomField[];
   campaignSources?: { id: string; name: string }[];
   tenantTags?: { id: string; name: string }[];
@@ -64,6 +67,20 @@ export function PipelineAutomationsDialog({
   useEffect(() => {
     if (open) void loadRules();
   }, [open, loadRules]);
+
+  useEffect(() => {
+    if (!open || loading) return;
+    const t = window.setTimeout(() => {
+      const preferForm =
+        initialScrollSection === "create" && canConfigure === true;
+      const formEl = document.getElementById("pipeline-automation-form");
+      const rulesEl = document.getElementById("pipeline-automation-rules");
+      const target =
+        preferForm && formEl ? formEl : (rulesEl ?? formEl ?? undefined);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [open, loading, initialScrollSection, canConfigure]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

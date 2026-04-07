@@ -8,6 +8,7 @@ import {
   ChevronsUpDown,
   GitBranch,
   Info,
+  ListChecks,
   Plus,
   Search,
   Settings,
@@ -110,6 +111,10 @@ export function PipelineView({
 }) {
   const router = useRouter();
   const [automationsOpen, setAutomationsOpen] = useState(false);
+  const [automationMenuOpen, setAutomationMenuOpen] = useState(false);
+  const [automationScrollSection, setAutomationScrollSection] = useState<
+    "create" | "manage"
+  >("create");
   const [activeAutomationCount, setActiveAutomationCount] = useState<
     number | null
   >(null);
@@ -130,6 +135,7 @@ export function PipelineView({
 
   useEffect(() => {
     if (!openAutomationsFromUrl) return;
+    setAutomationScrollSection("create");
     setAutomationsOpen(true);
     router.replace(
       `/pipeline?pipelineId=${encodeURIComponent(activePipeline.id)}`,
@@ -456,24 +462,67 @@ export function PipelineView({
           </div>
         </div>
         <div className="flex w-full gap-2 lg:w-auto lg:max-w-md lg:shrink-0">
-          <button
-            type="button"
-            onClick={() => setAutomationsOpen(true)}
-            className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-muted/40 hover:text-foreground"
-            aria-label={
-              activeAutomationCount != null && activeAutomationCount > 0
-                ? `Automações do funil, ${activeAutomationCount} ativas`
-                : "Automações do funil"
-            }
-            title="Automações"
-          >
-            <Zap className="size-[18px]" strokeWidth={2} />
-            {activeAutomationCount != null && activeAutomationCount > 0 ? (
-              <span className="absolute -right-0.5 -top-0.5 flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground">
-                {activeAutomationCount > 99 ? "99+" : activeAutomationCount}
-              </span>
-            ) : null}
-          </button>
+          <Popover open={automationMenuOpen} onOpenChange={setAutomationMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="relative h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
+                aria-label={
+                  activeAutomationCount != null && activeAutomationCount > 0
+                    ? `Automações do funil, ${activeAutomationCount} ativas`
+                    : "Automações do funil"
+                }
+                title="Automações"
+              >
+                <Zap className="size-[18px]" strokeWidth={2} />
+                {activeAutomationCount != null && activeAutomationCount > 0 ? (
+                  <span className="absolute -right-0.5 -top-0.5 flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground">
+                    {activeAutomationCount > 99
+                      ? "99+"
+                      : activeAutomationCount}
+                  </span>
+                ) : null}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              className="w-[min(calc(100vw-1.5rem),16rem)] border-border/60 p-4"
+            >
+              <p className="text-sm font-semibold">Automações</p>
+              <div className="mt-3 flex flex-col gap-2 border-t border-border/40 pt-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    setAutomationScrollSection("manage");
+                    setAutomationsOpen(true);
+                    setAutomationMenuOpen(false);
+                  }}
+                >
+                  <ListChecks className="size-4 shrink-0" strokeWidth={2} />
+                  Gerenciar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    setAutomationScrollSection("create");
+                    setAutomationsOpen(true);
+                    setAutomationMenuOpen(false);
+                  }}
+                >
+                  <Plus className="size-4 shrink-0" strokeWidth={2} />
+                  Criar
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -656,6 +705,7 @@ export function PipelineView({
           setAutomationsOpen(open);
           if (!open) void refreshActiveAutomationCount();
         }}
+        initialScrollSection={automationScrollSection}
         pipeline={activePipeline}
         canConfigure={canConfigureAutomations ?? false}
         dealCustomFieldDefs={dealCustomFieldDefs}
