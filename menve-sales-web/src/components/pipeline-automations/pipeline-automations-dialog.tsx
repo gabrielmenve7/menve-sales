@@ -16,9 +16,9 @@ import {
 import { cn } from "@/lib/utils";
 import { PipelineAutomationsPanel } from "./pipeline-automations-panel";
 
-/** Mesmo shell visual do modal central do lead (`pipeline-deal-detail-dialog`). */
+/** Shell do modal + área de trabalho estilo ClickUp (fundo contínuo escuro). */
 const centralDialogClass = cn(
-  "flex flex-col gap-0 overflow-hidden border-0 bg-background p-0 shadow-lg duration-200",
+  "flex flex-col gap-0 overflow-hidden border border-zinc-800 bg-[#111] p-0 text-zinc-100 shadow-2xl duration-200",
   "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
   "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
   "left-[50%] top-[50%] max-h-[min(94vh,920px)] w-[min(100vw-1rem,80rem)] max-w-none translate-x-[-50%] translate-y-[-50%] sm:rounded-lg",
@@ -67,20 +67,22 @@ export function PipelineAutomationsDialog({
         overlayClassName="bg-black/30 backdrop-blur-md"
         className={centralDialogClass}
       >
-        <DialogHeader className="space-y-1 border-b border-border/60 px-6 pb-4 pt-6 text-left">
+        <DialogHeader className="space-y-1 border-b border-zinc-800/80 bg-[#111] px-6 pb-4 pt-6 text-left">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <DialogTitle className="text-2xl font-semibold tracking-tight">
+              <DialogTitle className="text-2xl font-semibold tracking-tight text-zinc-50">
                 Automações
               </DialogTitle>
-              <p className="text-sm text-muted-foreground">{pipeline.name}</p>
+              <p className="text-sm text-zinc-500">
+                Localizado em: <span className="text-zinc-400">{pipeline.name}</span>
+              </p>
             </div>
             <DialogClose asChild>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8 shrink-0 rounded-md"
+                className="size-8 shrink-0 rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
               >
                 <X className="size-4" />
                 <span className="sr-only">Fechar</span>
@@ -88,9 +90,9 @@ export function PipelineAutomationsDialog({
             </DialogClose>
           </div>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[#0e0e0e] px-6 pb-6 pt-5">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
+            <p className="text-sm text-zinc-500">Carregando…</p>
           ) : (
             <PipelineAutomationsPanel
               pipeline={pipeline}
@@ -98,6 +100,7 @@ export function PipelineAutomationsDialog({
               canConfigure={canConfigure}
               variant="dialog"
               onRulesChanged={() => void loadRules()}
+              onCancel={() => onOpenChange(false)}
               dealCustomFieldDefs={dealCustomFieldDefs}
               campaignSources={campaignSources}
               tenantTags={tenantTags}

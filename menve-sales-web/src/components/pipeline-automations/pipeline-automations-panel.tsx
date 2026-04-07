@@ -42,7 +42,7 @@ import { PIPELINE_AUTOMATION_TRIGGER_LABELS } from "@/lib/pipeline-automation-ty
 import { pipelineSelectClass } from "@/lib/pipeline-ui-tokens";
 import { cn } from "@/lib/utils";
 
-/** Mesmo padrão visual do popover de filtros do pipeline (`pipeline-view.tsx`). */
+/** Página / embed: cartões alinhados aos filtros do pipeline. */
 const groupPanelClass =
   "rounded-lg border border-border/60 bg-muted/20 p-3 shadow-sm dark:bg-muted/10";
 const groupHeaderClass =
@@ -55,10 +55,21 @@ const triggerTypeButtonClass = cn(
 );
 const dashedV = "border-l border-dashed border-border/50";
 
+/** Modal: campos direto no fundo charcoal, sem cartões. */
+const dialogSelectFull = cn(
+  "w-full min-w-0 rounded-lg border border-zinc-700/90 bg-zinc-900/45 px-3 py-2 text-sm text-zinc-100 shadow-none",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500/35",
+);
+const dialogTriggerBtn = cn(
+  dialogSelectFull,
+  "flex h-10 cursor-pointer items-center justify-between gap-2 text-left font-normal",
+);
+const dialogDashedV = "border-l border-dashed border-zinc-700/50";
+
 const TRIGGER_GROUPS: { heading: string; types: PipelineAutomationTriggerType[] }[] =
   [
     {
-      heading: "Oportunidade",
+      heading: "Gatilhos",
       types: [
         "DEAL_STAGE_TRANSITION",
         "DEAL_CREATED",
@@ -69,11 +80,9 @@ const TRIGGER_GROUPS: { heading: string; types: PipelineAutomationTriggerType[] 
         "DEAL_LEFT_STAGE",
         "DEAL_MARKED_WON",
         "DEAL_MARKED_LOST",
+        "CONTACT_TAG_ADDED",
+        "CONTACT_TAG_REMOVED",
       ],
-    },
-    {
-      heading: "Contato",
-      types: ["CONTACT_TAG_ADDED", "CONTACT_TAG_REMOVED"],
     },
   ];
 
@@ -256,6 +265,7 @@ export function PipelineAutomationsPanel({
   canConfigure,
   variant = "page",
   onRulesChanged,
+  onCancel,
   dealCustomFieldDefs = [],
   campaignSources = [],
   tenantTags = [],
@@ -265,6 +275,8 @@ export function PipelineAutomationsPanel({
   canConfigure: boolean;
   variant?: "page" | "dialog";
   onRulesChanged?: () => void;
+  /** Modal: fecha sem salvar (botão Cancelar). */
+  onCancel?: () => void;
   dealCustomFieldDefs?: CustomField[];
   campaignSources?: { id: string; name: string }[];
   tenantTags?: { id: string; name: string }[];
@@ -433,11 +445,23 @@ export function PipelineAutomationsPanel({
   const TriggerIcon = triggerIcon(triggerType);
   const formShell =
     "rounded-lg border border-border/60 bg-muted/20 p-4 shadow-sm dark:bg-muted/10";
+  const isDialog = variant === "dialog";
+  const sel = isDialog ? dialogSelectFull : selectFullWidth;
+  const trigBtn = isDialog ? dialogTriggerBtn : triggerTypeButtonClass;
+  const dashV = isDialog ? dialogDashedV : dashedV;
+  const lbl = isDialog
+    ? "text-[11px] font-medium text-zinc-500"
+    : fieldLabelClass;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col space-y-6">
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col space-y-6",
+        isDialog && "text-zinc-100",
+      )}
+    >
       {variant === "dialog" ? (
-        <p className="text-[12px] text-muted-foreground">
+        <p className="text-[12px] text-zinc-500">
           As regras são avaliadas na ordem abaixo quando o evento ocorre.
         </p>
       ) : (
@@ -449,11 +473,18 @@ export function PipelineAutomationsPanel({
       )}
 
       {canConfigure ? (
-        <form onSubmit={onSubmit} className={cn("shrink-0 space-y-5", formShell)}>
+        <form
+          id={isDialog ? "pipeline-automation-form" : undefined}
+          onSubmit={onSubmit}
+          className={cn("shrink-0 space-y-5", !isDialog && formShell)}
+        >
           <div className="space-y-1.5">
             <Label
               htmlFor="auto-name"
-              className="text-[11px] font-medium text-muted-foreground"
+              className={cn(
+                "text-[11px] font-medium",
+                isDialog ? "text-zinc-500" : "text-muted-foreground",
+              )}
             >
               Nome da automação
             </Label>
@@ -462,35 +493,70 @@ export function PipelineAutomationsPanel({
               placeholder="Dê um nome a esta automação…"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-11 rounded-xl border-border/50 bg-background text-[14px] shadow-sm placeholder:text-muted-foreground/70"
+              className={cn(
+                "h-11 text-[14px]",
+                isDialog
+                  ? "rounded-lg border-zinc-700/90 bg-zinc-900/45 text-zinc-100 shadow-none placeholder:text-zinc-600 focus-visible:ring-zinc-500/35"
+                  : "rounded-xl border-border/50 bg-background shadow-sm placeholder:text-muted-foreground/70",
+              )}
             />
           </div>
 
-          <div className="grid gap-6 text-foreground lg:grid-cols-[1fr_auto_1fr] lg:items-start">
+          <div
+            className={cn(
+              "grid gap-6 lg:grid-cols-[1fr_auto_1fr] lg:items-start",
+              isDialog ? "text-zinc-100" : "text-foreground",
+            )}
+          >
             {/* Acionar */}
             <div className="relative min-w-0 space-y-0">
               <div className="flex justify-center">
-                <div className={cn("h-4 w-px", dashedV)} />
+                <div className={cn("h-4 w-px", dashV)} />
               </div>
-              <div className={groupHeaderClass}>
+              <div
+                className={cn(
+                  isDialog
+                    ? "flex items-center justify-between gap-3 py-0.5"
+                    : groupHeaderClass,
+                )}
+              >
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-violet-500/15 text-violet-600 dark:text-violet-400">
+                  <span
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-md",
+                      isDialog
+                        ? "bg-violet-500/20 text-violet-300"
+                        : "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+                    )}
+                  >
                     <Zap className="size-4" strokeWidth={2} aria-hidden />
                   </span>
-                  <span className="truncate text-sm font-semibold text-foreground">
+                  <span
+                    className={cn(
+                      "truncate text-sm font-semibold",
+                      isDialog ? "text-zinc-50" : "text-foreground",
+                    )}
+                  >
                     Acionar
                   </span>
                 </div>
-                <span className="hidden shrink-0 rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] text-muted-foreground shadow-sm sm:inline">
+                <span
+                  className={cn(
+                    "hidden shrink-0 rounded-md border px-2 py-1 text-[11px] sm:inline",
+                    isDialog
+                      ? "border-zinc-700 bg-zinc-900/50 text-zinc-400"
+                      : "border-border/60 bg-background text-muted-foreground shadow-sm",
+                  )}
+                >
                   Oportunidades neste funil
                 </span>
               </div>
               <div className="flex justify-center py-1">
-                <div className={cn("min-h-[12px] w-px flex-1", dashedV)} />
+                <div className={cn("min-h-[12px] w-px flex-1", dashV)} />
               </div>
 
-              <div className={groupPanelClass}>
-                <p className={cn("mb-3 uppercase tracking-wide", fieldLabelClass)}>
+              <div className={cn(isDialog ? "space-y-4" : groupPanelClass)}>
+                <p className={cn("mb-1 uppercase tracking-wide", lbl)}>
                   Tipo de gatilho
                 </p>
                 <Popover
@@ -500,12 +566,15 @@ export function PipelineAutomationsPanel({
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className={triggerTypeButtonClass}
+                      className={trigBtn}
                       aria-expanded={triggerMenuOpen}
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <TriggerIcon
-                          className="size-4 shrink-0 text-muted-foreground"
+                          className={cn(
+                            "size-4 shrink-0",
+                            isDialog ? "text-zinc-400" : "text-muted-foreground",
+                          )}
                           strokeWidth={2}
                           aria-hidden
                         />
@@ -514,30 +583,58 @@ export function PipelineAutomationsPanel({
                         </span>
                       </span>
                       <ChevronDown
-                        className="size-4 shrink-0 text-muted-foreground"
+                        className={cn(
+                          "size-4 shrink-0",
+                          isDialog ? "text-zinc-500" : "text-muted-foreground",
+                        )}
                         aria-hidden
                       />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent
                     align="start"
-                    className="w-[min(100vw-2rem,320px)] border-border/60 p-0 shadow-lg"
+                    className={cn(
+                      "w-[min(100vw-2rem,320px)] p-0 shadow-lg",
+                      isDialog
+                        ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                        : "border-border/60",
+                    )}
                   >
-                    <div className="border-b border-border/40 p-2">
+                    <div
+                      className={cn(
+                        "border-b p-2",
+                        isDialog ? "border-zinc-800" : "border-border/40",
+                      )}
+                    >
                       <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Search
+                          className={cn(
+                            "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
+                            isDialog ? "text-zinc-500" : "text-muted-foreground",
+                          )}
+                        />
                         <Input
                           value={triggerSearch}
                           onChange={(e) => setTriggerSearch(e.target.value)}
                           placeholder="Pesquisar…"
-                          className="h-9 border-border/50 bg-background pl-8 text-sm shadow-sm placeholder:text-muted-foreground/70"
+                          className={cn(
+                            "h-9 pl-8 text-sm shadow-none",
+                            isDialog
+                              ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
+                              : "border-border/50 bg-background placeholder:text-muted-foreground/70",
+                          )}
                         />
                       </div>
                     </div>
                     <div className="max-h-64 overflow-y-auto py-1">
                       {filteredTriggerGroups.map((group) => (
                         <div key={group.heading}>
-                          <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <p
+                            className={cn(
+                              "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
+                              isDialog ? "text-zinc-500" : "text-muted-foreground",
+                            )}
+                          >
                             {group.heading}
                           </p>
                           {group.types.map((t) => {
@@ -548,8 +645,16 @@ export function PipelineAutomationsPanel({
                                 key={t}
                                 type="button"
                                 className={cn(
-                                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50",
-                                  selected && "bg-muted/40",
+                                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
+                                  isDialog
+                                    ? cn(
+                                        "hover:bg-zinc-800/80",
+                                        selected && "bg-zinc-800",
+                                      )
+                                    : cn(
+                                        "hover:bg-muted/50",
+                                        selected && "bg-muted/40",
+                                      ),
                                 )}
                                 onClick={() => {
                                   setTriggerType(t);
@@ -558,7 +663,12 @@ export function PipelineAutomationsPanel({
                                 }}
                               >
                                 <Icon
-                                  className="size-4 shrink-0 text-muted-foreground"
+                                  className={cn(
+                                    "size-4 shrink-0",
+                                    isDialog
+                                      ? "text-zinc-400"
+                                      : "text-muted-foreground",
+                                  )}
                                   strokeWidth={2}
                                   aria-hidden
                                 />
@@ -566,7 +676,13 @@ export function PipelineAutomationsPanel({
                                   {PIPELINE_AUTOMATION_TRIGGER_LABELS[t]}
                                 </span>
                                 {selected ? (
-                                  <span className="text-foreground">✓</span>
+                                  <span
+                                    className={
+                                      isDialog ? "text-zinc-200" : "text-foreground"
+                                    }
+                                  >
+                                    ✓
+                                  </span>
                                 ) : null}
                               </button>
                             );
@@ -577,13 +693,13 @@ export function PipelineAutomationsPanel({
                   </PopoverContent>
                 </Popover>
 
-                <div className="mt-4 space-y-3 border-t border-border/40 pt-4">
+                <div className="mt-4 space-y-3">
                   {triggerType === "DEAL_STAGE_TRANSITION" ? (
                     <>
                       <div className="space-y-1">
-                        <p className={fieldLabelClass}>De</p>
+                        <p className={lbl}>De</p>
                         <select
-                          className={selectFullWidth}
+                          className={sel}
                           value={stageFromId}
                           onChange={(e) => setStageFromId(e.target.value)}
                           aria-label="Etapa de origem"
@@ -597,9 +713,9 @@ export function PipelineAutomationsPanel({
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <p className={fieldLabelClass}>Para</p>
+                        <p className={lbl}>Para</p>
                         <select
-                          className={selectFullWidth}
+                          className={sel}
                           value={stageToId}
                           onChange={(e) => setStageToId(e.target.value)}
                           aria-label="Etapa de destino do gatilho"
@@ -618,13 +734,13 @@ export function PipelineAutomationsPanel({
                   {triggerType === "DEAL_ENTERED_STAGE" ||
                   triggerType === "DEAL_LEFT_STAGE" ? (
                     <div className="space-y-1">
-                      <p className={fieldLabelClass}>
+                      <p className={lbl}>
                         {triggerType === "DEAL_ENTERED_STAGE"
                           ? "Etapa de destino (opcional)"
                           : "Etapa de origem (opcional)"}
                       </p>
                       <select
-                        className={selectFullWidth}
+                        className={sel}
                         value={legacyStageFilterId}
                         onChange={(e) => setLegacyStageFilterId(e.target.value)}
                         aria-label="Filtro de etapa"
@@ -641,12 +757,24 @@ export function PipelineAutomationsPanel({
 
                   {triggerType === "DEAL_CREATED" ? (
                     <div className="space-y-2">
-                      <p className={fieldLabelClass}>
+                      <p className={lbl}>
                         Origens de criação (vazio = todas)
                       </p>
-                      <div className="max-h-36 space-y-1.5 overflow-y-auto rounded-md border border-border/60 bg-background p-2 shadow-sm">
+                      <div
+                        className={cn(
+                          "max-h-36 space-y-1.5 overflow-y-auto rounded-md p-2",
+                          isDialog
+                            ? "border border-zinc-800/80 bg-zinc-950/30"
+                            : "border border-border/60 bg-background shadow-sm",
+                        )}
+                      >
                         {campaignSources.length === 0 ? (
-                          <p className="text-[12px] text-muted-foreground">
+                          <p
+                            className={cn(
+                              "text-[12px]",
+                              isDialog ? "text-zinc-500" : "text-muted-foreground",
+                            )}
+                          >
                             Nenhuma origem cadastrada.
                           </p>
                         ) : (
@@ -657,7 +785,12 @@ export function PipelineAutomationsPanel({
                             >
                               <input
                                 type="checkbox"
-                                className="rounded border-input"
+                                className={cn(
+                                  "rounded",
+                                  isDialog
+                                    ? "border-zinc-600 bg-zinc-900"
+                                    : "border-input",
+                                )}
                                 checked={selectedCampaignIds.includes(c.id)}
                                 onChange={(e) => {
                                   setSelectedCampaignIds((prev) =>
@@ -678,9 +811,9 @@ export function PipelineAutomationsPanel({
                   {triggerType === "DEAL_CUSTOM_FIELD_CHANGED" ? (
                     <>
                       <div className="space-y-1">
-                        <p className={fieldLabelClass}>Campo</p>
+                        <p className={lbl}>Campo</p>
                         <select
-                          className={selectFullWidth}
+                          className={sel}
                           value={customFieldKey}
                           onChange={(e) => {
                             setCustomFieldKey(e.target.value);
@@ -701,9 +834,9 @@ export function PipelineAutomationsPanel({
                       fieldSelectOptions.length > 0 ? (
                         <>
                           <div className="space-y-1">
-                            <p className={fieldLabelClass}>De (opcional)</p>
+                            <p className={lbl}>De (opcional)</p>
                             <select
-                              className={selectFullWidth}
+                              className={sel}
                               value={fromCustomStr}
                               onChange={(e) => setFromCustomStr(e.target.value)}
                               aria-label="Valor anterior"
@@ -717,9 +850,9 @@ export function PipelineAutomationsPanel({
                             </select>
                           </div>
                           <div className="space-y-1">
-                            <p className={fieldLabelClass}>Para (opcional)</p>
+                            <p className={lbl}>Para (opcional)</p>
                             <select
-                              className={selectFullWidth}
+                              className={sel}
                               value={toCustomStr}
                               onChange={(e) => setToCustomStr(e.target.value)}
                               aria-label="Novo valor"
@@ -736,25 +869,35 @@ export function PipelineAutomationsPanel({
                       ) : (
                         <>
                           <div className="space-y-1">
-                            <p className={fieldLabelClass}>
+                            <p className={lbl}>
                               Valor anterior (opcional, JSON ou texto)
                             </p>
                             <Input
                               value={fromCustomStr}
                               onChange={(e) => setFromCustomStr(e.target.value)}
                               placeholder="Vazio = qualquer"
-                              className="h-10 border-border/50 bg-background text-sm shadow-sm"
+                              className={cn(
+                                "h-10 text-sm shadow-none",
+                                isDialog
+                                  ? "border-zinc-700/90 bg-zinc-900/45 text-zinc-100 placeholder:text-zinc-600"
+                                  : "border-border/50 bg-background shadow-sm",
+                              )}
                             />
                           </div>
                           <div className="space-y-1">
-                            <p className={fieldLabelClass}>
+                            <p className={lbl}>
                               Novo valor (opcional)
                             </p>
                             <Input
                               value={toCustomStr}
                               onChange={(e) => setToCustomStr(e.target.value)}
                               placeholder="Vazio = qualquer"
-                              className="h-10 border-border/50 bg-background text-sm shadow-sm"
+                              className={cn(
+                                "h-10 text-sm shadow-none",
+                                isDialog
+                                  ? "border-zinc-700/90 bg-zinc-900/45 text-zinc-100 placeholder:text-zinc-600"
+                                  : "border-border/50 bg-background shadow-sm",
+                              )}
                             />
                           </div>
                         </>
@@ -765,9 +908,9 @@ export function PipelineAutomationsPanel({
                   {(triggerType === "CONTACT_TAG_ADDED" ||
                     triggerType === "CONTACT_TAG_REMOVED") && (
                     <div className="space-y-1">
-                      <p className={fieldLabelClass}>Tag (opcional)</p>
+                      <p className={lbl}>Tag (opcional)</p>
                       <select
-                        className={selectFullWidth}
+                        className={sel}
                         value={tagFilterId}
                         onChange={(e) => setTagFilterId(e.target.value)}
                         aria-label="Filtrar por tag"
@@ -779,7 +922,12 @@ export function PipelineAutomationsPanel({
                           </option>
                         ))}
                       </select>
-                      <p className="text-[11px] leading-snug text-muted-foreground">
+                      <p
+                        className={cn(
+                          "text-[11px] leading-snug",
+                          isDialog ? "text-zinc-500" : "text-muted-foreground",
+                        )}
+                      >
                         Dispara para oportunidades abertas deste funil quando a
                         tag é aplicada ou removida no contato vinculado.
                       </p>
@@ -790,7 +938,12 @@ export function PipelineAutomationsPanel({
                     triggerType === "DEAL_ASSIGNEE_REMOVED" ||
                     triggerType === "DEAL_MARKED_WON" ||
                     triggerType === "DEAL_MARKED_LOST") && (
-                    <p className="text-[12px] text-muted-foreground">
+                    <p
+                      className={cn(
+                        "text-[12px]",
+                        isDialog ? "text-zinc-500" : "text-muted-foreground",
+                      )}
+                    >
                       Sem filtros adicionais.
                     </p>
                   )}
@@ -798,13 +951,18 @@ export function PipelineAutomationsPanel({
               </div>
 
               <div className="flex justify-center pt-2">
-                <div className={cn("h-6 w-px", dashedV)} />
+                <div className={cn("h-6 w-px", dashV)} />
               </div>
               <div className="flex justify-center">
                 <button
                   type="button"
                   disabled
-                  className="flex size-8 items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/20 text-muted-foreground"
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-lg border border-dashed",
+                    isDialog
+                      ? "border-zinc-700 bg-transparent text-zinc-600"
+                      : "border-border/50 bg-muted/20 text-muted-foreground",
+                  )}
                   aria-label="Adicionar gatilho (em breve)"
                 >
                   +
@@ -814,7 +972,14 @@ export function PipelineAutomationsPanel({
 
             {/* Seta central */}
             <div className="flex flex-col items-center justify-center gap-2 lg:pt-16">
-              <div className="flex size-10 items-center justify-center rounded-lg border border-border/60 bg-muted/20 text-lg text-muted-foreground shadow-sm dark:bg-muted/10">
+              <div
+                className={cn(
+                  "flex size-10 items-center justify-center rounded-lg border text-lg",
+                  isDialog
+                    ? "border-zinc-700 bg-zinc-900/50 text-zinc-400"
+                    : "border-border/60 bg-muted/20 text-muted-foreground shadow-sm dark:bg-muted/10",
+                )}
+              >
                 →
               </div>
             </div>
@@ -822,50 +987,81 @@ export function PipelineAutomationsPanel({
             {/* Ação */}
             <div className="relative min-w-0 space-y-0">
               <div className="flex justify-center">
-                <div className={cn("h-4 w-px", dashedV)} />
+                <div className={cn("h-4 w-px", dashV)} />
               </div>
-              <div className={groupHeaderClass}>
+              <div
+                className={cn(
+                  isDialog
+                    ? "flex items-center justify-between gap-3 py-0.5"
+                    : groupHeaderClass,
+                )}
+              >
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  <span
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-md",
+                      isDialog
+                        ? "bg-emerald-500/20 text-emerald-300"
+                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+                    )}
+                  >
                     <CircleDot className="size-4" strokeWidth={2} aria-hidden />
                   </span>
-                  <span className="truncate text-sm font-semibold text-foreground">
+                  <span
+                    className={cn(
+                      "truncate text-sm font-semibold",
+                      isDialog ? "text-zinc-50" : "text-foreground",
+                    )}
+                  >
                     Ação
                   </span>
                 </div>
               </div>
               <div className="flex justify-center py-1">
-                <div className={cn("min-h-[12px] w-px flex-1", dashedV)} />
+                <div className={cn("min-h-[12px] w-px flex-1", dashV)} />
               </div>
 
-              <div className={groupPanelClass}>
+              <div className={cn(isDialog ? "space-y-4" : groupPanelClass)}>
                 <button
                   type="button"
                   className={cn(
-                    triggerTypeButtonClass,
-                    "mb-4 w-full cursor-default opacity-90",
+                    trigBtn,
+                    "mb-1 w-full cursor-default opacity-90",
                   )}
                   aria-hidden
                 >
                   <span className="flex items-center gap-2">
                     <Target
-                      className="size-4 text-muted-foreground"
+                      className={cn(
+                        "size-4",
+                        isDialog ? "text-zinc-400" : "text-muted-foreground",
+                      )}
                       strokeWidth={2}
                       aria-hidden
                     />
                     <span>Alterar status (mover etapa)</span>
                   </span>
                   <ChevronDown
-                    className="size-4 text-muted-foreground opacity-50"
+                    className={cn(
+                      "size-4 opacity-50",
+                      isDialog ? "text-zinc-500" : "text-muted-foreground",
+                    )}
                     aria-hidden
                   />
                 </button>
                 <div className="space-y-1">
-                  <p className={fieldLabelClass}>
-                    Status<span className="text-destructive">*</span>
+                  <p className={lbl}>
+                    Status
+                    <span
+                      className={
+                        isDialog ? "text-rose-400" : "text-destructive"
+                      }
+                    >
+                      *
+                    </span>
                   </p>
                   <select
-                    className={selectFullWidth}
+                    className={sel}
                     value={targetStageId}
                     onChange={(e) => setTargetStageId(e.target.value)}
                     aria-label="Etapa de destino da ação"
@@ -878,7 +1074,14 @@ export function PipelineAutomationsPanel({
                     ))}
                   </select>
                 </div>
-                <div className="mt-4 flex gap-2 rounded-md border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
+                <div
+                  className={cn(
+                    "mt-4 flex gap-2 rounded-md border px-3 py-2 text-[11px] leading-snug",
+                    isDialog
+                      ? "border-amber-500/25 bg-amber-500/10 text-amber-100/95"
+                      : "border-amber-500/35 bg-amber-500/10 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100",
+                  )}
+                >
                   <span aria-hidden>⚠</span>
                   <span>
                     A oportunidade será movida para a etapa escolhida. Se a etapa
@@ -888,13 +1091,18 @@ export function PipelineAutomationsPanel({
               </div>
 
               <div className="flex justify-center pt-2">
-                <div className={cn("h-6 w-px", dashedV)} />
+                <div className={cn("h-6 w-px", dashV)} />
               </div>
               <div className="flex justify-center">
                 <button
                   type="button"
                   disabled
-                  className="flex size-8 items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/20 text-muted-foreground"
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-lg border border-dashed",
+                    isDialog
+                      ? "border-zinc-700 bg-transparent text-zinc-600"
+                      : "border-border/50 bg-muted/20 text-muted-foreground",
+                  )}
                   aria-label="Adicionar ação (em breve)"
                 >
                   +
@@ -904,25 +1112,66 @@ export function PipelineAutomationsPanel({
           </div>
 
           {formError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p
+              className={cn(
+                "text-sm",
+                isDialog ? "text-rose-400" : "text-destructive",
+              )}
+              role="alert"
+            >
               {formError}
             </p>
           ) : null}
 
-          <Button
-            type="submit"
-            disabled={pending}
-            className="font-medium"
+          <div
+            className={cn(
+              "flex gap-2",
+              isDialog
+                ? "mt-8 justify-end border-t border-zinc-800 pt-5"
+                : "justify-start",
+            )}
           >
-            {pending ? "Salvando…" : "Salvar automação"}
-          </Button>
+            {isDialog && onCancel ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                onClick={onCancel}
+              >
+                Cancelar
+              </Button>
+            ) : null}
+            <Button
+              type="submit"
+              disabled={pending}
+              className={cn(
+                "font-medium",
+                isDialog &&
+                  "bg-zinc-100 text-zinc-950 hover:bg-white dark:bg-zinc-200",
+              )}
+            >
+              {pending ? "Salvando…" : "Salvar automação"}
+            </Button>
+          </div>
         </form>
       ) : (
-        <div className="rounded-lg border border-border/60 bg-muted/15 px-4 py-3 text-sm text-muted-foreground">
+        <div
+          className={cn(
+            "rounded-lg border px-4 py-3 text-sm",
+            isDialog
+              ? "border-zinc-800 bg-zinc-900/40 text-zinc-400"
+              : "border-border/60 bg-muted/15 text-muted-foreground",
+          )}
+        >
           Apenas administradores e gestores podem criar ou editar automações.{" "}
           <Link
             href="/settings"
-            className="font-medium text-foreground underline-offset-4 hover:underline"
+            className={cn(
+              "font-medium underline-offset-4 hover:underline",
+              isDialog
+                ? "text-zinc-200 hover:text-white"
+                : "text-foreground",
+            )}
           >
             Configurações
           </Link>
@@ -930,9 +1179,21 @@ export function PipelineAutomationsPanel({
       )}
 
       <div className="min-h-0 flex-1 space-y-3">
-        <p className="text-sm font-semibold">Regras ativas</p>
+        <p
+          className={cn(
+            "text-sm font-semibold",
+            isDialog ? "text-zinc-200" : "text-foreground",
+          )}
+        >
+          Regras ativas
+        </p>
         {rules.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p
+            className={cn(
+              "text-sm",
+              isDialog ? "text-zinc-500" : "text-muted-foreground",
+            )}
+          >
             Nenhuma automação ainda. {canConfigure ? "Crie uma regra acima." : ""}
           </p>
         ) : (
@@ -940,7 +1201,12 @@ export function PipelineAutomationsPanel({
             {rules.map((r) => (
               <li
                 key={r.id}
-                className="rounded-lg border border-border/60 bg-muted/15 p-3 dark:bg-muted/10"
+                className={cn(
+                  "rounded-lg border p-3",
+                  isDialog
+                    ? "border-zinc-800 bg-zinc-900/35"
+                    : "border-border/60 bg-muted/15 dark:bg-muted/10",
+                )}
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 space-y-1">
