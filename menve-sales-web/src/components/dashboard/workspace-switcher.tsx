@@ -53,8 +53,8 @@ export function WorkspaceSwitcher({
           variant="ghost"
           className={cn(
             compactIconOnly
-              ? "h-auto w-full flex-col justify-center gap-0 rounded-xl border border-border/60 bg-card/80 px-1.5 py-2.5 shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60"
-              : "h-auto w-full justify-start gap-2.5 rounded-xl border border-border/60 bg-card/80 px-3 py-2.5 text-left shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60",
+              ? "h-auto w-full flex-col justify-center gap-0 rounded-xl border border-border/60 bg-primary/11 px-1.5 py-2.5 shadow-sm hover:bg-primary/16 dark:border-border/50 dark:bg-primary/18 dark:hover:bg-primary/26"
+              : "h-auto w-full justify-start gap-2.5 rounded-xl border border-border/60 bg-primary/11 px-3 py-2.5 text-left shadow-sm hover:bg-primary/16 dark:border-border/50 dark:bg-primary/18 dark:hover:bg-primary/26",
             className,
           )}
           aria-expanded={open}
