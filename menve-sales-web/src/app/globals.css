@@ -166,6 +166,41 @@ body {
     background: rgb(255 255 255 / 0.31);
   }
 
+  /* Lista de conversas do Inbox — thumb ~80% mais suave que o padrão (~0.26 → ~0.05). */
+  .inbox-conversation-list-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(85 85 85 / 0.05) transparent;
+  }
+
+  .dark .inbox-conversation-list-scroll {
+    scrollbar-color: rgb(255 255 255 / 0.05) transparent;
+  }
+
+  .inbox-conversation-list-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .inbox-conversation-list-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .inbox-conversation-list-scroll::-webkit-scrollbar-thumb {
+    background: rgb(85 85 85 / 0.05);
+    border-radius: 9999px;
+  }
+
+  .inbox-conversation-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(85 85 85 / 0.12);
+  }
+
+  .dark .inbox-conversation-list-scroll::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.05);
+  }
+
+  .dark .inbox-conversation-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.12);
+  }
+
   /* Inbox: fundo branco com doodles quase invisíveis (estilo papel de parede de chat). */
   .inbox-chat-messages-pattern {
     background-color: #ffffff;

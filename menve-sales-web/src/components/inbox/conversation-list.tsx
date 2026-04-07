@@ -59,7 +59,7 @@ export function ConversationList({
           onActiveFilterChange={setActiveFilter}
         />
       </div>
-      <div className="min-h-0 flex-1 divide-y divide-border/15 overflow-y-auto dark:divide-border/25">
+      <div className="inbox-conversation-list-scroll min-h-0 flex-1 divide-y divide-border/15 overflow-y-auto dark:divide-border/25">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
             <span className="flex size-10 items-center justify-center rounded-full bg-muted">
