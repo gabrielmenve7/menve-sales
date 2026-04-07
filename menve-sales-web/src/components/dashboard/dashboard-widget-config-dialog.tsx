@@ -151,6 +151,13 @@ function statusesFromSpec(spec: WidgetQuerySpec): Record<DealStatusCode, boolean
   };
 }
 
+function dealCustomFieldSelectOptions(cf: DealCustomFieldDef | undefined) {
+  if (!cf || cf.fieldType !== "SELECT") return [];
+  const raw = cf.options;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => String(x)).filter((s) => s.length > 0);
+}
+
 function numericFieldTypes(f: DealCustomFieldDef) {
   return f.fieldType === "NUMBER" || f.fieldType === "MONEY_BRL";
 }
@@ -1659,7 +1666,11 @@ export function DashboardWidgetConfigDialog({
                                     rows: g.rows.map((r) =>
                                       r.id === row.id &&
                                       r.field === "customField"
-                                        ? { ...r, key: e.target.value }
+                                        ? {
+                                            ...r,
+                                            key: e.target.value,
+                                            value: "",
+                                          }
                                         : r,
                                     ),
                                   };
@@ -1684,28 +1695,83 @@ export function DashboardWidgetConfigDialog({
                               </option>
                             ))}
                           </select>
-                          <Input
-                            className={cn(selectClass, "min-w-[8rem]")}
-                            value={row.value}
-                            onChange={(e) =>
-                              setFilterGroups((prev) =>
-                                prev.map((g) => {
-                                  if (g.id !== group.id) return g;
-                                  return {
-                                    ...g,
-                                    rows: g.rows.map((r) =>
-                                      r.id === row.id &&
-                                      r.field === "customField"
-                                        ? { ...r, value: e.target.value }
-                                        : r,
-                                    ),
-                                  };
-                                }),
-                              )
+                          {row.key ? (() => {
+                            const cf = dealCustomFields.find(
+                              (f) => f.key === row.key,
+                            );
+                            const selectOpts =
+                              dealCustomFieldSelectOptions(cf);
+                            if (selectOpts.length > 0) {
+                              return (
+                                <select
+                                  className={cn(selectClass, "min-w-[10rem]")}
+                                  value={row.value}
+                                  onChange={(e) =>
+                                    setFilterGroups((prev) =>
+                                      prev.map((g) => {
+                                        if (g.id !== group.id) return g;
+                                        return {
+                                          ...g,
+                                          rows: g.rows.map((r) =>
+                                            r.id === row.id &&
+                                            r.field === "customField"
+                                              ? {
+                                                  ...r,
+                                                  value: e.target.value,
+                                                }
+                                              : r,
+                                          ),
+                                        };
+                                      }),
+                                    )
+                                  }
+                                  aria-label="Valor do campo"
+                                >
+                                  <option
+                                    value=""
+                                    className="bg-popover text-popover-foreground"
+                                  >
+                                    Selecionar opção
+                                  </option>
+                                  {selectOpts.map((opt) => (
+                                    <option
+                                      key={opt}
+                                      value={opt}
+                                      className="bg-popover text-popover-foreground"
+                                    >
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              );
                             }
-                            placeholder="Valor no deal"
-                            aria-label="Valor do filtro"
-                          />
+                            return (
+                              <Input
+                                className={cn(selectClass, "min-w-[8rem]")}
+                                value={row.value}
+                                onChange={(e) =>
+                                  setFilterGroups((prev) =>
+                                    prev.map((g) => {
+                                      if (g.id !== group.id) return g;
+                                      return {
+                                        ...g,
+                                        rows: g.rows.map((r) =>
+                                          r.id === row.id &&
+                                          r.field === "customField"
+                                            ? {
+                                                ...r,
+                                                value: e.target.value,
+                                              }
+                                            : r,
+                                        ),
+                                      };
+                                    }),
+                                  )
+                                }
+                                aria-label="Valor do filtro"
+                              />
+                            );
+                          })() : null}
                         </div>
                       ) : null}
                     </div>

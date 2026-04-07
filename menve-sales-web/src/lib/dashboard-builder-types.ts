@@ -118,6 +118,8 @@ export type DealCustomFieldDef = {
   key: string;
   name: string;
   fieldType: string;
+  /** Lista de opções quando `fieldType` é SELECT (vem do JSON na API). */
+  options?: unknown;
 };
 
 export type WidgetDataScalar = { kind: "scalar"; value: number };
