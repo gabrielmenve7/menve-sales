@@ -152,7 +152,7 @@ export function parseLayoutJson(raw: unknown): LayoutJson {
 export function defaultBarChartConfig(): BarChartConfig {
   return {
     showAverageLine: true,
-    showDataLabels: true,
+    showDataLabels: false,
     showLegend: false,
     timePreset: "LAST_30_DAYS",
     xGroupBy: "DAY",
