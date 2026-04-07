@@ -2,6 +2,7 @@
 
 import type { CustomField, WhatsAppConnection } from "@prisma/client";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchInboxBundle } from "@/actions/inbox-fetch";
 import { ConversationList } from "@/components/inbox/conversation-list";
@@ -103,6 +104,8 @@ export function InboxClient({
   tenantMembers: TenantMemberOption[];
   canManageConnections?: boolean;
 }) {
+  const router = useRouter();
+
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     const fromDeepLink = resolveDeepLinkConversationId(
       initialConversations,
@@ -168,18 +171,17 @@ export function InboxClient({
     [conversations, selectedId],
   );
 
-  const queueIndex = useMemo(
-    () => conversations.findIndex((c) => c.id === selectedId),
-    [conversations, selectedId],
+  const openContactInInbox = useCallback(
+    (contactId: string) => {
+      const conv = conversations.find((c) => c.contact.id === contactId);
+      if (conv) {
+        setSelectedId(conv.id);
+        return;
+      }
+      router.push(`/inbox?contact=${encodeURIComponent(contactId)}`);
+    },
+    [conversations, router],
   );
-  const canGoToNextInQueue =
-    queueIndex >= 0 && queueIndex < conversations.length - 1;
-
-  const goToNextInQueue = useCallback(() => {
-    if (!canGoToNextInQueue) return;
-    const next = conversations[queueIndex + 1];
-    if (next) setSelectedId(next.id);
-  }, [canGoToNextInQueue, conversations, queueIndex]);
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -214,8 +216,7 @@ export function InboxClient({
             dealCustomFieldDefs={dealCustomFieldDefs}
             tenantMembers={tenantMembers}
             onLeadChanged={() => void refetch()}
-            canGoToNextInQueue={canGoToNextInQueue}
-            onGoToNextInQueue={goToNextInQueue}
+            onOpenContactInInbox={openContactInInbox}
           />
         ) : (
           <InboxLeadSidebarEmpty />

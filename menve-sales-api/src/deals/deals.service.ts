@@ -69,7 +69,9 @@ export class DealsService {
           },
         },
         dealTags: { include: { tag: true } },
-        assignedTo: { select: { id: true, name: true, email: true } },
+        assignedTo: {
+          select: { id: true, name: true, email: true, image: true },
+        },
       },
     });
     if (!deal) throw new NotFoundException();
@@ -256,7 +258,9 @@ export class DealsService {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, tenantId },
       include: {
-        assignedTo: { select: { id: true, name: true, email: true } },
+        assignedTo: {
+          select: { id: true, name: true, email: true, image: true },
+        },
       },
     });
     if (!deal) throw new BadRequestException("Deal não encontrado");
@@ -296,7 +300,7 @@ export class DealsService {
 
     const nextUser = await this.prisma.user.findFirst({
       where: { id: data.assignedToId, tenantId },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, image: true },
     });
     if (!nextUser) throw new BadRequestException("Usuário inválido");
 
@@ -508,5 +512,38 @@ export class DealsService {
       }),
     ]);
     return { ok: true as const };
+  }
+
+  /**
+   * Próximo deal OPEN na mesma etapa do mesmo funil, na mesma ordem do board (`updatedAt` desc).
+   */
+  async nextOpenDealInSameStageQueue(tenantId: string, dealId: string) {
+    const current = await this.prisma.deal.findFirst({
+      where: { id: dealId, tenantId, status: "OPEN" },
+      select: { id: true, pipelineId: true, stageId: true },
+    });
+    if (!current) {
+      return { next: null };
+    }
+
+    const stageDeals = await this.prisma.deal.findMany({
+      where: {
+        tenantId,
+        pipelineId: current.pipelineId,
+        stageId: current.stageId,
+        status: "OPEN",
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, contactId: true },
+    });
+
+    const idx = stageDeals.findIndex((d) => d.id === dealId);
+    if (idx < 0 || idx >= stageDeals.length - 1) {
+      return { next: null };
+    }
+    const next = stageDeals[idx + 1]!;
+    return {
+      next: { dealId: next.id, contactId: next.contactId },
+    };
   }
 }

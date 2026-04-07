@@ -1,12 +1,13 @@
 "use client";
 
 import type { CustomField } from "@prisma/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Kanban, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PipelineDealDetailDialog } from "@/app/(dashboard)/pipeline/pipeline-deal-detail-dialog";
 import { createDeal } from "@/actions/deals";
+import { getNextOpenDealInSameStage } from "@/actions/deal-queue";
 import {
   fetchPipelinesListForInbox,
   type InboxPipelineListItem,
@@ -206,17 +207,16 @@ export function InboxLeadSidebar({
   dealCustomFieldDefs,
   tenantMembers,
   onLeadChanged,
-  canGoToNextInQueue,
-  onGoToNextInQueue,
+  onOpenContactInInbox,
 }: {
   contact: InboxContact;
   deals: InboxOpenDeal[];
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   onLeadChanged: () => void;
-  canGoToNextInQueue: boolean;
-  onGoToNextInQueue: () => void;
+  onOpenContactInInbox: (contactId: string) => void;
 }) {
+  const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [activeDealId, setActiveDealId] = useState<string | null>(null);
 
@@ -237,9 +237,29 @@ export function InboxLeadSidebar({
     [openDeals, activeDealId],
   );
 
+  const pipelineDealId = activeDeal?.id ?? null;
+
+  const { data: nextInStage, isLoading: nextInStageLoading } = useQuery({
+    queryKey: ["deal-next-in-stage", pipelineDealId],
+    queryFn: () => getNextOpenDealInSameStage(pipelineDealId!),
+    enabled: Boolean(pipelineDealId),
+    staleTime: 10_000,
+  });
+
+  const canGoToNextInQueue =
+    Boolean(pipelineDealId) &&
+    !nextInStageLoading &&
+    Boolean(nextInStage);
+
   const onRefresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["deal-next-in-stage"] });
     onLeadChanged();
-  }, [onLeadChanged]);
+  }, [onLeadChanged, queryClient]);
+
+  const onGoToNextInQueue = useCallback(() => {
+    if (!nextInStage) return;
+    onOpenContactInInbox(nextInStage.contactId);
+  }, [nextInStage, onOpenContactInInbox]);
 
   return (
     <aside className="flex h-full min-h-0 w-full flex-col border-l border-border/20 bg-background dark:border-border/30">
@@ -255,8 +275,12 @@ export function InboxLeadSidebar({
           disabled={!canGoToNextInQueue}
           title={
             canGoToNextInQueue
-              ? "Abrir a próxima conversa da lista"
-              : "Não há próxima conversa na fila"
+              ? "Próximo lead na mesma etapa do funil"
+              : !pipelineDealId
+                ? "Selecione uma oportunidade aberta"
+                : nextInStageLoading
+                  ? "Carregando fila da etapa…"
+                  : "Não há outro lead nesta etapa"
           }
           onClick={onGoToNextInQueue}
           className={cn(

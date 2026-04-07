@@ -21,6 +21,12 @@ export class DealsController {
     return this.deals.create(u.tenantId, u.userId, body);
   }
 
+  /** Deve vir antes de `GET :id` para não capturar `next-in-stage` como id. */
+  @Get(":id/next-in-stage")
+  nextInStage(@ReqUser() u: RequestUser, @Param("id") id: string) {
+    return this.deals.nextOpenDealInSameStageQueue(u.tenantId, id);
+  }
+
   @Get(":id")
   getOne(@ReqUser() u: RequestUser, @Param("id") id: string) {
     return this.deals.getById(u.tenantId, id);
