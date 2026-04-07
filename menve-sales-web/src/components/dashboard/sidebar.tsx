@@ -55,8 +55,8 @@ export function Sidebar({
         ? "justify-center px-2 py-2.5"
         : "gap-3 px-3 py-2.5",
       active
-        ? "bg-foreground/[0.06] text-foreground dark:bg-white/[0.08]"
-        : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]",
+        ? "bg-primary/14 text-foreground dark:bg-primary/22"
+        : "text-muted-foreground hover:bg-primary/9 hover:text-foreground dark:hover:bg-primary/16",
     );
 
   return (
