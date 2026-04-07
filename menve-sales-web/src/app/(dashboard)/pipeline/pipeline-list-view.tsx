@@ -51,9 +51,9 @@ function LeadAssigneeAvatar({
       <span
         title="Sem responsável"
         aria-label="Sem responsável"
-        className="flex size-7 shrink-0 items-center justify-center rounded-full bg-violet-600 dark:bg-violet-500"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-violet-600 dark:bg-violet-500"
       >
-        <User className="size-3.5 text-white/80" strokeWidth={2} />
+        <User className="size-3 text-white/80" strokeWidth={2} />
       </span>
     );
   }
@@ -67,7 +67,7 @@ function LeadAssigneeAvatar({
           image: assignedTo.image,
         }}
         size="sm"
-        className="size-7 text-[10px] font-semibold uppercase tracking-tight"
+        className="size-6 text-[9px] font-semibold uppercase tracking-tight"
       />
     </span>
   );
@@ -164,7 +164,7 @@ function DealListRow({
         )}
       >
         <td
-          className="align-middle py-4 pl-3 pr-1 sm:pl-4 sm:pr-1"
+          className="align-middle py-2 pl-3 pr-1 sm:pl-4 sm:pr-1"
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -176,10 +176,10 @@ function DealListRow({
             onClick={(e) => e.stopPropagation()}
           />
         </td>
-        <td className="align-middle px-2 py-4">
+        <td className="align-middle px-2 py-2">
           <button
             type="button"
-            className="flex size-9 touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-8 touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Arrastar ${deal.contact.name} para outra etapa`}
             {...listeners}
             {...attributes}
@@ -188,10 +188,10 @@ function DealListRow({
             <GripVertical className="size-4" strokeWidth={2} />
           </button>
         </td>
-        <td className="align-middle px-2 py-4">
+        <td className="align-middle px-2 py-2">
           <button
             type="button"
-            className="flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-expanded={expanded}
             aria-label={expanded ? "Recolher detalhes" : "Expandir detalhes"}
             onClick={(e) => {
@@ -210,7 +210,7 @@ function DealListRow({
           </button>
         </td>
         <td
-          className="cursor-pointer align-middle py-4 pl-1 pr-3"
+          className="cursor-pointer align-middle py-2 pl-1 pr-3"
           onClick={onOpenDetail}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -234,18 +234,18 @@ function DealListRow({
           </div>
         </td>
         <td
-          className="cursor-pointer align-middle py-4 pl-2 pr-2"
+          className="cursor-pointer align-middle py-2 pl-2 pr-2"
           onClick={onOpenDetail}
         >
           <span
-            className="inline-block max-w-full truncate rounded-md px-2 py-1 text-[10px] font-bold uppercase leading-tight tracking-wide"
+            className="inline-block max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold uppercase leading-tight tracking-wide"
             style={stageSolidPillStyle(accent)}
           >
             {stage.name}
           </span>
         </td>
         <td
-          className="cursor-pointer align-middle py-4 pl-2 pr-3 sm:pr-4"
+          className="cursor-pointer align-middle py-2 pl-2 pr-3 sm:pr-4"
           onClick={onOpenDetail}
         >
           <div className="flex justify-start">
@@ -266,7 +266,7 @@ function DealListRow({
             }}
           >
             <div className="min-h-0 overflow-hidden">
-              <div className="border-0 bg-transparent px-4 pb-4 pl-[8rem] pt-0 text-[12px] leading-relaxed text-muted-foreground sm:pl-[8.5rem]">
+              <div className="border-0 bg-transparent px-4 pb-2 pl-[8rem] pt-0 text-[12px] leading-snug text-muted-foreground sm:pl-[8.5rem]">
                 {phone ? (
                   <p>
                     <span className="font-medium text-foreground/80">
@@ -366,7 +366,7 @@ function ListStageTbody({
     >
       <tr className="bg-muted/40">
         <td colSpan={COL_COUNT} className="p-0">
-          <div className={cn(STAGE_BAR_GRID, "border-b border-border/25 py-4")}>
+          <div className={cn(STAGE_BAR_GRID, "border-b border-border/25 py-2")}>
             <div
               className="flex items-center justify-center pl-3 sm:pl-4"
               onClick={(e) => e.stopPropagation()}
@@ -383,7 +383,7 @@ function ListStageTbody({
             <button
               type="button"
               aria-expanded={!collapsed}
-              className="flex min-h-[2.75rem] min-w-0 items-center gap-2 rounded-md px-1 py-1.5 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-10 min-w-0 items-center gap-2 rounded-md px-1 py-1 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
               onClick={onToggleCollapsed}
             >
               <ChevronDown
@@ -427,7 +427,7 @@ function ListStageTbody({
             <tr>
               <td
                 colSpan={COL_COUNT}
-                className="border-b border-border/20 bg-muted/15 px-4 py-8 text-center text-[13px] leading-relaxed text-muted-foreground"
+                className="border-b border-border/20 bg-muted/15 px-4 py-4 text-center text-[13px] leading-snug text-muted-foreground"
               >
                 Nenhum lead nesta etapa
               </td>
@@ -463,7 +463,7 @@ function ListStageTbody({
             ))
           )}
           <tr className="border-b border-border/25 bg-muted/10">
-            <td colSpan={COL_COUNT} className="p-4 pt-3">
+            <td colSpan={COL_COUNT} className="p-2 pt-2">
               <PipelineNewDeal
                 pipeline={pipeline}
                 contacts={contacts}
@@ -638,7 +638,7 @@ export function PipelineListView({
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-1",
         toolbarDock === "inline" && "relative min-h-[min(69vh,35rem)]",
-        selectedIds.size > 0 && "pb-24",
+        selectedIds.size > 0 && "pb-12",
       )}
     >
       <DndContext
@@ -647,7 +647,7 @@ export function PipelineListView({
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="px-4 pb-4 pt-1 sm:px-8">
+        <div className="px-4 pb-2 pt-0.5 sm:px-8">
           <div className="overflow-x-auto rounded-xl border border-border/40 bg-card/50 shadow-sm">
             <table className="mx-auto w-full max-w-[98rem] min-w-[30rem] table-fixed border-collapse text-[13px]">
               <colgroup>
@@ -662,28 +662,28 @@ export function PipelineListView({
                 <tr>
                   <th
                     scope="col"
-                    className="py-4 pl-3 pr-2 align-middle sm:pl-4"
+                    className="py-2 pl-3 pr-1 align-middle sm:pl-4 sm:pr-1"
                   >
                     <span className="sr-only">Seleção por etapa</span>
                   </th>
                   <th
                     scope="col"
-                    className="px-2 py-4 align-middle text-center font-semibold"
+                    className="px-2 py-2 align-middle text-center font-semibold"
                   >
                     <span className="sr-only">Arrastar</span>
                   </th>
-                  <th scope="col" className="px-2 py-4 align-middle font-semibold">
+                  <th scope="col" className="px-2 py-2 align-middle font-semibold">
                     <span className="sr-only">Expandir</span>
                   </th>
-                  <th scope="col" className="py-4 pl-1 pr-3 align-middle font-semibold">
+                  <th scope="col" className="py-2 pl-1 pr-3 align-middle font-semibold">
                     Nome
                   </th>
-                  <th scope="col" className="py-4 pl-2 pr-2 align-middle font-semibold">
+                  <th scope="col" className="py-2 pl-2 pr-2 align-middle font-semibold">
                     Status
                   </th>
                   <th
                     scope="col"
-                    className="py-4 pl-2 pr-3 align-middle font-semibold sm:pr-4"
+                    className="py-2 pl-2 pr-3 align-middle font-semibold sm:pr-4"
                   >
                     Responsável
                   </th>
