@@ -53,8 +53,8 @@ export function WorkspaceSwitcher({
           variant="ghost"
           className={cn(
             compactIconOnly
-              ? "h-auto w-full flex-col justify-center gap-0 rounded-xl border border-border/60 bg-card/80 px-1 py-2 shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60"
-              : "h-auto w-full justify-start gap-2 rounded-xl border border-border/60 bg-card/80 px-2.5 py-2 text-left shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60",
+              ? "h-auto w-full flex-col justify-center gap-0 rounded-xl border border-border/60 bg-card/80 px-1.5 py-2.5 shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60"
+              : "h-auto w-full justify-start gap-2.5 rounded-xl border border-border/60 bg-card/80 px-3 py-2.5 text-left shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60",
             className,
           )}
           aria-expanded={open}
@@ -65,7 +65,7 @@ export function WorkspaceSwitcher({
           <span
             className={cn(
               "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-foreground font-semibold text-background dark:bg-foreground dark:text-background",
-              compactIconOnly ? "size-9 text-[14px]" : "size-8 text-[13px]",
+              compactIconOnly ? "size-11 text-[16.8px]" : "size-10 text-[15.6px]",
             )}
             aria-hidden={!!tenant.image}
           >
@@ -84,13 +84,13 @@ export function WorkspaceSwitcher({
           {!compactIconOnly ? (
             <>
               <span className="min-w-0 flex-1 text-left">
-                <span className="block truncate text-[13px] font-semibold leading-tight tracking-tight">
+                <span className="block truncate text-[15.6px] font-semibold leading-tight tracking-tight">
                   {tenant.name}
                 </span>
               </span>
               <ChevronDown
                 className={cn(
-                  "size-4 shrink-0 text-muted-foreground opacity-70 transition-transform",
+                  "size-[19px] shrink-0 text-muted-foreground opacity-70 transition-transform",
                   open && "rotate-180",
                 )}
                 strokeWidth={2}

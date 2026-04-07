@@ -13,10 +13,11 @@ import { ChevronsLeft } from "lucide-react";
 const LS_WIDTH = "menve.sidebar.width";
 const LS_COLLAPSED = "menve.sidebar.collapsed";
 
-const WIDTH_DEFAULT = 216;
-const WIDTH_MIN = 200;
-const WIDTH_MAX = 380;
-const WIDTH_COLLAPSED = 80;
+/** +20% vs 216 / 200 / 380 / 80 */
+const WIDTH_DEFAULT = 259;
+const WIDTH_MIN = 240;
+const WIDTH_MAX = 456;
+const WIDTH_COLLAPSED = 96;
 const RESIZE_HANDLE_W = 10;
 
 function readStoredWidth(): number {
@@ -163,18 +164,18 @@ export function DashboardShell({
               />
             </div>
           ) : (
-            <div className="flex min-w-0 items-start gap-1">
+            <div className="flex min-w-0 items-start gap-1.5">
               <WorkspaceSwitcher tenant={tenant} className="min-w-0 flex-1" />
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className="mt-0.5 size-9 shrink-0 rounded-lg border-border/60 bg-card/60 shadow-sm dark:border-border/50"
+                className="mt-0.5 size-11 shrink-0 rounded-lg border-border/60 bg-card/60 shadow-sm dark:border-border/50"
                 aria-label="Recolher barra lateral"
                 title="Recolher barra lateral"
                 onClick={() => setCollapsedSafe(true)}
               >
-                <ChevronsLeft className="size-4 opacity-80" strokeWidth={2} />
+                <ChevronsLeft className="size-[19px] opacity-80" strokeWidth={2} />
               </Button>
             </div>
           )}

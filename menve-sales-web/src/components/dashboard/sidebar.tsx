@@ -67,10 +67,10 @@ export function Sidebar({
 
   const linkClass = (active: boolean) =>
     cn(
-      "flex items-center rounded-lg text-[13px] font-medium transition-colors",
+      "flex items-center rounded-lg text-[15.6px] font-medium leading-snug transition-colors",
       collapsed
-        ? "justify-center px-2 py-2"
-        : "gap-2.5 px-2.5 py-2",
+        ? "justify-center px-2 py-2.5"
+        : "gap-3 px-3 py-2.5",
       active
         ? "bg-foreground/[0.06] text-foreground dark:bg-white/[0.08]"
         : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground dark:hover:bg-white/[0.05]",
@@ -90,15 +90,15 @@ export function Sidebar({
               type="button"
               variant="outline"
               size="icon"
-              className="mb-1 size-9 shrink-0 rounded-lg border-border/60 bg-card/60 shadow-sm dark:border-border/50"
+              className="mb-1 size-11 shrink-0 rounded-lg border-border/60 bg-card/60 shadow-sm dark:border-border/50"
               aria-label="Expandir barra lateral"
               title="Expandir barra lateral"
               onClick={() => onRequestExpand?.()}
             >
-              <ChevronsRight className="size-4 opacity-80" strokeWidth={2} />
+              <ChevronsRight className="size-[19px] opacity-80" strokeWidth={2} />
             </Button>
             <div
-              className="mb-1.5 h-px w-8 shrink-0 bg-border/50 dark:bg-border/40"
+              className="mb-1.5 h-px w-10 shrink-0 bg-border/50 dark:bg-border/40"
               aria-hidden
             />
           </>
@@ -112,7 +112,7 @@ export function Sidebar({
               pathname === href || pathname.startsWith(href + "/"),
             )}
           >
-            <Icon className="size-[15px] shrink-0 opacity-80" strokeWidth={1.75} />
+            <Icon className="size-[18px] shrink-0 opacity-80" strokeWidth={1.75} />
             {collapsed ? (
               <span className="sr-only">{label}</span>
             ) : (
@@ -126,7 +126,7 @@ export function Sidebar({
             title={collapsed ? "Admin" : undefined}
             className={linkClass(pathname.startsWith("/admin"))}
           >
-            <Shield className="size-[15px] shrink-0 opacity-80" strokeWidth={1.75} />
+            <Shield className="size-[18px] shrink-0 opacity-80" strokeWidth={1.75} />
             {collapsed ? <span className="sr-only">Admin</span> : "Admin"}
           </Link>
         ) : null}
@@ -135,7 +135,7 @@ export function Sidebar({
         <div
           className={cn(
             "space-y-3",
-            collapsed ? "flex flex-col items-center px-1.5 py-2" : "p-3",
+            collapsed ? "flex flex-col items-center px-2 py-2.5" : "p-3.5",
           )}
         >
           <div
@@ -146,8 +146,8 @@ export function Sidebar({
           >
             <div
               className={cn(
-                "relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/60 bg-muted/50 text-[14px] font-semibold text-foreground dark:border-border/50",
-                collapsed ? "size-9 text-[12px]" : "size-10",
+                "relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/60 bg-muted/50 font-semibold text-foreground dark:border-border/50",
+                collapsed ? "size-11 text-[14.5px]" : "size-12 text-[17px]",
               )}
               aria-hidden={!!userImage}
               title={collapsed ? displayName : undefined}
@@ -168,11 +168,11 @@ export function Sidebar({
             </div>
             {!collapsed ? (
               <div className="min-w-0 flex-1 pt-0.5">
-                <p className="truncate text-[13px] font-medium leading-tight text-foreground">
+                <p className="truncate text-[15.6px] font-medium leading-tight text-foreground">
                   {displayName}
                 </p>
                 {subEmail ? (
-                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  <p className="mt-0.5 truncate text-[13.2px] text-muted-foreground">
                     {subEmail}
                   </p>
                 ) : null}
@@ -182,7 +182,7 @@ export function Sidebar({
 
           <div className={cn("space-y-1.5", collapsed && "w-full")}>
             {!collapsed ? (
-              <p className="px-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="px-0.5 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">
                 Aparência
               </p>
             ) : null}
@@ -201,8 +201,8 @@ export function Sidebar({
             className={cn(
               "text-muted-foreground hover:text-foreground",
               collapsed
-                ? "size-9 shrink-0 p-0"
-                : "h-8 w-full text-[13px]",
+                ? "size-11 shrink-0 p-0"
+                : "h-10 w-full text-[15.6px]",
             )}
             type="button"
             onClick={() => signOut({ callbackUrl: "/login" })}
@@ -210,7 +210,7 @@ export function Sidebar({
             aria-label="Sair"
           >
             {collapsed ? (
-              <LogOut className="size-[15px] opacity-80" strokeWidth={1.75} />
+              <LogOut className="size-[18px] opacity-80" strokeWidth={1.75} />
             ) : (
               "Sair"
             )}
