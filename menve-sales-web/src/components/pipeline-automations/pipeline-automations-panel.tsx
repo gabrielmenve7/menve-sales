@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
+import type { Dispatch, SetStateAction } from "react";
 import { useMemo, useState, useTransition } from "react";
 import {
   createPipelineAutomationRule,
@@ -85,12 +86,6 @@ const TRIGGER_GROUPS: { heading: string; types: PipelineAutomationTriggerType[] 
       ],
     },
   ];
-
-/** Tipos de ação persistidos na API (hoje só MOVE_TO_STAGE; lista pronta para expansão). */
-const AUTOMATION_ACTION_OPTIONS: {
-  type: PipelineAutomationAction["type"];
-  label: string;
-}[] = [{ type: "MOVE_TO_STAGE", label: "Alterar status (mover etapa)" }];
 
 function triggerIcon(t: PipelineAutomationTriggerType) {
   switch (t) {
@@ -265,6 +260,329 @@ function selectOptionsFromCustomField(field: CustomField | undefined) {
   });
 }
 
+export type AutomationKindFieldBundle = {
+  stageFromId: string;
+  setStageFromId: (v: string) => void;
+  stageToId: string;
+  setStageToId: (v: string) => void;
+  legacyStageFilterId: string;
+  setLegacyStageFilterId: (v: string) => void;
+  selectedCampaignIds: string[];
+  setSelectedCampaignIds: Dispatch<SetStateAction<string[]>>;
+  customFieldKey: string;
+  setCustomFieldKey: (v: string) => void;
+  fromCustomStr: string;
+  setFromCustomStr: (v: string) => void;
+  toCustomStr: string;
+  setToCustomStr: (v: string) => void;
+  tagFilterId: string;
+  setTagFilterId: (v: string) => void;
+};
+
+/** Campos condicionais iguais para gatilho ou ação (mesmos tipos que o acionamento). */
+function AutomationKindConfigFields({
+  kind,
+  bundle,
+  isDialog,
+  lbl,
+  sel,
+  stages,
+  campaignSources,
+  dealCustomFieldDefs,
+  sortedTags,
+}: {
+  kind: PipelineAutomationTriggerType;
+  bundle: AutomationKindFieldBundle;
+  isDialog: boolean;
+  lbl: string;
+  sel: string;
+  stages: Stage[];
+  campaignSources: { id: string; name: string }[];
+  dealCustomFieldDefs: CustomField[];
+  sortedTags: { id: string; name: string }[];
+}) {
+  const {
+    stageFromId,
+    setStageFromId,
+    stageToId,
+    setStageToId,
+    legacyStageFilterId,
+    setLegacyStageFilterId,
+    selectedCampaignIds,
+    setSelectedCampaignIds,
+    customFieldKey,
+    setCustomFieldKey,
+    fromCustomStr,
+    setFromCustomStr,
+    toCustomStr,
+    setToCustomStr,
+    tagFilterId,
+    setTagFilterId,
+  } = bundle;
+
+  const selectedField = useMemo(
+    () => dealCustomFieldDefs.find((d) => d.key === customFieldKey),
+    [dealCustomFieldDefs, customFieldKey],
+  );
+  const fieldSelectOptions = useMemo(
+    () => selectOptionsFromCustomField(selectedField),
+    [selectedField],
+  );
+
+  return (
+    <div className="mt-4 space-y-3">
+      {kind === "DEAL_STAGE_TRANSITION" ? (
+        <>
+          <div className="space-y-1">
+            <p className={lbl}>De</p>
+            <select
+              className={sel}
+              value={stageFromId}
+              onChange={(e) => setStageFromId(e.target.value)}
+              aria-label="Etapa de origem"
+            >
+              <option value="">Qualquer status</option>
+              {stages.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <p className={lbl}>Para</p>
+            <select
+              className={sel}
+              value={stageToId}
+              onChange={(e) => setStageToId(e.target.value)}
+              aria-label="Etapa de destino"
+            >
+              <option value="">Qualquer status</option>
+              {stages.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      ) : null}
+
+      {kind === "DEAL_ENTERED_STAGE" || kind === "DEAL_LEFT_STAGE" ? (
+        <div className="space-y-1">
+          <p className={lbl}>
+            {kind === "DEAL_ENTERED_STAGE"
+              ? "Etapa de destino (opcional)"
+              : "Etapa de origem (opcional)"}
+          </p>
+          <select
+            className={sel}
+            value={legacyStageFilterId}
+            onChange={(e) => setLegacyStageFilterId(e.target.value)}
+            aria-label="Filtro de etapa"
+          >
+            <option value="">Qualquer etapa</option>
+            {stages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {kind === "DEAL_CREATED" ? (
+        <div className="space-y-2">
+          <p className={lbl}>Origens de criação (vazio = todas)</p>
+          <div
+            className={cn(
+              "max-h-36 space-y-1.5 overflow-y-auto rounded-md p-2",
+              isDialog
+                ? "border border-zinc-800/80 bg-zinc-950/30"
+                : "border border-border/60 bg-background shadow-sm",
+            )}
+          >
+            {campaignSources.length === 0 ? (
+              <p
+                className={cn(
+                  "text-[12px]",
+                  isDialog ? "text-zinc-500" : "text-muted-foreground",
+                )}
+              >
+                Nenhuma origem cadastrada.
+              </p>
+            ) : (
+              campaignSources.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex cursor-pointer items-center gap-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    className={cn(
+                      "rounded",
+                      isDialog
+                        ? "border-zinc-600 bg-zinc-900"
+                        : "border-input",
+                    )}
+                    checked={selectedCampaignIds.includes(c.id)}
+                    onChange={(e) => {
+                      setSelectedCampaignIds((prev) =>
+                        e.target.checked
+                          ? [...prev, c.id]
+                          : prev.filter((x) => x !== c.id),
+                      );
+                    }}
+                  />
+                  <span className="truncate">{c.name}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {kind === "DEAL_CUSTOM_FIELD_CHANGED" ? (
+        <>
+          <div className="space-y-1">
+            <p className={lbl}>Campo</p>
+            <select
+              className={sel}
+              value={customFieldKey}
+              onChange={(e) => {
+                setCustomFieldKey(e.target.value);
+                setFromCustomStr("");
+                setToCustomStr("");
+              }}
+              aria-label="Campo personalizado"
+            >
+              <option value="">Selecionar…</option>
+              {dealCustomFieldDefs.map((d) => (
+                <option key={d.id} value={d.key}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedField?.fieldType === "SELECT" &&
+          fieldSelectOptions.length > 0 ? (
+            <>
+              <div className="space-y-1">
+                <p className={lbl}>De (opcional)</p>
+                <select
+                  className={sel}
+                  value={fromCustomStr}
+                  onChange={(e) => setFromCustomStr(e.target.value)}
+                  aria-label="Valor anterior"
+                >
+                  <option value="">Qualquer</option>
+                  {fieldSelectOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <p className={lbl}>Para (opcional)</p>
+                <select
+                  className={sel}
+                  value={toCustomStr}
+                  onChange={(e) => setToCustomStr(e.target.value)}
+                  aria-label="Novo valor"
+                >
+                  <option value="">Qualquer</option>
+                  {fieldSelectOptions.map((o) => (
+                    <option key={`t-${o.value}`} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <p className={lbl}>
+                  Valor anterior (opcional, JSON ou texto)
+                </p>
+                <Input
+                  value={fromCustomStr}
+                  onChange={(e) => setFromCustomStr(e.target.value)}
+                  placeholder="Vazio = qualquer"
+                  className={cn(
+                    "h-10 text-sm shadow-none",
+                    isDialog
+                      ? "border-zinc-700/90 bg-zinc-900/45 text-zinc-100 placeholder:text-zinc-600"
+                      : "border-border/50 bg-background shadow-sm",
+                  )}
+                />
+              </div>
+              <div className="space-y-1">
+                <p className={lbl}>Novo valor (opcional)</p>
+                <Input
+                  value={toCustomStr}
+                  onChange={(e) => setToCustomStr(e.target.value)}
+                  placeholder="Vazio = qualquer"
+                  className={cn(
+                    "h-10 text-sm shadow-none",
+                    isDialog
+                      ? "border-zinc-700/90 bg-zinc-900/45 text-zinc-100 placeholder:text-zinc-600"
+                      : "border-border/50 bg-background shadow-sm",
+                  )}
+                />
+              </div>
+            </>
+          )}
+        </>
+      ) : null}
+
+      {(kind === "CONTACT_TAG_ADDED" || kind === "CONTACT_TAG_REMOVED") && (
+        <div className="space-y-1">
+          <p className={lbl}>Tag (opcional)</p>
+          <select
+            className={sel}
+            value={tagFilterId}
+            onChange={(e) => setTagFilterId(e.target.value)}
+            aria-label="Filtrar por tag"
+          >
+            <option value="">Qualquer tag</option>
+            {sortedTags.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <p
+            className={cn(
+              "text-[11px] leading-snug",
+              isDialog ? "text-zinc-500" : "text-muted-foreground",
+            )}
+          >
+            {kind === "CONTACT_TAG_ADDED"
+              ? "Para oportunidades abertas deste funil quando a tag é aplicada no contato vinculado."
+              : "Para oportunidades abertas deste funil quando a tag é removida do contato vinculado."}
+          </p>
+        </div>
+      )}
+
+      {(kind === "DEAL_ASSIGNEE_ASSIGNED" ||
+        kind === "DEAL_ASSIGNEE_REMOVED" ||
+        kind === "DEAL_MARKED_WON" ||
+        kind === "DEAL_MARKED_LOST") && (
+        <p
+          className={cn(
+            "text-[12px]",
+            isDialog ? "text-zinc-500" : "text-muted-foreground",
+          )}
+        >
+          Sem filtros adicionais.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function PipelineAutomationsPanel({
   pipeline,
   rulesRaw,
@@ -315,24 +633,27 @@ export function PipelineAutomationsPanel({
   const [pending, startTransition] = useTransition();
   const [triggerMenuOpen, setTriggerMenuOpen] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState("");
-  const [actionType, setActionType] =
-    useState<PipelineAutomationAction["type"]>("MOVE_TO_STAGE");
+  const [actionKindType, setActionKindType] =
+    useState<PipelineAutomationTriggerType>("DEAL_STAGE_TRANSITION");
+  const [actionStageFromId, setActionStageFromId] = useState("");
+  const [actionStageToId, setActionStageToId] = useState("");
+  const [actionLegacyStageFilterId, setActionLegacyStageFilterId] =
+    useState("");
+  const [actionSelectedCampaignIds, setActionSelectedCampaignIds] = useState<
+    string[]
+  >([]);
+  const [actionCustomFieldKey, setActionCustomFieldKey] = useState("");
+  const [actionFromCustomStr, setActionFromCustomStr] = useState("");
+  const [actionToCustomStr, setActionToCustomStr] = useState("");
+  const [actionTagFilterId, setActionTagFilterId] = useState("");
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [actionSearch, setActionSearch] = useState("");
 
   const [openRunsId, setOpenRunsId] = useState<string | null>(null);
   const [runsByRule, setRunsByRule] = useState<
     Record<string, PipelineAutomationRunRow[]>
   >({});
   const [runsLoading, setRunsLoading] = useState<string | null>(null);
-
-  const selectedField = useMemo(
-    () => dealCustomFieldDefs.find((d) => d.key === customFieldKey),
-    [dealCustomFieldDefs, customFieldKey],
-  );
-  const fieldSelectOptions = useMemo(
-    () => selectOptionsFromCustomField(selectedField),
-    [selectedField],
-  );
 
   const filteredTriggerGroups = useMemo(() => {
     const q = triggerSearch.trim().toLowerCase();
@@ -345,12 +666,16 @@ export function PipelineAutomationsPanel({
     })).filter((g) => g.types.length > 0);
   }, [triggerSearch]);
 
-  const actionTypeLabel = useMemo(
-    () =>
-      AUTOMATION_ACTION_OPTIONS.find((o) => o.type === actionType)?.label ??
-      actionType,
-    [actionType],
-  );
+  const filteredActionGroups = useMemo(() => {
+    const q = actionSearch.trim().toLowerCase();
+    if (!q) return TRIGGER_GROUPS;
+    return TRIGGER_GROUPS.map((g) => ({
+      ...g,
+      types: g.types.filter((t) =>
+        PIPELINE_AUTOMATION_TRIGGER_LABELS[t].toLowerCase().includes(q),
+      ),
+    })).filter((g) => g.types.length > 0);
+  }, [actionSearch]);
 
   function buildTriggerFilter(): PipelineAutomationTriggerFilter | null {
     const out: PipelineAutomationTriggerFilter = {};
@@ -397,12 +722,27 @@ export function PipelineAutomationsPanel({
       setFormError("Informe um nome para a automação.");
       return;
     }
-    if (!targetStageId) {
-      setFormError("Selecione a etapa de destino da ação.");
+    if (triggerType === "DEAL_CUSTOM_FIELD_CHANGED" && !customFieldKey.trim()) {
+      setFormError("Selecione o campo personalizado no gatilho.");
       return;
     }
-    if (triggerType === "DEAL_CUSTOM_FIELD_CHANGED" && !customFieldKey.trim()) {
-      setFormError("Selecione o campo personalizado.");
+    if (
+      actionKindType === "DEAL_CUSTOM_FIELD_CHANGED" &&
+      !actionCustomFieldKey.trim()
+    ) {
+      setFormError("Selecione o campo personalizado na ação.");
+      return;
+    }
+    const moveStageId =
+      actionKindType === "DEAL_STAGE_TRANSITION"
+        ? actionStageToId.trim()
+        : targetStageId.trim();
+    if (!moveStageId) {
+      setFormError(
+        actionKindType === "DEAL_STAGE_TRANSITION"
+          ? 'Selecione "Para" na ação (etapa de destino).'
+          : "Selecione a etapa de destino da ação (Status).",
+      );
       return;
     }
     const triggerFilter = buildTriggerFilter();
@@ -413,7 +753,7 @@ export function PipelineAutomationsPanel({
           name: name.trim(),
           triggerType,
           triggerFilter,
-          actions: [{ type: actionType, stageId: targetStageId }],
+          actions: [{ type: "MOVE_TO_STAGE", stageId: moveStageId }],
         });
         onRulesChanged?.();
         setName("");
@@ -427,7 +767,16 @@ export function PipelineAutomationsPanel({
         setToCustomStr("");
         setTagFilterId("");
         setTargetStageId(stages[0]?.id ?? "");
-        setActionType("MOVE_TO_STAGE");
+        setActionKindType("DEAL_STAGE_TRANSITION");
+        setActionStageFromId("");
+        setActionStageToId("");
+        setActionLegacyStageFilterId("");
+        setActionSelectedCampaignIds([]);
+        setActionCustomFieldKey("");
+        setActionFromCustomStr("");
+        setActionToCustomStr("");
+        setActionTagFilterId("");
+        setActionSearch("");
       } catch (err) {
         setFormError(
           err instanceof Error ? err.message : "Não foi possível salvar.",
@@ -460,6 +809,45 @@ export function PipelineAutomationsPanel({
   }
 
   const TriggerIcon = triggerIcon(triggerType);
+  const ActionIcon = triggerIcon(actionKindType);
+
+  const triggerFieldBundle: AutomationKindFieldBundle = {
+    stageFromId,
+    setStageFromId,
+    stageToId,
+    setStageToId,
+    legacyStageFilterId,
+    setLegacyStageFilterId,
+    selectedCampaignIds,
+    setSelectedCampaignIds,
+    customFieldKey,
+    setCustomFieldKey,
+    fromCustomStr,
+    setFromCustomStr,
+    toCustomStr,
+    setToCustomStr,
+    tagFilterId,
+    setTagFilterId,
+  };
+
+  const actionFieldBundle: AutomationKindFieldBundle = {
+    stageFromId: actionStageFromId,
+    setStageFromId: setActionStageFromId,
+    stageToId: actionStageToId,
+    setStageToId: setActionStageToId,
+    legacyStageFilterId: actionLegacyStageFilterId,
+    setLegacyStageFilterId: setActionLegacyStageFilterId,
+    selectedCampaignIds: actionSelectedCampaignIds,
+    setSelectedCampaignIds: setActionSelectedCampaignIds,
+    customFieldKey: actionCustomFieldKey,
+    setCustomFieldKey: setActionCustomFieldKey,
+    fromCustomStr: actionFromCustomStr,
+    setFromCustomStr: setActionFromCustomStr,
+    toCustomStr: actionToCustomStr,
+    setToCustomStr: setActionToCustomStr,
+    tagFilterId: actionTagFilterId,
+    setTagFilterId: setActionTagFilterId,
+  };
   const formShell =
     "rounded-lg border border-border/60 bg-muted/20 p-4 shadow-sm dark:bg-muted/10";
   const isDialog = variant === "dialog";
@@ -713,261 +1101,17 @@ export function PipelineAutomationsPanel({
                   </PopoverContent>
                 </Popover>
 
-                <div className="mt-4 space-y-3">
-                  {triggerType === "DEAL_STAGE_TRANSITION" ? (
-                    <>
-                      <div className="space-y-1">
-                        <p className={lbl}>De</p>
-                        <select
-                          className={sel}
-                          value={stageFromId}
-                          onChange={(e) => setStageFromId(e.target.value)}
-                          aria-label="Etapa de origem"
-                        >
-                          <option value="">Qualquer status</option>
-                          {stages.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <p className={lbl}>Para</p>
-                        <select
-                          className={sel}
-                          value={stageToId}
-                          onChange={(e) => setStageToId(e.target.value)}
-                          aria-label="Etapa de destino do gatilho"
-                        >
-                          <option value="">Qualquer status</option>
-                          {stages.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
-                  ) : null}
-
-                  {triggerType === "DEAL_ENTERED_STAGE" ||
-                  triggerType === "DEAL_LEFT_STAGE" ? (
-                    <div className="space-y-1">
-                      <p className={lbl}>
-                        {triggerType === "DEAL_ENTERED_STAGE"
-                          ? "Etapa de destino (opcional)"
-                          : "Etapa de origem (opcional)"}
-                      </p>
-                      <select
-                        className={sel}
-                        value={legacyStageFilterId}
-                        onChange={(e) => setLegacyStageFilterId(e.target.value)}
-                        aria-label="Filtro de etapa"
-                      >
-                        <option value="">Qualquer etapa</option>
-                        {stages.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : null}
-
-                  {triggerType === "DEAL_CREATED" ? (
-                    <div className="space-y-2">
-                      <p className={lbl}>
-                        Origens de criação (vazio = todas)
-                      </p>
-                      <div
-                        className={cn(
-                          "max-h-36 space-y-1.5 overflow-y-auto rounded-md p-2",
-                          isDialog
-                            ? "border border-zinc-800/80 bg-zinc-950/30"
-                            : "border border-border/60 bg-background shadow-sm",
-                        )}
-                      >
-                        {campaignSources.length === 0 ? (
-                          <p
-                            className={cn(
-                              "text-[12px]",
-                              isDialog ? "text-zinc-500" : "text-muted-foreground",
-                            )}
-                          >
-                            Nenhuma origem cadastrada.
-                          </p>
-                        ) : (
-                          campaignSources.map((c) => (
-                            <label
-                              key={c.id}
-                              className="flex cursor-pointer items-center gap-2 text-sm"
-                            >
-                              <input
-                                type="checkbox"
-                                className={cn(
-                                  "rounded",
-                                  isDialog
-                                    ? "border-zinc-600 bg-zinc-900"
-                                    : "border-input",
-                                )}
-                                checked={selectedCampaignIds.includes(c.id)}
-                                onChange={(e) => {
-                                  setSelectedCampaignIds((prev) =>
-                                    e.target.checked
-                                      ? [...prev, c.id]
-                                      : prev.filter((x) => x !== c.id),
-                                  );
-                                }}
-                              />
-                              <span className="truncate">{c.name}</span>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {triggerType === "DEAL_CUSTOM_FIELD_CHANGED" ? (
-                    <>
-                      <div className="space-y-1">
-                        <p className={lbl}>Campo</p>
-                        <select
-                          className={sel}
-                          value={customFieldKey}
-                          onChange={(e) => {
-                            setCustomFieldKey(e.target.value);
-                            setFromCustomStr("");
-                            setToCustomStr("");
-                          }}
-                          aria-label="Campo personalizado"
-                        >
-                          <option value="">Selecionar…</option>
-                          {dealCustomFieldDefs.map((d) => (
-                            <option key={d.id} value={d.key}>
-                              {d.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      {selectedField?.fieldType === "SELECT" &&
-                      fieldSelectOptions.length > 0 ? (
-                        <>
-                          <div className="space-y-1">
-                            <p className={lbl}>De (opcional)</p>
-                            <select
-                              className={sel}
-                              value={fromCustomStr}
-                              onChange={(e) => setFromCustomStr(e.target.value)}
-                              aria-label="Valor anterior"
-                            >
-                              <option value="">Qualquer</option>
-                              {fieldSelectOptions.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <p className={lbl}>Para (opcional)</p>
-                            <select
-                              className={sel}
-                              value={toCustomStr}
-                              onChange={(e) => setToCustomStr(e.target.value)}
-                              aria-label="Novo valor"
-                            >
-                              <option value="">Qualquer</option>
-                              {fieldSelectOptions.map((o) => (
-                                <option key={`t-${o.value}`} value={o.value}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="space-y-1">
-                            <p className={lbl}>
-                              Valor anterior (opcional, JSON ou texto)
-                            </p>
-                            <Input
-                              value={fromCustomStr}
-                              onChange={(e) => setFromCustomStr(e.target.value)}
-                              placeholder="Vazio = qualquer"
-                              className={cn(
-                                "h-10 text-sm shadow-none",
-                                isDialog
-                                  ? "border-zinc-700/90 bg-zinc-900/45 text-zinc-100 placeholder:text-zinc-600"
-                                  : "border-border/50 bg-background shadow-sm",
-                              )}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <p className={lbl}>
-                              Novo valor (opcional)
-                            </p>
-                            <Input
-                              value={toCustomStr}
-                              onChange={(e) => setToCustomStr(e.target.value)}
-                              placeholder="Vazio = qualquer"
-                              className={cn(
-                                "h-10 text-sm shadow-none",
-                                isDialog
-                                  ? "border-zinc-700/90 bg-zinc-900/45 text-zinc-100 placeholder:text-zinc-600"
-                                  : "border-border/50 bg-background shadow-sm",
-                              )}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </>
-                  ) : null}
-
-                  {(triggerType === "CONTACT_TAG_ADDED" ||
-                    triggerType === "CONTACT_TAG_REMOVED") && (
-                    <div className="space-y-1">
-                      <p className={lbl}>Tag (opcional)</p>
-                      <select
-                        className={sel}
-                        value={tagFilterId}
-                        onChange={(e) => setTagFilterId(e.target.value)}
-                        aria-label="Filtrar por tag"
-                      >
-                        <option value="">Qualquer tag</option>
-                        {sortedTags.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                      <p
-                        className={cn(
-                          "text-[11px] leading-snug",
-                          isDialog ? "text-zinc-500" : "text-muted-foreground",
-                        )}
-                      >
-                        Dispara para oportunidades abertas deste funil quando a
-                        tag é aplicada ou removida no contato vinculado.
-                      </p>
-                    </div>
-                  )}
-
-                  {(triggerType === "DEAL_ASSIGNEE_ASSIGNED" ||
-                    triggerType === "DEAL_ASSIGNEE_REMOVED" ||
-                    triggerType === "DEAL_MARKED_WON" ||
-                    triggerType === "DEAL_MARKED_LOST") && (
-                    <p
-                      className={cn(
-                        "text-[12px]",
-                        isDialog ? "text-zinc-500" : "text-muted-foreground",
-                      )}
-                    >
-                      Sem filtros adicionais.
-                    </p>
-                  )}
-                </div>
+                <AutomationKindConfigFields
+                  kind={triggerType}
+                  bundle={triggerFieldBundle}
+                  isDialog={isDialog}
+                  lbl={lbl}
+                  sel={sel}
+                  stages={stages}
+                  campaignSources={campaignSources}
+                  dealCustomFieldDefs={dealCustomFieldDefs}
+                  sortedTags={sortedTags}
+                />
               </div>
 
               <div className="flex justify-center pt-2">
@@ -1067,7 +1211,7 @@ export function PipelineAutomationsPanel({
                       aria-label="Tipo de ação"
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <Target
+                        <ActionIcon
                           className={cn(
                             "size-4 shrink-0",
                             isDialog
@@ -1077,7 +1221,9 @@ export function PipelineAutomationsPanel({
                           strokeWidth={2}
                           aria-hidden
                         />
-                        <span className="truncate">{actionTypeLabel}</span>
+                        <span className="truncate">
+                          {PIPELINE_AUTOMATION_TRIGGER_LABELS[actionKindType]}
+                        </span>
                       </span>
                       <ChevronDown
                         className={cn(
@@ -1097,92 +1243,139 @@ export function PipelineAutomationsPanel({
                         : "w-[min(100vw-2rem,20rem)] border-border/60",
                     )}
                   >
+                    <div
+                      className={cn(
+                        "border-b p-2",
+                        isDialog ? "border-zinc-800" : "border-border/40",
+                      )}
+                    >
+                      <div className="relative">
+                        <Search
+                          className={cn(
+                            "absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2",
+                            isDialog ? "text-zinc-500" : "text-muted-foreground",
+                          )}
+                        />
+                        <Input
+                          value={actionSearch}
+                          onChange={(e) => setActionSearch(e.target.value)}
+                          placeholder="Pesquisar…"
+                          className={cn(
+                            "h-9 pl-8 text-sm shadow-none",
+                            isDialog
+                              ? "border-zinc-700 bg-zinc-950/80 text-zinc-100 placeholder:text-zinc-600"
+                              : "border-border/50 bg-background placeholder:text-muted-foreground/70",
+                          )}
+                        />
+                      </div>
+                    </div>
                     <div className="max-h-64 overflow-y-auto py-1">
-                      <p
-                        className={cn(
-                          "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
-                          isDialog ? "text-zinc-500" : "text-muted-foreground",
-                        )}
-                      >
-                        Ações
-                      </p>
-                      {AUTOMATION_ACTION_OPTIONS.map((opt) => {
-                        const selected = opt.type === actionType;
-                        return (
-                          <button
-                            key={opt.type}
-                            type="button"
+                      {filteredActionGroups.map((group) => (
+                        <div key={group.heading}>
+                          <p
                             className={cn(
-                              "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
-                              isDialog
-                                ? cn(
-                                    "hover:bg-zinc-800/80",
-                                    selected && "bg-zinc-800",
-                                  )
-                                : cn(
-                                    "hover:bg-muted/50",
-                                    selected && "bg-muted/40",
-                                  ),
+                              "px-3 py-2 text-[10px] font-semibold uppercase tracking-wide",
+                              isDialog ? "text-zinc-500" : "text-muted-foreground",
                             )}
-                            onClick={() => {
-                              setActionType(opt.type);
-                              setActionMenuOpen(false);
-                            }}
                           >
-                            <Target
-                              className={cn(
-                                "size-4 shrink-0",
-                                isDialog
-                                  ? "text-zinc-400"
-                                  : "text-muted-foreground",
-                              )}
-                              strokeWidth={2}
-                              aria-hidden
-                            />
-                            <span className="flex-1 truncate">{opt.label}</span>
-                            {selected ? (
-                              <span
-                                className={
-                                  isDialog ? "text-zinc-200" : "text-foreground"
-                                }
+                            {group.heading}
+                          </p>
+                          {group.types.map((t) => {
+                            const Icon = triggerIcon(t);
+                            const selected = t === actionKindType;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                className={cn(
+                                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm",
+                                  isDialog
+                                    ? cn(
+                                        "hover:bg-zinc-800/80",
+                                        selected && "bg-zinc-800",
+                                      )
+                                    : cn(
+                                        "hover:bg-muted/50",
+                                        selected && "bg-muted/40",
+                                      ),
+                                )}
+                                onClick={() => {
+                                  setActionKindType(t);
+                                  setActionMenuOpen(false);
+                                  setActionSearch("");
+                                }}
                               >
-                                ✓
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
+                                <Icon
+                                  className={cn(
+                                    "size-4 shrink-0",
+                                    isDialog
+                                      ? "text-zinc-400"
+                                      : "text-muted-foreground",
+                                  )}
+                                  strokeWidth={2}
+                                  aria-hidden
+                                />
+                                <span className="flex-1 truncate">
+                                  {PIPELINE_AUTOMATION_TRIGGER_LABELS[t]}
+                                </span>
+                                {selected ? (
+                                  <span
+                                    className={
+                                      isDialog ? "text-zinc-200" : "text-foreground"
+                                    }
+                                  >
+                                    ✓
+                                  </span>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
                   </PopoverContent>
                 </Popover>
 
+                <AutomationKindConfigFields
+                  kind={actionKindType}
+                  bundle={actionFieldBundle}
+                  isDialog={isDialog}
+                  lbl={lbl}
+                  sel={sel}
+                  stages={stages}
+                  campaignSources={campaignSources}
+                  dealCustomFieldDefs={dealCustomFieldDefs}
+                  sortedTags={sortedTags}
+                />
+
                 <div className="mt-4 space-y-3">
-                  <div className="space-y-1">
-                    <p className={lbl}>
-                      Status
-                      <span
-                        className={
-                          isDialog ? "text-rose-400" : "text-destructive"
-                        }
+                  {actionKindType !== "DEAL_STAGE_TRANSITION" ? (
+                    <div className="space-y-1">
+                      <p className={lbl}>
+                        Status
+                        <span
+                          className={
+                            isDialog ? "text-rose-400" : "text-destructive"
+                          }
+                        >
+                          *
+                        </span>
+                      </p>
+                      <select
+                        className={sel}
+                        value={targetStageId}
+                        onChange={(e) => setTargetStageId(e.target.value)}
+                        aria-label="Etapa de destino da ação"
                       >
-                        *
-                      </span>
-                    </p>
-                    <select
-                      className={sel}
-                      value={targetStageId}
-                      onChange={(e) => setTargetStageId(e.target.value)}
-                      aria-label="Etapa de destino da ação"
-                      disabled={actionType !== "MOVE_TO_STAGE"}
-                    >
-                      <option value="">Selecionar um status</option>
-                      {stages.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                        <option value="">Selecionar um status</option>
+                        {stages.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
                   <div
                     className={cn(
                       "flex gap-2 rounded-md border px-3 py-2 text-[11px] leading-snug",
@@ -1193,8 +1386,20 @@ export function PipelineAutomationsPanel({
                   >
                     <span aria-hidden>⚠</span>
                     <span>
-                      A oportunidade será movida para a etapa escolhida. Se a
-                      etapa não existir mais, a regra pode falhar na execução.
+                      {actionKindType === "DEAL_STAGE_TRANSITION" ? (
+                        <>
+                          A oportunidade será movida para a etapa em{" "}
+                          <strong className="font-medium">Para</strong>. Se a
+                          etapa não existir mais, a regra pode falhar na execução.
+                        </>
+                      ) : (
+                        <>
+                          Por enquanto só é aplicado mover para a etapa em{" "}
+                          <strong className="font-medium">Status</strong>. Os
+                          demais campos acima espelham o tipo escolhido para
+                          quando a API suportar ações adicionais.
+                        </>
+                      )}
                     </span>
                   </div>
                 </div>
