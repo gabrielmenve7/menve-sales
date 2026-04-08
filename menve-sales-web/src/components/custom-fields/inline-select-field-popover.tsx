@@ -58,7 +58,7 @@ const optionClearSelectedClass =
   "border-border/80 bg-background text-muted-foreground ring-1 ring-border/50 hover:bg-muted/70 dark:border-white/10 dark:bg-[#333333] dark:text-neutral-400 dark:ring-white/15 dark:hover:bg-[#3a3a3a]";
 
 const optionSelectedClass =
-  "border-primary bg-primary text-primary-foreground hover:bg-primary dark:border-blue-600 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-600";
+  "border-primary-solid bg-primary-solid text-primary-solid-fg hover:bg-primary-solid/90";
 
 type InlineSelectFieldRowProps = {
   field: CustomField;

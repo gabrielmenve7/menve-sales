@@ -214,7 +214,7 @@ function BarConfigToggle({
         onClick={() => onCheckedChange(!checked)}
         className={cn(
           "relative h-6 w-10 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          checked ? "bg-primary" : "bg-muted",
+          checked ? "bg-primary-solid" : "bg-muted",
         )}
       >
         <span

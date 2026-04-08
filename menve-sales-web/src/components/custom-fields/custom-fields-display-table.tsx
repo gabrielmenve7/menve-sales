@@ -85,7 +85,7 @@ export function formatCustomFieldCell(
           href={href}
           target="_blank"
           rel="noreferrer"
-          className="text-primary underline-offset-2 hover:underline"
+          className="text-primary-solid underline-offset-2 hover:underline"
         >
           {String(raw)}
         </a>

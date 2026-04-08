@@ -112,7 +112,7 @@ export function InboxStatusFilterMenu({
           <SlidersHorizontal className="size-4" />
           {hasActiveFilters ? (
             <span
-              className="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
+              className="absolute right-1 top-1 size-1.5 rounded-full bg-primary-solid"
               aria-hidden
             />
           ) : null}
@@ -139,7 +139,7 @@ export function InboxStatusFilterMenu({
             <List className="size-4 shrink-0 text-muted-foreground" />
             <span className="flex-1">Todos</span>
             {!hasActiveFilters ? (
-              <Check className="size-4 shrink-0 text-primary" />
+              <Check className="size-4 shrink-0 text-primary-solid" />
             ) : null}
           </button>
           {FILTER_ROWS.map((row) => {
@@ -159,7 +159,7 @@ export function InboxStatusFilterMenu({
                 <Icon className="size-4 shrink-0 text-muted-foreground" />
                 <span className="flex-1">{row.label}</span>
                 {checked ? (
-                  <Check className="size-4 shrink-0 text-primary" />
+                  <Check className="size-4 shrink-0 text-primary-solid" />
                 ) : null}
               </button>
             );

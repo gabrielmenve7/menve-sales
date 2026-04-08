@@ -368,7 +368,7 @@ export function PesquisaClient({
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full bg-primary transition-all"
+                  className="h-full bg-primary-solid transition-all"
                   style={{ width: `${progressPct}%` }}
                 />
               </div>

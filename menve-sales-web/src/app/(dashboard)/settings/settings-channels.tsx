@@ -1,10 +1,18 @@
 "use client";
 
 import type { WhatsAppConnection } from "@prisma/client";
-import { Loader2, Plus, Radio, RefreshCw, Trash2 } from "lucide-react";
+import { Copy, Loader2, Pencil, Plus, Radio, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createMetaChannel, createInstagramChannel } from "@/actions/channels";
+import {
+  fetchMetaEmbeddedSignupInfo,
+  fetchMetaOnboardingInfo,
+  patchMetaWhatsAppConnection,
+  testMetaWhatsAppConnection,
+  type MetaEmbeddedSignupInfo,
+  type MetaOnboardingInfo,
+} from "@/actions/whatsapp-meta";
 import {
   deleteWhatsAppConnection,
   pollEvolutionStatus,
@@ -92,12 +100,25 @@ export function SettingsChannels({
   const [refreshQrLoading, setRefreshQrLoading] = useState(false);
   const [reapplyWebhookId, setReapplyWebhookId] = useState<string | null>(null);
 
-  // Meta form
+  // Meta wizard + edição
   const [metaOpen, setMetaOpen] = useState(false);
+  const [metaWizardStep, setMetaWizardStep] = useState(0);
+  const [metaOnboarding, setMetaOnboarding] = useState<MetaOnboardingInfo | null>(null);
+  const [metaEmbedded, setMetaEmbedded] = useState<MetaEmbeddedSignupInfo | null>(null);
+  const [metaOnboardingError, setMetaOnboardingError] = useState<string | null>(null);
+  const [metaCreatedConnectionId, setMetaCreatedConnectionId] = useState<string | null>(null);
   const [metaName, setMetaName] = useState("");
   const [metaPhoneNumberId, setMetaPhoneNumberId] = useState("");
   const [metaAccessToken, setMetaAccessToken] = useState("");
   const [metaBusinessAccountId, setMetaBusinessAccountId] = useState("");
+  const [metaTestResult, setMetaTestResult] = useState<string | null>(null);
+  const [testingMetaId, setTestingMetaId] = useState<string | null>(null);
+  const [metaEditOpen, setMetaEditOpen] = useState(false);
+  const [metaEditConn, setMetaEditConn] = useState<WhatsAppConnection | null>(null);
+  const [metaEditName, setMetaEditName] = useState("");
+  const [metaEditPhone, setMetaEditPhone] = useState("");
+  const [metaEditToken, setMetaEditToken] = useState("");
+  const [metaEditWaba, setMetaEditWaba] = useState("");
 
   // Instagram form
   const [igOpen, setIgOpen] = useState(false);
@@ -117,6 +138,12 @@ export function SettingsChannels({
     if (type === "evolution") {
       void startEvolutionFlow();
     } else if (type === "meta") {
+      setMetaWizardStep(0);
+      setMetaCreatedConnectionId(null);
+      setMetaTestResult(null);
+      setMetaOnboarding(null);
+      setMetaEmbedded(null);
+      setMetaOnboardingError(null);
       setMetaOpen(true);
     } else if (type === "instagram") {
       setIgOpen(true);
@@ -151,6 +178,96 @@ export function SettingsChannels({
         return s - 1;
       });
     }, 1000);
+  }
+
+  useEffect(() => {
+    if (!metaOpen) return;
+    let cancelled = false;
+    setMetaOnboardingError(null);
+    void (async () => {
+      try {
+        const [info, emb] = await Promise.all([
+          fetchMetaOnboardingInfo(),
+          fetchMetaEmbeddedSignupInfo(),
+        ]);
+        if (!cancelled) {
+          setMetaOnboarding(info);
+          setMetaEmbedded(emb);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setMetaOnboardingError(
+            e instanceof Error ? e.message : "Falha ao carregar dados do webhook",
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [metaOpen]);
+
+  async function copyToClipboard(label: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(`${label} copiado.`);
+    } catch {
+      alert("Não foi possível copiar. Selecione e copie manualmente.");
+    }
+  }
+
+  function openMetaEdit(c: WhatsAppConnection) {
+    const cfg = c.config as Record<string, string>;
+    setMetaEditConn(c);
+    setMetaEditName(c.name);
+    setMetaEditPhone(cfg.phoneNumberId ?? "");
+    setMetaEditToken("");
+    setMetaEditWaba(cfg.businessAccountId ?? "");
+    setMetaEditOpen(true);
+  }
+
+  async function onPatchMeta(e: React.FormEvent) {
+    e.preventDefault();
+    if (!metaEditConn) return;
+    setLoading(true);
+    try {
+      await patchMetaWhatsAppConnection({
+        connectionId: metaEditConn.id,
+        name: metaEditName.trim(),
+        phoneNumberId: metaEditPhone.trim(),
+        businessAccountId: metaEditWaba.trim(),
+        ...(metaEditToken.trim() ? { accessToken: metaEditToken.trim() } : {}),
+      });
+      setMetaEditOpen(false);
+      setMetaEditConn(null);
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Falha ao salvar");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runMetaTest(
+    connectionId: string,
+    opts?: { inWizard?: boolean },
+  ) {
+    setTestingMetaId(connectionId);
+    if (opts?.inWizard) setMetaTestResult(null);
+    try {
+      const r = await testMetaWhatsAppConnection(connectionId);
+      const msg = r.connected
+        ? "Conexão OK — Graph API respondeu para este número."
+        : `Falha: ${r.detail ?? "sem detalhe"}`;
+      if (opts?.inWizard) setMetaTestResult(msg);
+      else alert(msg);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro ao testar";
+      if (opts?.inWizard) setMetaTestResult(msg);
+      else alert(msg);
+    } finally {
+      setTestingMetaId(null);
+    }
   }
 
   function startPairingPoll(connId: string) {
@@ -188,21 +305,32 @@ export function SettingsChannels({
     e.preventDefault();
     setLoading(true);
     try {
-      await createMetaChannel({
+      const r = await createMetaChannel({
         name: metaName.trim() || "WhatsApp Official",
         phoneNumberId: metaPhoneNumberId.trim(),
         accessToken: metaAccessToken.trim(),
         businessAccountId: metaBusinessAccountId.trim(),
       });
-      setMetaOpen(false);
-      setMetaName("");
-      setMetaPhoneNumberId("");
-      setMetaAccessToken("");
-      setMetaBusinessAccountId("");
+      setMetaCreatedConnectionId(r.connectionId);
+      setMetaWizardStep(3);
+      setMetaTestResult(null);
       router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Falha ao conectar");
     } finally {
       setLoading(false);
     }
+  }
+
+  function closeMetaWizard() {
+    setMetaOpen(false);
+    setMetaWizardStep(0);
+    setMetaName("");
+    setMetaPhoneNumberId("");
+    setMetaAccessToken("");
+    setMetaBusinessAccountId("");
+    setMetaCreatedConnectionId(null);
+    setMetaTestResult(null);
   }
 
   async function onCreateInstagram(e: React.FormEvent) {
@@ -329,6 +457,35 @@ export function SettingsChannels({
                   >
                     {c.isActive ? "Conectado" : "Desconectado"}
                   </span>
+                  {c.provider === "META" && (
+                    <div className="flex shrink-0 flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 px-2 text-xs"
+                        disabled={loading}
+                        onClick={() => openMetaEdit(c)}
+                      >
+                        <Pencil className="size-3.5" />
+                        Editar
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                        disabled={loading || testingMetaId === c.id}
+                        onClick={() => void runMetaTest(c.id)}
+                      >
+                        {testingMetaId === c.id ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          "Testar"
+                        )}
+                      </Button>
+                    </div>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -634,39 +791,330 @@ export function SettingsChannels({
         </DialogContent>
       </Dialog>
 
-      {/* Meta Cloud API form dialog */}
-      <Dialog open={metaOpen} onOpenChange={setMetaOpen}>
-        <DialogContent className="sm:max-w-lg">
+      {/* Meta Cloud API — assistente de ativação */}
+      <Dialog
+        open={metaOpen}
+        onOpenChange={(o) => {
+          if (!o) closeMetaWizard();
+          else setMetaOpen(true);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>WhatsApp Official — Meta Cloud API</DialogTitle>
             <DialogDescription>
-              Insira as credenciais do Meta Business. Encontre esses dados no Meta for Developers → WhatsApp → API Setup.
+              {metaWizardStep === 0 &&
+                "Ative o canal no Meta for Developers e conclua aqui. Todas as etapas podem ser feitas com o assistente abaixo."}
+              {metaWizardStep === 1 &&
+                "Configure o webhook no app Meta com a URL e o verify token exibidos aqui."}
+              {metaWizardStep === 2 &&
+                "Credenciais da API Setup (Phone Number ID, token temporário ou de sistema)."}
+              {metaWizardStep === 3 && "Canal registrado no Menve. Valide a conexão com a Graph API."}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={onCreateMeta} className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="meta-name">Nome da conexão</Label>
-              <Input id="meta-name" value={metaName} onChange={(e) => setMetaName(e.target.value)} placeholder="WhatsApp Business" />
+
+          {metaOnboardingError && (
+            <p className="text-sm text-destructive">{metaOnboardingError}</p>
+          )}
+
+          {metaWizardStep === 0 && (
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>Você precisa de:</p>
+              <ul className="list-inside list-disc space-y-1">
+                <li>Conta Meta Business e acesso ao app em developers.facebook.com</li>
+                <li>Número aprovado para WhatsApp Business (Cloud API)</li>
+                <li>
+                  URL pública HTTPS da API Menve em{" "}
+                  <code className="rounded bg-muted px-1">PUBLIC_APP_URL</code>{" "}
+                  (mesma base usada no webhook)
+                </li>
+              </ul>
+              <p className="text-xs">
+                Fora da janela de 24h com o cliente, use{" "}
+                <strong>templates</strong> aprovados — envio pelo Inbox (Meta) ou
+                campanhas futuras.
+              </p>
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button type="button" variant="outline" onClick={closeMetaWizard}>
+                  Cancelar
+                </Button>
+                <Button type="button" onClick={() => setMetaWizardStep(1)}>
+                  Próximo: Webhook
+                </Button>
+              </DialogFooter>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="meta-phone">Phone Number ID</Label>
-              <Input id="meta-phone" value={metaPhoneNumberId} onChange={(e) => setMetaPhoneNumberId(e.target.value)} required />
+          )}
+
+          {metaWizardStep === 1 && (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                  Callback URL (cole em WhatsApp → Configuration → Webhook)
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="max-w-full flex-1 break-all text-xs">
+                    {metaOnboarding?.callbackUrl ||
+                      (webhookBaseUrl
+                        ? `${webhookBaseUrl}/webhooks/whatsapp/meta`
+                        : "(configure PUBLIC_APP_URL)")}
+                  </code>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="shrink-0 gap-1"
+                    disabled={!(metaOnboarding?.callbackUrl || webhookBaseUrl)}
+                    onClick={() =>
+                      void copyToClipboard(
+                        "Callback URL",
+                        metaOnboarding?.callbackUrl ||
+                          `${webhookBaseUrl}/webhooks/whatsapp/meta`,
+                      )
+                    }
+                  >
+                    <Copy className="size-3.5" />
+                    Copiar
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-md border bg-muted/40 p-3">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">
+                  Verify token (o mesmo valor em{" "}
+                  <code className="rounded bg-background px-1">META_VERIFY_TOKEN</code> na API)
+                </p>
+                {metaOnboarding?.verifyTokenConfigured ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <code className="max-w-full flex-1 break-all text-xs">
+                      {metaOnboarding.verifyToken}
+                    </code>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="shrink-0 gap-1"
+                      onClick={() =>
+                        void copyToClipboard("Verify token", metaOnboarding.verifyToken)
+                      }
+                    >
+                      <Copy className="size-3.5" />
+                      Copiar
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Defina META_VERIFY_TOKEN no servidor da API e reinicie o serviço.
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium">Assine o campo</p>
+                <ul className="list-inside list-disc text-xs text-muted-foreground">
+                  {(metaOnboarding?.subscribedFieldsSuggestion ?? ["messages"]).map((f) => (
+                    <li key={f}>
+                      <code>{f}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {metaOnboarding && !metaOnboarding.metaAppSecretConfigured && (
+                <p className="text-xs text-muted-foreground">
+                  Recomendado em produção: defina{" "}
+                  <code className="rounded bg-muted px-1">META_APP_SECRET</code>{" "}
+                  para validar assinatura{" "}
+                  <code className="rounded bg-muted px-1">X-Hub-Signature-256</code>.
+                </p>
+              )}
+              {metaEmbedded?.enabled && (
+                <div className="rounded-md border border-dashed p-3 text-xs">
+                  <p className="mb-2 font-medium text-foreground">
+                    Embedded Signup (OAuth) habilitado no servidor
+                  </p>
+                  <a
+                    href={metaEmbedded.oauthAuthorizationUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary-solid underline"
+                  >
+                    Abrir login Meta para conectar WABA
+                  </a>
+                  <p className="mt-2 text-muted-foreground">
+                    Após concluir no Meta, ainda informe Phone Number ID e token aqui
+                    se o callback OAuth ainda não estiver ligado ao Menve.
+                  </p>
+                </div>
+              )}
+              {metaEmbedded && !metaEmbedded.enabled && (
+                <p className="text-[11px] text-muted-foreground">
+                  {metaEmbedded.message}
+                </p>
+              )}
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button type="button" variant="outline" onClick={() => setMetaWizardStep(0)}>
+                  Voltar
+                </Button>
+                <Button type="button" onClick={() => setMetaWizardStep(2)}>
+                  Próximo: Credenciais
+                </Button>
+              </DialogFooter>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="meta-token">Access Token</Label>
-              <Input id="meta-token" type="password" value={metaAccessToken} onChange={(e) => setMetaAccessToken(e.target.value)} required />
+          )}
+
+          {metaWizardStep === 2 && (
+            <form onSubmit={onCreateMeta} className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="meta-name">Nome da conexão</Label>
+                <Input
+                  id="meta-name"
+                  value={metaName}
+                  onChange={(e) => setMetaName(e.target.value)}
+                  placeholder="WhatsApp Business"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="meta-phone">Phone Number ID</Label>
+                <Input
+                  id="meta-phone"
+                  value={metaPhoneNumberId}
+                  onChange={(e) => setMetaPhoneNumberId(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="meta-token">Access Token</Label>
+                <Input
+                  id="meta-token"
+                  type="password"
+                  value={metaAccessToken}
+                  onChange={(e) => setMetaAccessToken(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="meta-ba">WhatsApp Business Account ID (WABA)</Label>
+                <Input
+                  id="meta-ba"
+                  value={metaBusinessAccountId}
+                  onChange={(e) => setMetaBusinessAccountId(e.target.value)}
+                  placeholder="Opcional para receber mensagens; obrigatório para listar templates"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Necessário para enviar templates pelo Inbox.
+                </p>
+              </div>
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button type="button" variant="outline" onClick={() => setMetaWizardStep(1)}>
+                  Voltar
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      Validando…
+                    </>
+                  ) : (
+                    "Conectar"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+
+          {metaWizardStep === 3 && metaCreatedConnectionId && (
+            <div className="space-y-4 text-sm">
+              <p className="text-muted-foreground">
+                Conexão salva. Use &quot;Testar&quot; para confirmar token e Phone Number ID
+                com a Graph API.
+              </p>
+              {metaTestResult && (
+                <p
+                  className={
+                    metaTestResult.startsWith("Conexão OK")
+                      ? "text-green-700 dark:text-green-400"
+                      : "text-destructive"
+                  }
+                >
+                  {metaTestResult}
+                </p>
+              )}
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={testingMetaId === metaCreatedConnectionId}
+                  onClick={() =>
+                    void runMetaTest(metaCreatedConnectionId, { inWizard: true })
+                  }
+                >
+                  {testingMetaId === metaCreatedConnectionId ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : null}
+                  Testar conexão
+                </Button>
+                <Button type="button" onClick={closeMetaWizard}>
+                  Concluir
+                </Button>
+              </DialogFooter>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="meta-ba">Business Account ID</Label>
-              <Input id="meta-ba" value={metaBusinessAccountId} onChange={(e) => setMetaBusinessAccountId(e.target.value)} required />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setMetaOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? <><Loader2 className="mr-2 size-4 animate-spin" />Salvando…</> : "Conectar"}
-              </Button>
-            </DialogFooter>
-          </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Editar conexão Meta */}
+      <Dialog open={metaEditOpen} onOpenChange={setMetaEditOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar WhatsApp Official</DialogTitle>
+            <DialogDescription>
+              Atualize credenciais sem remover conversas. Deixe o token em branco para manter o atual.
+            </DialogDescription>
+          </DialogHeader>
+          {metaEditConn && (
+            <form onSubmit={onPatchMeta} className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="meta-edit-name">Nome</Label>
+                <Input
+                  id="meta-edit-name"
+                  value={metaEditName}
+                  onChange={(e) => setMetaEditName(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="meta-edit-phone">Phone Number ID</Label>
+                <Input
+                  id="meta-edit-phone"
+                  value={metaEditPhone}
+                  onChange={(e) => setMetaEditPhone(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="meta-edit-token">Access Token (novo)</Label>
+                <Input
+                  id="meta-edit-token"
+                  type="password"
+                  value={metaEditToken}
+                  onChange={(e) => setMetaEditToken(e.target.value)}
+                  placeholder="Deixe vazio para não alterar"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="meta-edit-waba">WABA ID</Label>
+                <Input
+                  id="meta-edit-waba"
+                  value={metaEditWaba}
+                  onChange={(e) => setMetaEditWaba(e.target.value)}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setMetaEditOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? <Loader2 className="size-4 animate-spin" /> : "Salvar"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 

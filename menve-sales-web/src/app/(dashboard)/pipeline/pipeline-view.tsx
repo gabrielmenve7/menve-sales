@@ -544,7 +544,7 @@ function PipelineViewBody({
                 >
                   <Zap className="size-[18px]" strokeWidth={2} />
                   {activeAutomationCount != null && activeAutomationCount > 0 ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground">
+                    <span className="absolute -right-0.5 -top-0.5 flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-primary-solid px-1 text-[10px] font-bold leading-none text-primary-solid-fg">
                       {activeAutomationCount > 99
                         ? "99+"
                         : activeAutomationCount}
@@ -613,7 +613,7 @@ function PipelineViewBody({
                 <SlidersHorizontal className="size-[18px]" strokeWidth={2} />
                 {hasActiveFilters ? (
                   <span
-                    className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary"
+                    className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary-solid"
                     aria-hidden
                   />
                 ) : null}
@@ -805,7 +805,7 @@ function PipelineViewBody({
                     <ListFilter className="size-[18px]" strokeWidth={2} />
                     {hasListStageFilter ? (
                       <span
-                        className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary"
+                        className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary-solid"
                         aria-hidden
                       />
                     ) : null}

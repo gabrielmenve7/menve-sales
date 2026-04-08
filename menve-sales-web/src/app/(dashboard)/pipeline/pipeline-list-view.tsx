@@ -361,7 +361,7 @@ function ListStageTbody({
       ref={setNodeRef}
       className={cn(
         !isFirst && "border-t-2 border-t-border/30",
-        isOver && "bg-primary/[0.07]",
+        isOver && "bg-primary-solid/[0.07]",
       )}
     >
       <tr className="bg-muted/40">

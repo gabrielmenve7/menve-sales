@@ -133,7 +133,7 @@ export function WorkspaceSwitcher({
                 <span className="text-border"> · </span>
                 <Link
                   href="/settings"
-                  className="text-primary hover:underline"
+                  className="text-primary-solid hover:underline"
                   onClick={() => setOpen(false)}
                 >
                   Gerenciar workspace

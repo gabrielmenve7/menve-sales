@@ -188,7 +188,7 @@ export function UserAccountMenu({
                   className={cn(
                     "relative flex aspect-square items-center justify-center rounded-md border-2 transition-transform hover:scale-105",
                     active
-                      ? "border-primary ring-2 ring-ring ring-offset-2 ring-offset-background"
+                      ? "border-primary-solid ring-2 ring-ring ring-offset-2 ring-offset-background"
                       : "border-border/60 hover:border-border",
                   )}
                 >

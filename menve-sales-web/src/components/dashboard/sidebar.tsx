@@ -55,8 +55,8 @@ export function Sidebar({
         ? "justify-center px-2 py-2.5"
         : "gap-3 px-3 py-2.5",
       active
-        ? "bg-primary/14 text-foreground dark:bg-primary/22"
-        : "text-muted-foreground hover:bg-primary/9 hover:text-foreground dark:hover:bg-primary/16",
+        ? "bg-primary-solid/14 text-foreground dark:bg-primary-solid/22"
+        : "text-muted-foreground hover:bg-primary-solid/9 hover:text-foreground dark:hover:bg-primary-solid/16",
     );
 
   return (
@@ -96,7 +96,7 @@ export function Sidebar({
             )}
           >
             <Icon
-              className="size-[18px] shrink-0 text-primary"
+              className="size-[18px] shrink-0 text-primary-solid"
               strokeWidth={1.75}
             />
             {collapsed ? (
@@ -113,7 +113,7 @@ export function Sidebar({
             className={linkClass(pathname.startsWith("/admin"))}
           >
             <Shield
-              className="size-[18px] shrink-0 text-primary"
+              className="size-[18px] shrink-0 text-primary-solid"
               strokeWidth={1.75}
             />
             {collapsed ? <span className="sr-only">Admin</span> : "Admin"}
