@@ -346,6 +346,17 @@ function BarChartCardBody({
   const xAxisHeight = rotateLabels ? 52 : 30;
   const bottomMargin = rotateLabels ? 8 : 4;
 
+  /** Mesmas regras do eixo X: grade vertical só onde há rótulo visível. */
+  const gridVerticalValues = useMemo(() => {
+    const last = n - 1;
+    return chartData
+      .map((row, i) => ({ name: row.name, i }))
+      .filter(
+        ({ i }) => i === 0 || i === last || i % tickStride === 0,
+      )
+      .map(({ name }) => name);
+  }, [chartData, n, tickStride]);
+
   const renderXTick = (props: {
     x: number;
     y: number;
@@ -417,8 +428,10 @@ function BarChartCardBody({
               }}
             >
               <CartesianGrid
+                stroke="var(--muted-foreground)"
+                strokeOpacity={0.14}
                 strokeDasharray="3 3"
-                className="stroke-muted-foreground/35"
+                verticalValues={gridVerticalValues}
               />
               <XAxis
                 dataKey="name"

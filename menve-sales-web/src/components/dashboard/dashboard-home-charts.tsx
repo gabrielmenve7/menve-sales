@@ -68,8 +68,9 @@ export function DashboardHomeCharts({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={prospecting.funnel} layout="vertical" margin={{ left: 8, right: 8 }}>
                 <CartesianGrid
+                  stroke="var(--muted-foreground)"
+                  strokeOpacity={0.14}
                   strokeDasharray="3 3"
-                  className="stroke-muted-foreground/35"
                 />
                 <XAxis
                   type="number"
@@ -107,8 +108,9 @@ export function DashboardHomeCharts({
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={dailyDeals} margin={{ left: 0, right: 8 }}>
               <CartesianGrid
+                stroke="var(--muted-foreground)"
+                strokeOpacity={0.14}
                 strokeDasharray="3 3"
-                className="stroke-muted-foreground/35"
               />
               <XAxis
                 dataKey="date"
@@ -152,8 +154,9 @@ export function DashboardHomeCharts({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dealsByStage} margin={{ left: 0, right: 8 }}>
                 <CartesianGrid
+                  stroke="var(--muted-foreground)"
+                  strokeOpacity={0.14}
                   strokeDasharray="3 3"
-                  className="stroke-muted-foreground/35"
                 />
                 <XAxis
                   dataKey="name"
