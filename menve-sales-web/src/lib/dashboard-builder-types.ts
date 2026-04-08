@@ -3,6 +3,31 @@ export type DealStatusCode = "OPEN" | "WON" | "LOST" | "ARCHIVED";
 export type DataMeasure = "QUANTITY" | "MONEY" | "CUSTOM_NUMBER";
 export type Aggregation = "SUM" | "AVG";
 
+/**
+ * Presets relativos para filtro DATE no cartão (igual pipeline).
+ * Manter em sincronia com `menve-sales-api/.../dashboard-custom-date-preset.util.ts`.
+ */
+export const WIDGET_FILTER_ROLLING_DATE_PRESETS = [
+  "today",
+  "yesterday",
+  "last7",
+  "thisWeek",
+  "thisMonth",
+  "lastMonth",
+] as const;
+
+export type WidgetFilterRollingDatePreset =
+  (typeof WIDGET_FILTER_ROLLING_DATE_PRESETS)[number];
+
+export function isWidgetFilterRollingDatePreset(
+  s: string | undefined,
+): s is WidgetFilterRollingDatePreset {
+  return (
+    s != null &&
+    (WIDGET_FILTER_ROLLING_DATE_PRESETS as readonly string[]).includes(s)
+  );
+}
+
 /** Uma linha de filtro persistida (sem ids de UI). */
 export type WidgetFilterRowSaved = {
   /** Liga esta linha à anterior dentro do mesmo grupo (filtro duplo). */
@@ -19,6 +44,8 @@ export type WidgetFilterRowSaved = {
   /** Filtro por intervalo em campo DATE (customData como string YYYY-MM-DD). */
   customDateFrom?: string;
   customDateTo?: string;
+  /** Período relativo (Hoje, Este mês, …) para campo DATE. */
+  customDatePreset?: WidgetFilterRollingDatePreset;
 };
 
 /** Grupo de filtros; `groupJoin` liga este grupo ao anterior (filtro agrupado). */

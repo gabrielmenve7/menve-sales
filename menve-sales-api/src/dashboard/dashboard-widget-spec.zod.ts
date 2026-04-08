@@ -1,5 +1,6 @@
 import { DealStatus } from "@prisma/client";
 import { z } from "zod";
+import { WIDGET_FILTER_ROLLING_DATE_PRESETS } from "./dashboard-custom-date-preset.util";
 
 const dealStatusEnum = z.enum(["OPEN", "WON", "LOST", "ARCHIVED"]);
 
@@ -21,6 +22,15 @@ const widgetFilterRowSchema = z.object({
   customValue: z.union([z.string(), z.number(), z.boolean()]).optional(),
   customDateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   customDateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** Período relativo (Hoje, Este mês, …) para campo DATE; resolvido na hora da query. */
+  customDatePreset: z
+    .enum(
+      WIDGET_FILTER_ROLLING_DATE_PRESETS as unknown as [
+        string,
+        ...string[],
+      ],
+    )
+    .optional(),
 });
 
 const widgetFilterGroupSchema = z.object({

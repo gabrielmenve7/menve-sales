@@ -6,6 +6,10 @@ import {
 import { DealStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import {
+  isoRangeFromRollingPreset,
+  isWidgetFilterRollingDatePreset,
+} from "./dashboard-custom-date-preset.util";
+import {
   resolveWidgetQuerySpec,
   widgetQuerySpecSchema,
   type ResolvedWidgetQuerySpec,
@@ -256,6 +260,19 @@ export class DashboardQueryService {
           }
           if (parts.length === 0) return null;
           return parts.length === 1 ? parts[0]! : { AND: parts };
+        }
+        if (isWidgetFilterRollingDatePreset(row.customDatePreset)) {
+          const range = isoRangeFromRollingPreset(
+            new Date(),
+            row.customDatePreset,
+          );
+          if (!range) return null;
+          return {
+            AND: [
+              { customData: { path: [k], gte: range.from } },
+              { customData: { path: [k], lte: range.to } },
+            ],
+          };
         }
         if (row.customValue === undefined || row.customValue === "") return null;
         return {

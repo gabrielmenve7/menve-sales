@@ -54,11 +54,13 @@ import type {
   WidgetFilterRowSaved,
   WidgetType,
 } from "@/lib/dashboard-builder-types";
-import { defaultBarChartConfig } from "@/lib/dashboard-builder-types";
+import {
+  defaultBarChartConfig,
+  isWidgetFilterRollingDatePreset,
+} from "@/lib/dashboard-builder-types";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import {
-  getDealCreatedInterval,
   parseDateInputString,
   type PipelineDatePreset,
 } from "@/app/(dashboard)/pipeline/pipeline-filter-utils";
@@ -757,16 +759,25 @@ function savedRowToDashRow(
         dateCustomTo: "",
       };
       if (!key) return base;
+
+      if (isWidgetFilterRollingDatePreset(r.customDatePreset)) {
+        return {
+          ...base,
+          datePreset: r.customDatePreset,
+        };
+      }
+
+      if (r.customDateFrom?.trim() || r.customDateTo?.trim()) {
+        return {
+          ...base,
+          datePreset: "custom",
+          dateCustomFrom: r.customDateFrom ?? "",
+          dateCustomTo: r.customDateTo ?? "",
+        };
+      }
+
       const cf = dealCustomFields.find((c) => c.key === key);
       if (cf?.fieldType === "DATE") {
-        if (r.customDateFrom?.trim() || r.customDateTo?.trim()) {
-          return {
-            ...base,
-            datePreset: "custom",
-            dateCustomFrom: r.customDateFrom ?? "",
-            dateCustomTo: r.customDateTo ?? "",
-          };
-        }
         if (
           r.customValue !== undefined &&
           r.customValue !== null &&
@@ -856,23 +867,13 @@ function dashRowToSaved(
             customDateTo: toIsoDateLocal(b),
           };
         }
-        if (row.datePreset !== "all") {
-          const interval = getDealCreatedInterval(
-            new Date(),
-            row.datePreset,
-            null,
-            null,
-          );
-          if (!interval) {
-            return { rowJoin, field: "customField", op: "IS", customKey: key };
-          }
+        if (isWidgetFilterRollingDatePreset(row.datePreset)) {
           return {
             rowJoin,
             field: "customField",
             op: "IS",
             customKey: key,
-            customDateFrom: toIsoDateLocal(interval.start),
-            customDateTo: toIsoDateLocal(interval.end),
+            customDatePreset: row.datePreset,
           };
         }
         return { rowJoin, field: "customField", op: "IS", customKey: key };
