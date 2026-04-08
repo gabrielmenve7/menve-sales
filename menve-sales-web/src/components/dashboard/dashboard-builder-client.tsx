@@ -59,12 +59,19 @@ import {
   newWidgetId,
   parseLayoutJson,
 } from "@/lib/dashboard-builder-types";
+import { buildMetricComparisonSpec } from "@/lib/dashboard-metric-compare";
 
 const GridLayoutWithWidth = WidthProvider(ReactGridLayout);
 
 const MAX_WIDGETS = 48;
 
 type BoardVm = DashboardBoardDto & { layout: LayoutJson };
+
+type WidgetDataBundle = {
+  primary: WidgetDataResult | null;
+  /** Valor do mesmo cálculo no período anterior (só cartão métrica + filtro de data único). */
+  previousScalar?: number;
+};
 
 function toVm(dto: DashboardBoardDto): BoardVm {
   return { ...dto, layout: parseLayoutJson(dto.layoutJson) };
@@ -108,7 +115,7 @@ export function DashboardBuilderClient({
   const [dealCustomFields] = useState(initialDealCustomFields);
   const [tenantMembers] = useState(initialTenantMembers);
   const [dataByWidget, setDataByWidget] = useState<
-    Record<string, WidgetDataResult | null>
+    Record<string, WidgetDataBundle>
   >({});
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
@@ -166,13 +173,37 @@ export function DashboardBuilderClient({
     setLoadErr(null);
     void (async () => {
       try {
-        const specs = activeBoard.layout.widgets.map((w) => w.querySpec);
+        type Slot =
+          | { widgetId: string; kind: "primary" }
+          | { widgetId: string; kind: "previous" };
+        const slots: Slot[] = [];
+        const specs: LayoutWidget["querySpec"][] = [];
+        for (const w of activeBoard.layout.widgets) {
+          slots.push({ widgetId: w.id, kind: "primary" });
+          specs.push(w.querySpec);
+          if (w.type === "METRIC") {
+            const cmp = buildMetricComparisonSpec(w.querySpec);
+            if (cmp) {
+              slots.push({ widgetId: w.id, kind: "previous" });
+              specs.push(cmp);
+            }
+          }
+        }
         const rows = await queryDashboardWidgetsBulk(specs);
         if (cancelled) return;
-        const map: Record<string, WidgetDataResult | null> = {};
-        activeBoard.layout.widgets.forEach((w, i) => {
-          map[w.id] = rows[i] ?? null;
-        });
+        const map: Record<string, WidgetDataBundle> = {};
+        for (let i = 0; i < slots.length; i++) {
+          const slot = slots[i]!;
+          const row = rows[i] ?? null;
+          if (slot.kind === "primary") {
+            map[slot.widgetId] = { primary: row };
+          } else {
+            const bundle = map[slot.widgetId];
+            if (bundle && row?.kind === "scalar") {
+              bundle.previousScalar = row.value;
+            }
+          }
+        }
         setDataByWidget(map);
       } catch {
         if (!cancelled) {
@@ -499,7 +530,12 @@ export function DashboardBuilderClient({
                           </div>
                           <DashboardWidgetRenderer
                             widget={w}
-                            data={loadErr ? null : (dataByWidget[w.id] ?? null)}
+                            data={
+                              loadErr
+                                ? null
+                                : (dataByWidget[w.id]?.primary ?? null)
+                            }
+                            previousScalar={dataByWidget[w.id]?.previousScalar}
                             loading={loadingData && !loadErr}
                             error={null}
                             dealCustomFields={dealCustomFields}

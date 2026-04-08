@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DollarSign, Hash, Target } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -27,6 +28,7 @@ import {
   type LayoutWidget,
   type WidgetDataResult,
 } from "@/lib/dashboard-builder-types";
+import { cn } from "@/lib/utils";
 
 function formatDayLabel(iso: string) {
   const [, m, d] = iso.split("-");
@@ -66,6 +68,38 @@ function computeBarMaxSize(n: number, widthPx: number): number {
   return Math.max(3, Math.min(56, Math.floor(perCategory * 0.72)));
 }
 
+function metricIconForSpec(spec: LayoutWidget["querySpec"]) {
+  const dm =
+    spec.dataMeasure ??
+    (spec.measure === "SUM_VALUE"
+      ? "MONEY"
+      : spec.measure === "COUNT"
+        ? "QUANTITY"
+        : "QUANTITY");
+  if (dm === "MONEY") return DollarSign;
+  if (dm === "CUSTOM_NUMBER") return Hash;
+  return Target;
+}
+
+function formatComparePercent(current: number, previous: number): {
+  text: string;
+  positive: boolean;
+  neutral: boolean;
+} {
+  if (previous === 0) {
+    if (current === 0) return { text: "0%", positive: true, neutral: true };
+    return { text: "—", positive: true, neutral: true };
+  }
+  const raw = ((current - previous) / previous) * 100;
+  const abs = Math.abs(raw);
+  const text = `${new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  }).format(abs)}%`;
+  if (raw === 0) return { text, positive: true, neutral: true };
+  return { text, positive: raw > 0, neutral: false };
+}
+
 function rollupBarSeries(
   series: { label: string; value: number }[],
   xGroupBy: BarXGroupBy | undefined,
@@ -97,12 +131,15 @@ function rollupBarSeries(
 export function DashboardWidgetRenderer({
   widget,
   data,
+  previousScalar,
   loading,
   error,
   dealCustomFields,
 }: {
   widget: LayoutWidget;
   data: WidgetDataResult | null;
+  /** Só métrica escalar: valor no período anterior (para seta e %). */
+  previousScalar?: number;
   loading: boolean;
   error: string | null;
   dealCustomFields: DealCustomFieldDef[];
@@ -120,6 +157,26 @@ export function DashboardWidgetRenderer({
         : "Gráfico de pizza");
 
   if (loading) {
+    if (widget.type === "METRIC") {
+      return (
+        <Card className="flex h-full flex-col rounded-xl border border-border/60 bg-card shadow-sm">
+          <CardHeader className="drag-handle cursor-grab space-y-0 px-5 pb-0 pt-5">
+            <div className="flex items-start justify-between gap-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {title}
+              </CardTitle>
+              <div className="size-9 shrink-0 animate-pulse rounded-lg bg-muted" />
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col px-5 pb-5 pt-4">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <div className="h-9 w-28 animate-pulse rounded bg-muted" />
+              <div className="h-5 w-16 animate-pulse rounded bg-muted" />
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
     return (
       <Card className="flex h-full flex-col border-border/60 bg-card/80 shadow-sm">
         <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
@@ -165,23 +222,69 @@ export function DashboardWidgetRenderer({
   }
 
   if (widget.type === "METRIC" && data.kind === "scalar") {
+    const Icon = metricIconForSpec(widget.querySpec);
+    const formatted = formatDashboardScalar(
+      widget.querySpec,
+      data.value,
+      widget.querySpec.customFieldKey
+        ? cfMap.get(widget.querySpec.customFieldKey) ?? null
+        : null,
+    );
+    const showCompare = previousScalar !== undefined;
+    const cmp = showCompare
+      ? formatComparePercent(data.value, previousScalar as number)
+      : null;
+
     return (
-      <Card className="flex h-full flex-col border-border/60 bg-card/80 shadow-sm">
-        <CardHeader className="drag-handle cursor-grab pb-0 pt-3">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
-            {title}
-          </CardTitle>
+      <Card className="flex h-full flex-col rounded-xl border border-border/60 bg-card shadow-sm">
+        <CardHeader className="drag-handle cursor-grab space-y-0 px-5 pb-0 pt-5">
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle className="text-sm font-medium leading-snug text-muted-foreground">
+              {title}
+            </CardTitle>
+            <div
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-foreground dark:bg-sky-400/15"
+              aria-hidden
+            >
+              <Icon className="size-4 stroke-[1.75]" />
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="flex flex-1 flex-col items-center justify-center pb-4 pt-1">
-          <p className="text-3xl font-semibold tabular-nums tracking-tight">
-            {formatDashboardScalar(
-              widget.querySpec,
-              data.value,
-              widget.querySpec.customFieldKey
-                ? cfMap.get(widget.querySpec.customFieldKey) ?? null
-                : null,
-            )}
-          </p>
+        <CardContent className="flex flex-1 flex-col justify-center px-5 pb-5 pt-4">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <p className="text-3xl font-bold tabular-nums tracking-tight text-foreground">
+              {formatted}
+            </p>
+            {cmp && !cmp.neutral ? (
+              <span
+                className={cn(
+                  "text-sm font-medium tabular-nums",
+                  cmp.positive ? "text-emerald-600 dark:text-emerald-500" : "text-red-600 dark:text-red-500",
+                )}
+                aria-label={
+                  cmp.positive
+                    ? `Alta de ${cmp.text} em relação ao período anterior`
+                    : `Queda de ${cmp.text} em relação ao período anterior`
+                }
+              >
+                {cmp.positive ? "↑" : "↓"} {cmp.text}
+              </span>
+            ) : cmp && cmp.neutral && cmp.text !== "—" ? (
+              <span
+                className="text-sm font-medium tabular-nums text-muted-foreground"
+                aria-label="Sem variação em relação ao período anterior"
+              >
+                {cmp.text}
+              </span>
+            ) : cmp && cmp.text === "—" ? (
+              <span
+                className="text-sm font-medium text-muted-foreground"
+                title="Sem base no período anterior para calcular percentual"
+              >
+                —
+              </span>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     );
