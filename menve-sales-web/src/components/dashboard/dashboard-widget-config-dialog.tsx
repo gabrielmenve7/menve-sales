@@ -1158,7 +1158,6 @@ export function DashboardWidgetConfigDialog({
   >("");
   const [days, setDays] = useState(30);
   const [barShowAverage, setBarShowAverage] = useState(true);
-  const [barShowLabels, setBarShowLabels] = useState(false);
   const [barShowLegend, setBarShowLegend] = useState(false);
   const [barTimePreset, setBarTimePreset] = useState<BarTimePreset>("LAST_30_DAYS");
   /** Com este/próximo mês: eixo com todos os dias do mês (futuros = 0) vs só até hoje. */
@@ -1197,7 +1196,6 @@ export function DashboardWidgetConfigDialog({
     if (widget.type === "BAR") {
       const bc = { ...defaultBarChartConfig(), ...widget.barChart };
       setBarShowAverage(bc.showAverageLine ?? true);
-      setBarShowLabels(bc.showDataLabels ?? false);
       setBarShowLegend(bc.showLegend ?? false);
       setBarTimePreset(bc.timePreset ?? inferBarTimePreset(s));
       setBarFillFullMonth(s.fillTimelineMonth === true);
@@ -1485,7 +1483,6 @@ export function DashboardWidgetConfigDialog({
     if (isBar) {
       next.barChart = {
         showAverageLine: barShowAverage,
-        showDataLabels: barShowLabels,
         showLegend: barShowLegend,
         timePreset: barTimePreset,
         xGroupBy: spec.dimension === "BY_DAY" ? barXGroupBy : "DAY",
@@ -1564,12 +1561,6 @@ export function DashboardWidgetConfigDialog({
                       label="Mostrar linha média"
                       checked={barShowAverage}
                       onCheckedChange={setBarShowAverage}
-                    />
-                    <BarConfigToggle
-                      id="dw-bar-labels"
-                      label="Mostrar rótulos de dados"
-                      checked={barShowLabels}
-                      onCheckedChange={setBarShowLabels}
                     />
                     <BarConfigToggle
                       id="dw-bar-legend"

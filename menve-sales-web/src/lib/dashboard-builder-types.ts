@@ -72,7 +72,6 @@ export type BarXGroupBy = "DAY" | "WEEK" | "MONTH";
  */
 export type BarChartConfig = {
   showAverageLine?: boolean;
-  showDataLabels?: boolean;
   showLegend?: boolean;
   timePreset?: BarTimePreset;
   xGroupBy?: BarXGroupBy;
@@ -182,7 +181,6 @@ export function parseLayoutJson(raw: unknown): LayoutJson {
 export function defaultBarChartConfig(): BarChartConfig {
   return {
     showAverageLine: true,
-    showDataLabels: false,
     showLegend: false,
     timePreset: "LAST_30_DAYS",
     xGroupBy: "DAY",

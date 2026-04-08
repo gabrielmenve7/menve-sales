@@ -6,7 +6,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  LabelList,
   Legend,
   Pie,
   PieChart,
@@ -267,7 +266,16 @@ export function DashboardWidgetRenderer({
                     />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v) => [formatBarValue(Number(v)), ""]} />
+                <Tooltip
+                  formatter={(v) => [formatBarValue(Number(v)), ""]}
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: "var(--card)",
+                    color: "var(--card-foreground)",
+                    fontSize: 12,
+                  }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -354,13 +362,14 @@ function BarChartCardBody({
     const text = payload?.value ?? "";
     if (rotateLabels) {
       return (
-        <g transform={`translate(${x},${y})`} className="text-muted-foreground">
+        <g transform={`translate(${x},${y})`}>
           <text
             x={0}
             y={0}
             dy={8}
             textAnchor="end"
             fontSize={10}
+            fill="var(--foreground)"
             transform="rotate(-38)"
           >
             {text}
@@ -369,8 +378,15 @@ function BarChartCardBody({
       );
     }
     return (
-      <g transform={`translate(${x},${y})`} className="text-muted-foreground">
-        <text x={0} y={0} dy={12} textAnchor="middle" fontSize={10}>
+      <g transform={`translate(${x},${y})`}>
+        <text
+          x={0}
+          y={0}
+          dy={12}
+          textAnchor="middle"
+          fontSize={10}
+          fill="var(--foreground)"
+        >
           {text}
         </text>
       </g>
@@ -394,29 +410,47 @@ function BarChartCardBody({
               data={chartData}
               barCategoryGap="12%"
               margin={{
-                top: barCfg.showDataLabels ? 18 : 4,
+                top: 4,
                 right: 4,
                 left: 0,
                 bottom: bottomMargin,
               }}
             >
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border/80" />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                className="stroke-muted-foreground/35"
+              />
               <XAxis
                 dataKey="name"
                 tick={renderXTick}
                 interval={0}
                 height={xAxisHeight}
-                tickLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={{ stroke: "var(--muted-foreground)" }}
+                axisLine={{ stroke: "var(--muted-foreground)" }}
               />
-              <YAxis tick={{ fontSize: 10 }} width={36} />
-              <Tooltip formatter={(v) => [formatBarValue(Number(v)), ""]} />
+              <YAxis
+                tick={{ fontSize: 10, fill: "var(--foreground)" }}
+                width={36}
+                axisLine={{ stroke: "var(--muted-foreground)" }}
+                tickLine={{ stroke: "var(--muted-foreground)" }}
+              />
+              <Tooltip
+                formatter={(v) => [formatBarValue(Number(v)), ""]}
+                contentStyle={{
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                  background: "var(--card)",
+                  color: "var(--card-foreground)",
+                  fontSize: 12,
+                }}
+              />
               {barCfg.showLegend ? (
                 <Legend wrapperStyle={{ fontSize: 11 }} />
               ) : null}
               {barCfg.showAverageLine && chartData.length > 0 ? (
                 <ReferenceLine
                   y={barAvg}
-                  stroke="hsl(var(--muted-foreground))"
+                  stroke="var(--muted-foreground)"
                   strokeDasharray="4 4"
                 />
               ) : null}
@@ -426,16 +460,6 @@ function BarChartCardBody({
                 maxBarSize={maxBarSize}
                 radius={[4, 4, 0, 0]}
               >
-                    {barCfg.showDataLabels ? (
-                      <LabelList
-                        dataKey="value"
-                        position="top"
-                        className="fill-muted-foreground text-[9px]"
-                        formatter={(v: number | string) =>
-                          formatBarValue(Number(v))
-                        }
-                      />
-                    ) : null}
                     {chartData.map((_, i) => (
                       <Cell
                         key={i}
