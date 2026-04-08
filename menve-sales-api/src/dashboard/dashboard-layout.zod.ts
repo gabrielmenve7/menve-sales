@@ -25,6 +25,7 @@ const barChartConfigSchema = z
       .optional(),
     xGroupBy: z.enum(["DAY", "WEEK", "MONTH"]).optional(),
     yGroupBy: z.literal("NONE").optional(),
+    seriesDisplay: z.enum(["BAR", "LINE"]).optional(),
   })
   .strict()
   .optional();

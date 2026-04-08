@@ -40,6 +40,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
   Aggregation,
+  BarSeriesDisplay,
   BarTimePreset,
   BarXGroupBy,
   DataMeasure,
@@ -1568,6 +1569,8 @@ export function DashboardWidgetConfigDialog({
   const [days, setDays] = useState(30);
   const [barShowAverage, setBarShowAverage] = useState(true);
   const [barShowLegend, setBarShowLegend] = useState(false);
+  const [barSeriesDisplay, setBarSeriesDisplay] =
+    useState<BarSeriesDisplay>("BAR");
   const [barTimePreset, setBarTimePreset] = useState<BarTimePreset>("LAST_30_DAYS");
   /** Com este/próximo mês: eixo com todos os dias do mês (futuros = 0) vs só até hoje. */
   const [barFillFullMonth, setBarFillFullMonth] = useState(false);
@@ -1616,6 +1619,7 @@ export function DashboardWidgetConfigDialog({
       setBarXGroupBy(bc.xGroupBy ?? "DAY");
       setBarCustomDays(s.days ?? 30);
       setBarXColumnId(inferBarXColumnIdFromSpec(s, dealCustomFields));
+      setBarSeriesDisplay(bc.seriesDisplay === "LINE" ? "LINE" : "BAR");
     }
   }, [widget, open, dealCustomFields]);
 
@@ -1911,6 +1915,7 @@ export function DashboardWidgetConfigDialog({
         showLegend: barShowLegend,
         timePreset: barTimePreset,
         xGroupBy: spec.dimension === "BY_DAY" ? barXGroupBy : "DAY",
+        seriesDisplay: barSeriesDisplay,
       };
     }
     onSave(next);
@@ -1992,6 +1997,17 @@ export function DashboardWidgetConfigDialog({
                       checked={barShowLegend}
                       onCheckedChange={setBarShowLegend}
                     />
+                    <BarConfigToggle
+                      id="dw-bar-line-view"
+                      label="Ver como linha"
+                      checked={barSeriesDisplay === "LINE"}
+                      onCheckedChange={(v) =>
+                        setBarSeriesDisplay(v ? "LINE" : "BAR")
+                      }
+                    />
+                    <p className={cn(panel.muted, "-mt-1 text-[11px] leading-snug")}>
+                      Mesmos dados e eixos; só muda o desenho (barras ou linha).
+                    </p>
                   </div>
                   <div className={`grid gap-3 border-t pt-5 ${panel.divider}`}>
                     <p className="text-sm font-medium text-foreground">Eixo X</p>

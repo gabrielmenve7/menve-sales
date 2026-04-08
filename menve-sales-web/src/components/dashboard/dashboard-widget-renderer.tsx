@@ -8,6 +8,8 @@ import {
   CartesianGrid,
   Cell,
   Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ReferenceLine,
@@ -17,7 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CHART_BAR_SEQUENCE } from "@/lib/chart-colors";
+import { CHART_BAR_SEQUENCE, CHART_LINE_STROKE } from "@/lib/chart-colors";
 import {
   customFieldByKey,
   defaultBarChartConfig,
@@ -382,6 +384,8 @@ function BarChartCardBody({
     [n, chartWidth],
   );
 
+  const showLine = (barCfg.seriesDisplay ?? "BAR") === "LINE";
+
   const perSlot = chartWidth > 0 && n > 0 ? chartWidth / n : 40;
   const rotateLabels =
     dimensionIsDay || n > 10 || (n > 6 && perSlot < X_LABEL_MIN_PX);
@@ -459,71 +463,134 @@ function BarChartCardBody({
           className="h-full min-h-[120px] w-full min-w-0"
         >
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartData}
-              barCategoryGap="12%"
-              margin={{
-                top: 4,
-                right: 4,
-                left: 0,
-                bottom: bottomMargin,
-              }}
-            >
-              <CartesianGrid
-                stroke="var(--muted-foreground)"
-                strokeOpacity={0.14}
-                strokeDasharray="3 3"
-                verticalValues={gridVerticalValues}
-              />
-              <XAxis
-                dataKey="name"
-                tick={renderXTick}
-                interval={0}
-                height={xAxisHeight}
-                tickLine={{ stroke: "var(--muted-foreground)" }}
-                axisLine={{ stroke: "var(--muted-foreground)" }}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: "var(--foreground)" }}
-                width={36}
-                axisLine={{ stroke: "var(--muted-foreground)" }}
-                tickLine={{ stroke: "var(--muted-foreground)" }}
-              />
-              <Tooltip
-                formatter={(v) => [formatBarValue(Number(v)), ""]}
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                  background: "var(--card)",
-                  color: "var(--card-foreground)",
-                  fontSize: 12,
+            {showLine ? (
+              <LineChart
+                data={chartData}
+                margin={{
+                  top: 4,
+                  right: 4,
+                  left: 0,
+                  bottom: bottomMargin,
                 }}
-              />
-              {barCfg.showLegend ? (
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              ) : null}
-              {barCfg.showAverageLine && chartData.length > 0 ? (
-                <ReferenceLine
-                  y={barAvg}
-                  stroke="var(--muted-foreground)"
-                  strokeDasharray="4 4"
-                />
-              ) : null}
-              <Bar
-                dataKey="value"
-                name={title}
-                maxBarSize={maxBarSize}
-                radius={[4, 4, 0, 0]}
               >
-                    {chartData.map((_, i) => (
-                      <Cell
-                        key={i}
-                        fill={CHART_BAR_SEQUENCE[i % CHART_BAR_SEQUENCE.length]}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                <CartesianGrid
+                  stroke="var(--muted-foreground)"
+                  strokeOpacity={0.14}
+                  strokeDasharray="3 3"
+                  verticalValues={gridVerticalValues}
+                />
+                <XAxis
+                  dataKey="name"
+                  tick={renderXTick}
+                  interval={0}
+                  height={xAxisHeight}
+                  tickLine={{ stroke: "var(--muted-foreground)" }}
+                  axisLine={{ stroke: "var(--muted-foreground)" }}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "var(--foreground)" }}
+                  width={36}
+                  axisLine={{ stroke: "var(--muted-foreground)" }}
+                  tickLine={{ stroke: "var(--muted-foreground)" }}
+                />
+                <Tooltip
+                  formatter={(v) => [formatBarValue(Number(v)), ""]}
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: "var(--card)",
+                    color: "var(--card-foreground)",
+                    fontSize: 12,
+                  }}
+                />
+                {barCfg.showLegend ? (
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                ) : null}
+                {barCfg.showAverageLine && chartData.length > 0 ? (
+                  <ReferenceLine
+                    y={barAvg}
+                    stroke="var(--muted-foreground)"
+                    strokeDasharray="4 4"
+                  />
+                ) : null}
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  name={title}
+                  stroke={CHART_LINE_STROKE}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: CHART_LINE_STROKE }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+              </LineChart>
+            ) : (
+              <BarChart
+                data={chartData}
+                barCategoryGap="12%"
+                margin={{
+                  top: 4,
+                  right: 4,
+                  left: 0,
+                  bottom: bottomMargin,
+                }}
+              >
+                <CartesianGrid
+                  stroke="var(--muted-foreground)"
+                  strokeOpacity={0.14}
+                  strokeDasharray="3 3"
+                  verticalValues={gridVerticalValues}
+                />
+                <XAxis
+                  dataKey="name"
+                  tick={renderXTick}
+                  interval={0}
+                  height={xAxisHeight}
+                  tickLine={{ stroke: "var(--muted-foreground)" }}
+                  axisLine={{ stroke: "var(--muted-foreground)" }}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "var(--foreground)" }}
+                  width={36}
+                  axisLine={{ stroke: "var(--muted-foreground)" }}
+                  tickLine={{ stroke: "var(--muted-foreground)" }}
+                />
+                <Tooltip
+                  formatter={(v) => [formatBarValue(Number(v)), ""]}
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: "var(--card)",
+                    color: "var(--card-foreground)",
+                    fontSize: 12,
+                  }}
+                />
+                {barCfg.showLegend ? (
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                ) : null}
+                {barCfg.showAverageLine && chartData.length > 0 ? (
+                  <ReferenceLine
+                    y={barAvg}
+                    stroke="var(--muted-foreground)"
+                    strokeDasharray="4 4"
+                  />
+                ) : null}
+                <Bar
+                  dataKey="value"
+                  name={title}
+                  maxBarSize={maxBarSize}
+                  radius={[4, 4, 0, 0]}
+                >
+                  {chartData.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={CHART_BAR_SEQUENCE[i % CHART_BAR_SEQUENCE.length]}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            )}
+          </ResponsiveContainer>
             </div>
         </CardContent>
       </Card>

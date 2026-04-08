@@ -66,6 +66,9 @@ export type BarTimePreset =
 /** Granularidade exibida no eixo X quando a série é por dia (API retorna dias; agregação no cliente). */
 export type BarXGroupBy = "DAY" | "WEEK" | "MONTH";
 
+/** Visualização da série no cartão BAR (mesmos dados). */
+export type BarSeriesDisplay = "BAR" | "LINE";
+
 /**
  * Opções de apresentação e eixos específicas do cartão BAR (gráfico de barras).
  * Não se aplica a METRIC / PIE / DONUT.
@@ -75,6 +78,8 @@ export type BarChartConfig = {
   showLegend?: boolean;
   timePreset?: BarTimePreset;
   xGroupBy?: BarXGroupBy;
+  /** Barras (padrão) ou linha. */
+  seriesDisplay?: BarSeriesDisplay;
 };
 
 export type WidgetQuerySpec = {
@@ -194,6 +199,7 @@ export function defaultBarChartConfig(): BarChartConfig {
     showLegend: false,
     timePreset: "LAST_30_DAYS",
     xGroupBy: "DAY",
+    seriesDisplay: "BAR",
   };
 }
 
