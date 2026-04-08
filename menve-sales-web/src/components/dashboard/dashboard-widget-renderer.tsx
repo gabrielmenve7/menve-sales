@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { DollarSign, Hash, Target } from "lucide-react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
   Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ReferenceLine,
@@ -19,7 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CHART_BAR_SEQUENCE, CHART_LINE_STROKE } from "@/lib/chart-colors";
+import { CHART_BAR_SEQUENCE } from "@/lib/chart-colors";
 import {
   customFieldByKey,
   defaultBarChartConfig,
@@ -361,6 +361,8 @@ function BarChartCardBody({
 }: BarChartCardBodyProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState(0);
+  /** IDs únicos para gradiente SVG (vários cartões na página). */
+  const areaFillGradientId = useId().replace(/:/g, "");
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -464,15 +466,35 @@ function BarChartCardBody({
         >
           <ResponsiveContainer width="100%" height="100%">
             {showLine ? (
-              <LineChart
+              <AreaChart
                 data={chartData}
                 margin={{
-                  top: 4,
+                  top: 8,
                   right: 4,
                   left: 0,
                   bottom: bottomMargin,
                 }}
               >
+                <defs>
+                  <linearGradient
+                    id={areaFillGradientId}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stopColor="var(--primary)"
+                      stopOpacity={0.32}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--primary)"
+                      stopOpacity={0.02}
+                    />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid
                   stroke="var(--muted-foreground)"
                   strokeOpacity={0.14}
@@ -513,17 +535,18 @@ function BarChartCardBody({
                     strokeDasharray="4 4"
                   />
                 ) : null}
-                <Line
+                <Area
                   type="monotone"
                   dataKey="value"
                   name={title}
-                  stroke={CHART_LINE_STROKE}
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: CHART_LINE_STROKE }}
-                  activeDot={{ r: 5 }}
+                  stroke="var(--primary)"
+                  strokeWidth={2.25}
+                  fill={`url(#${areaFillGradientId})`}
+                  dot={false}
+                  activeDot={false}
                   connectNulls
                 />
-              </LineChart>
+              </AreaChart>
             ) : (
               <BarChart
                 data={chartData}
