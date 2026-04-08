@@ -122,7 +122,7 @@ export function VoiceMessagePlayer({
         "min-w-[min(100%,280px)] max-w-full px-2.5 py-1.5 text-sm shadow-sm",
         incoming
           ? "rounded-br-lg rounded-tl-sm rounded-tr-lg rounded-bl-lg bg-muted/60 text-foreground dark:bg-muted/35"
-          : "rounded-bl-lg rounded-br-lg rounded-tl-lg rounded-tr-sm bg-primary text-primary-foreground",
+          : "rounded-bl-lg rounded-br-lg rounded-tl-lg rounded-tr-sm bg-primary-solid text-primary-solid-fg",
       )}
     >
       <audio ref={audioRef} preload="metadata" className="hidden">
@@ -138,7 +138,7 @@ export function VoiceMessagePlayer({
               "flex size-9 shrink-0 items-center justify-center rounded-full transition-opacity hover:opacity-90",
               incoming
                 ? "bg-foreground/10 text-foreground dark:bg-foreground/15"
-                : "bg-primary-foreground/20 text-primary-foreground",
+                : "bg-primary-solid-fg/20 text-primary-solid-fg",
             )}
             aria-label={playing ? "Pausar" : "Reproduzir"}
           >
@@ -151,7 +151,7 @@ export function VoiceMessagePlayer({
           <span
             className={cn(
               "text-[11px] tabular-nums",
-              incoming ? "text-muted-foreground" : "text-primary-foreground/65",
+              incoming ? "text-muted-foreground" : "text-primary-solid-fg/65",
             )}
           >
             {duration > 0 ? formatDur(duration) : "···"}
@@ -172,7 +172,7 @@ export function VoiceMessagePlayer({
                   "w-[3px] shrink-0 rounded-full",
                   incoming
                     ? "bg-foreground/18 dark:bg-foreground/25"
-                    : "bg-primary-foreground/35",
+                    : "bg-primary-solid-fg/35",
                 )}
                 style={{ height: h }}
               />
@@ -182,7 +182,7 @@ export function VoiceMessagePlayer({
                 "pointer-events-none absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm",
                 incoming
                   ? "ring-2 ring-background/80 dark:ring-background/60"
-                  : "ring-2 ring-primary/40",
+                  : "ring-2 ring-primary-solid/40",
               )}
               style={{
                 left: `${progress * 100}%`,
@@ -210,7 +210,7 @@ export function VoiceMessagePlayer({
             <span
               className={cn(
                 "absolute -bottom-0.5 -left-0.5 flex size-5 items-center justify-center rounded-full shadow-sm ring-2",
-                incoming ? "ring-muted/60 dark:ring-muted/50" : "ring-primary",
+                incoming ? "ring-muted/60 dark:ring-muted/50" : "ring-primary-solid",
               )}
               style={{ backgroundColor: ACCENT }}
               aria-hidden
@@ -226,7 +226,7 @@ export function VoiceMessagePlayer({
       <div
         className={cn(
           "mt-0.5 flex justify-end pr-0.5 text-[11px] tabular-nums",
-          incoming ? "text-muted-foreground" : "text-primary-foreground/65",
+          incoming ? "text-muted-foreground" : "text-primary-solid-fg/65",
         )}
       >
         {wallClockTime}
