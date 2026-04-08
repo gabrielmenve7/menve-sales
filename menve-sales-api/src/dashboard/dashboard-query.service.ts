@@ -66,6 +66,47 @@ function extractIsoDateKeyFromCustomData(
   return s.slice(0, 10);
 }
 
+const EMPTY_BUCKET = "__empty__";
+
+function rawCustomValueForGroup(
+  customData: Prisma.JsonValue | null,
+  key: string,
+): unknown {
+  if (customData == null || typeof customData !== "object" || Array.isArray(customData)) {
+    return null;
+  }
+  return (customData as Record<string, unknown>)[key];
+}
+
+function internalBucketKeyFromRaw(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return EMPTY_BUCKET;
+  if (typeof raw === "number" && Number.isFinite(raw)) return `n:${raw}`;
+  if (typeof raw === "boolean") return raw ? "b:true" : "b:false";
+  const s = String(raw).trim();
+  return s.length === 0 ? EMPTY_BUCKET : `s:${s}`;
+}
+
+function labelFromInternalBucketKey(internalKey: string): string {
+  if (internalKey === EMPTY_BUCKET) return "(vazio)";
+  if (internalKey.startsWith("n:")) return internalKey.slice(2);
+  if (internalKey.startsWith("b:")) return internalKey === "b:true" ? "Sim" : "Não";
+  if (internalKey.startsWith("s:")) return internalKey.slice(2);
+  return internalKey;
+}
+
+function sortSeriesPtBr(
+  series: { label: string; value: number }[],
+  emptyLabels: string[],
+): { label: string; value: number }[] {
+  const emptySet = new Set(emptyLabels);
+  return [...series].sort((a, b) => {
+    const ae = emptySet.has(a.label);
+    const be = emptySet.has(b.label);
+    if (ae !== be) return ae ? 1 : -1;
+    return a.label.localeCompare(b.label, "pt-BR");
+  });
+}
+
 @Injectable()
 export class DashboardQueryService {
   constructor(private readonly prisma: PrismaService) {}
@@ -139,6 +180,24 @@ export class DashboardQueryService {
       if (cf.fieldType !== "DATE") {
         throw new BadRequestException(
           "Agrupar linha do tempo por data só aceita campos do tipo Data",
+        );
+      }
+    }
+    if (spec.dimension === "BY_CUSTOM_VALUE" && spec.groupByCustomFieldKey) {
+      const cf = await this.prisma.customField.findFirst({
+        where: {
+          tenantId,
+          entity: "DEAL",
+          key: spec.groupByCustomFieldKey,
+        },
+        select: { fieldType: true },
+      });
+      if (!cf) {
+        throw new BadRequestException("Campo do eixo X inválido para este tenant");
+      }
+      if (cf.fieldType === "DATE") {
+        throw new BadRequestException(
+          "Para campo Data no eixo X use a linha do tempo (período + agrupar por dias/semanas)",
         );
       }
     }
@@ -339,6 +398,12 @@ export class DashboardQueryService {
     }
     if (dim === "BY_DAY") {
       return this.byDay(tenantId, spec);
+    }
+    if (dim === "BY_ASSIGNEE") {
+      return this.byAssignee(tenantId, spec);
+    }
+    if (dim === "BY_CUSTOM_VALUE") {
+      return this.byCustomFieldValue(tenantId, spec);
     }
     throw new BadRequestException("Dimensão inválida");
   }
@@ -640,5 +705,205 @@ export class DashboardQueryService {
       series.push({ label: dkey, value });
     }
     return { kind: "series", series };
+  }
+
+  private async byAssignee(
+    tenantId: string,
+    spec: ResolvedWidgetQuerySpec,
+  ): Promise<SeriesResult> {
+    const where = this.buildWhere(tenantId, spec);
+    const emptyLabel = "Sem responsável";
+
+    const resolveLabels = async (
+      rows: { assignedToId: string | null }[],
+    ): Promise<Map<string | null, string>> => {
+      const map = new Map<string | null, string>();
+      map.set(null, emptyLabel);
+      const ids = [
+        ...new Set(
+          rows
+            .map((r) => r.assignedToId)
+            .filter((id): id is string => id != null && id.length > 0),
+        ),
+      ];
+      if (ids.length > 0) {
+        const users = await this.prisma.user.findMany({
+          where: { tenantId, id: { in: ids } },
+          select: { id: true, name: true, email: true },
+        });
+        for (const u of users) {
+          const n = u.name?.trim();
+          map.set(u.id, n && n.length > 0 ? n : u.email);
+        }
+        for (const id of ids) {
+          if (!map.has(id)) map.set(id, id);
+        }
+      }
+      return map;
+    };
+
+    if (spec.dataMeasure === "QUANTITY") {
+      const rows = await this.prisma.deal.groupBy({
+        by: ["assignedToId"],
+        where,
+        _count: { _all: true },
+      });
+      const labelBy = await resolveLabels(rows);
+      const series = rows.map((r) => ({
+        label: labelBy.get(r.assignedToId) ?? emptyLabel,
+        value: r._count._all,
+      }));
+      return {
+        kind: "series",
+        series: sortSeriesPtBr(series, [emptyLabel]),
+      };
+    }
+
+    if (spec.dataMeasure === "MONEY") {
+      if (spec.aggregation === "AVG") {
+        const rows = await this.prisma.deal.groupBy({
+          by: ["assignedToId"],
+          where,
+          _avg: { value: true },
+        });
+        const labelBy = await resolveLabels(rows);
+        const series = rows.map((r) => ({
+          label: labelBy.get(r.assignedToId) ?? emptyLabel,
+          value: Number(r._avg.value ?? 0),
+        }));
+        return {
+          kind: "series",
+          series: sortSeriesPtBr(series, [emptyLabel]),
+        };
+      }
+      const rows = await this.prisma.deal.groupBy({
+        by: ["assignedToId"],
+        where,
+        _sum: { value: true },
+      });
+      const labelBy = await resolveLabels(rows);
+      const series = rows.map((r) => ({
+        label: labelBy.get(r.assignedToId) ?? emptyLabel,
+        value: Number(r._sum.value ?? 0),
+      }));
+      return {
+        kind: "series",
+        series: sortSeriesPtBr(series, [emptyLabel]),
+      };
+    }
+
+    const numKey = spec.customFieldKey!;
+    const rows = await this.prisma.deal.findMany({
+      where,
+      select: { assignedToId: true, customData: true },
+    });
+    const map = new Map<string | null, number[]>();
+    for (const r of rows) {
+      const n = extractJsonNumber(r.customData, numKey);
+      if (n == null) continue;
+      const k = r.assignedToId;
+      const arr = map.get(k) ?? [];
+      arr.push(n);
+      map.set(k, arr);
+    }
+    const pseudoRows = [...map.keys()].map((assignedToId) => ({ assignedToId }));
+    const labelBy = await resolveLabels(pseudoRows);
+    const series = [...map.entries()].map(([aid, nums]) => {
+      const label = labelBy.get(aid) ?? emptyLabel;
+      if (spec.aggregation === "AVG") {
+        const t = nums.reduce((a, b) => a + b, 0);
+        return { label, value: t / nums.length };
+      }
+      return { label, value: nums.reduce((a, b) => a + b, 0) };
+    });
+    return {
+      kind: "series",
+      series: sortSeriesPtBr(series, [emptyLabel]),
+    };
+  }
+
+  private async byCustomFieldValue(
+    tenantId: string,
+    spec: ResolvedWidgetQuerySpec,
+  ): Promise<SeriesResult> {
+    const gk = spec.groupByCustomFieldKey!;
+    const where = this.buildWhere(tenantId, spec);
+    const cf = await this.prisma.customField.findFirst({
+      where: { tenantId, entity: "DEAL", key: gk },
+      select: { fieldType: true },
+    });
+    if (!cf) throw new NotFoundException("Campo customizado não encontrado");
+
+    const measureKey = spec.customFieldKey;
+    const rows = await this.prisma.deal.findMany({
+      where,
+      select: { customData: true, value: true },
+    });
+
+    const map = new Map<string, number[]>();
+    for (const r of rows) {
+      const raw = rawCustomValueForGroup(r.customData, gk);
+      const bk = internalBucketKeyFromRaw(raw);
+      let v: number;
+      if (spec.dataMeasure === "QUANTITY") {
+        v = 1;
+      } else if (spec.dataMeasure === "MONEY") {
+        v = Number(r.value ?? 0);
+      } else {
+        const n = extractJsonNumber(r.customData, measureKey!);
+        if (n == null) continue;
+        v = n;
+      }
+      const arr = map.get(bk) ?? [];
+      arr.push(v);
+      map.set(bk, arr);
+    }
+
+    let series: { label: string; value: number }[] = [...map.entries()].map(
+      ([internalKey, arr]) => {
+        let value: number;
+        if (spec.dataMeasure === "QUANTITY") {
+          value = arr.length;
+        } else if (spec.aggregation === "AVG" && arr.length > 0) {
+          value = arr.reduce((a, b) => a + b, 0) / arr.length;
+        } else {
+          value = arr.reduce((a, b) => a + b, 0);
+        }
+        return {
+          label: labelFromInternalBucketKey(internalKey),
+          value,
+        };
+      },
+    );
+
+    if (cf.fieldType === "USER") {
+      const ids = new Set<string>();
+      for (const [internalKey] of map) {
+        if (internalKey === EMPTY_BUCKET) continue;
+        if (internalKey.startsWith("s:")) ids.add(internalKey.slice(2));
+      }
+      if (ids.size > 0) {
+        const users = await this.prisma.user.findMany({
+          where: { tenantId, id: { in: [...ids] } },
+          select: { id: true, name: true, email: true },
+        });
+        const nameById = new Map(
+          users.map((u) => {
+            const n = u.name?.trim();
+            return [u.id, n && n.length > 0 ? n : u.email] as const;
+          }),
+        );
+        series = series.map((s) => {
+          if (s.label === "(vazio)") return s;
+          const resolved = nameById.get(s.label);
+          return resolved ? { ...s, label: resolved } : s;
+        });
+      }
+    }
+
+    return {
+      kind: "series",
+      series: sortSeriesPtBr(series, ["(vazio)"]),
+    };
   }
 }

@@ -5,8 +5,10 @@ import {
   Calendar,
   ChevronsUpDown,
   CircleDot,
+  DollarSign,
   Hash,
   Info,
+  Kanban,
   Link2,
   ListOrdered,
   Mail,
@@ -69,17 +71,84 @@ const DIMENSION_OPTIONS: {
   { value: "BY_STAGE", label: "Por estágio" },
   { value: "BY_STATUS", label: "Por status" },
   { value: "BY_DAY", label: "Por dia (linha do tempo)" },
+  { value: "BY_ASSIGNEE", label: "Por responsável" },
+  { value: "BY_CUSTOM_VALUE", label: "Por valor de campo" },
 ];
 
-/** Rótulos do eixo X no modo gráfico de barras (alinhado ao protótipo). */
-const BAR_X_DIMENSION_OPTIONS: {
-  value: NonNullable<WidgetQuerySpec["dimension"]> | "";
-  label: string;
-}[] = [
-  { value: "BY_STAGE", label: "Estágio" },
-  { value: "BY_STATUS", label: "Status" },
-  { value: "BY_DAY", label: "Linha do tempo" },
-];
+const BAR_X_STAGE = "x:stage";
+const BAR_X_STATUS = "x:status";
+const BAR_X_ASSIGNEE = "x:assignee";
+const BAR_X_TIMELINE_CREATED = "x:timeline:created";
+const BAR_X_TIMELINE_DATE_PREFIX = "x:timeline:date:";
+const BAR_X_CUSTOM_PREFIX = "x:custom:";
+
+function barXTimelineDateKey(fieldKey: string): string {
+  return `${BAR_X_TIMELINE_DATE_PREFIX}${fieldKey}`;
+}
+
+function barXCustomKey(fieldKey: string): string {
+  return `${BAR_X_CUSTOM_PREFIX}${fieldKey}`;
+}
+
+function parseBarXColumnId(id: string): {
+  dimension: NonNullable<WidgetQuerySpec["dimension"]>;
+  timelineBucketFieldKey?: string;
+  groupByCustomFieldKey?: string;
+} {
+  if (id === BAR_X_STAGE) return { dimension: "BY_STAGE" };
+  if (id === BAR_X_STATUS) return { dimension: "BY_STATUS" };
+  if (id === BAR_X_ASSIGNEE) return { dimension: "BY_ASSIGNEE" };
+  if (id === BAR_X_TIMELINE_CREATED) return { dimension: "BY_DAY" };
+  if (id.startsWith(BAR_X_TIMELINE_DATE_PREFIX)) {
+    const key = id.slice(BAR_X_TIMELINE_DATE_PREFIX.length);
+    return { dimension: "BY_DAY", timelineBucketFieldKey: key };
+  }
+  if (id.startsWith(BAR_X_CUSTOM_PREFIX)) {
+    return {
+      dimension: "BY_CUSTOM_VALUE",
+      groupByCustomFieldKey: id.slice(BAR_X_CUSTOM_PREFIX.length),
+    };
+  }
+  return { dimension: "BY_STAGE" };
+}
+
+function inferBarXColumnIdFromSpec(
+  spec: WidgetQuerySpec,
+  _dealCustomFields: DealCustomFieldDef[],
+): string {
+  const d = spec.dimension;
+  if (d === "BY_STAGE") return BAR_X_STAGE;
+  if (d === "BY_STATUS") return BAR_X_STATUS;
+  if (d === "BY_ASSIGNEE") return BAR_X_ASSIGNEE;
+  if (d === "BY_CUSTOM_VALUE" && spec.groupByCustomFieldKey?.trim()) {
+    return barXCustomKey(spec.groupByCustomFieldKey.trim());
+  }
+  if (d === "BY_DAY") {
+    const tb = spec.timelineBucketFieldKey?.trim();
+    if (!tb) return BAR_X_TIMELINE_CREATED;
+    return barXTimelineDateKey(tb);
+  }
+  return BAR_X_STAGE;
+}
+
+function labelForBarXColumnId(
+  columnId: string,
+  dealCustomFields: DealCustomFieldDef[],
+): string {
+  if (columnId === BAR_X_STAGE) return "Estágio";
+  if (columnId === BAR_X_STATUS) return "Status";
+  if (columnId === BAR_X_ASSIGNEE) return "Responsável";
+  if (columnId === BAR_X_TIMELINE_CREATED) return "Data de criação";
+  if (columnId.startsWith(BAR_X_TIMELINE_DATE_PREFIX)) {
+    const k = columnId.slice(BAR_X_TIMELINE_DATE_PREFIX.length);
+    return dealCustomFields.find((c) => c.key === k)?.name ?? k;
+  }
+  if (columnId.startsWith(BAR_X_CUSTOM_PREFIX)) {
+    const k = columnId.slice(BAR_X_CUSTOM_PREFIX.length);
+    return dealCustomFields.find((c) => c.key === k)?.name ?? k;
+  }
+  return "Selecionar…";
+}
 
 const BAR_TIME_PRESET_OPTIONS: { value: BarTimePreset; label: string }[] = [
   { value: "THIS_MONTH", label: "Este mês" },
@@ -1014,6 +1083,9 @@ function columnOptionSelectable(
   return !taken.has(bf);
 }
 
+const dashComboTriggerClass =
+  "h-10 min-w-[12rem] max-w-[16rem] justify-between rounded-md border border-input bg-background px-2 text-left text-sm font-normal shadow-sm ring-offset-background";
+
 function DashFilterFieldPicker({
   columnId,
   groupRows,
@@ -1057,7 +1129,7 @@ function DashFilterFieldPicker({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-10 min-w-[12rem] max-w-[16rem] justify-between rounded-md border border-input bg-background px-2 text-left text-sm font-normal shadow-sm ring-offset-background"
+          className={dashComboTriggerClass}
         >
           <span className="min-w-0 flex-1 truncate">
             {labelForDashColumnId(columnId, dealCustomFields)}
@@ -1119,6 +1191,343 @@ function DashFilterFieldPicker({
   );
 }
 
+function BarXAxisFieldPicker({
+  columnId,
+  dealCustomFields,
+  onSelect,
+}: {
+  columnId: string;
+  dealCustomFields: DealCustomFieldDef[];
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const flat = useMemo(() => {
+    const builtins: {
+      id: string;
+      label: string;
+      Icon: LucideIcon;
+      search: string;
+    }[] = [
+      {
+        id: BAR_X_STAGE,
+        label: "Estágio",
+        Icon: Kanban,
+        search: "estágio pipeline fase coluna",
+      },
+      {
+        id: BAR_X_STATUS,
+        label: "Status",
+        Icon: CircleDot,
+        search: "status aberto ganho perdido",
+      },
+      {
+        id: BAR_X_ASSIGNEE,
+        label: "Responsável",
+        Icon: User,
+        search: "responsável atribuído dono vendedor",
+      },
+      {
+        id: BAR_X_TIMELINE_CREATED,
+        label: "Data de criação",
+        Icon: Calendar,
+        search: "criação criado data criação do deal",
+      },
+    ];
+    const customs = [...dealCustomFields]
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+      .map((f) =>
+        f.fieldType === "DATE"
+          ? {
+              id: barXTimelineDateKey(f.key),
+              label: f.name,
+              Icon: iconForDealCustomFieldType(f.fieldType),
+              search: `${f.name} ${f.key} data linha do tempo`.toLowerCase(),
+            }
+          : {
+              id: barXCustomKey(f.key),
+              label: f.name,
+              Icon: iconForDealCustomFieldType(f.fieldType),
+              search: `${f.name} ${f.key}`.toLowerCase(),
+            },
+      );
+    return [...builtins, ...customs];
+  }, [dealCustomFields]);
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return flat;
+    return flat.filter((x) => x.search.includes(t));
+  }, [flat, q]);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={dashComboTriggerClass}
+        >
+          <span className="min-w-0 flex-1 truncate">
+            {labelForBarXColumnId(columnId, dealCustomFields)}
+          </span>
+          <ChevronsUpDown className="ml-1 size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[min(20rem,calc(100vw-2rem))] border-border/60 p-0 shadow-lg"
+        align="start"
+      >
+        <div className="border-b border-border/60 p-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Pesquisar…"
+              className="h-9 pl-9"
+            />
+          </div>
+        </div>
+        <div className="max-h-64 overflow-y-auto overscroll-contain p-1">
+          {filtered.map((opt) => {
+            const Icon = opt.Icon;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted/80",
+                  columnId === opt.id && "bg-muted/60",
+                )}
+                onClick={() => {
+                  onSelect(opt.id);
+                  setOpen(false);
+                  setQ("");
+                }}
+              >
+                <Icon
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+              </button>
+            );
+          })}
+          {filtered.length === 0 ? (
+            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+              Nada encontrado.
+            </p>
+          ) : null}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function barYMeasureButtonLabel(
+  dataMeasure: DataMeasure,
+  customFieldKey: string,
+  dealCustomFields: DealCustomFieldDef[],
+): string {
+  if (dataMeasure === "QUANTITY") return "Número de deals";
+  if (dataMeasure === "MONEY") return "Valor do negócio (R$)";
+  const cf = dealCustomFields.find((c) => c.key === customFieldKey);
+  return cf?.name ?? "Campo numérico…";
+}
+
+function BarYMeasurePicker({
+  dataMeasure,
+  customFieldKey,
+  numericCustomFields,
+  dealCustomFields,
+  onPick,
+}: {
+  dataMeasure: DataMeasure;
+  customFieldKey: string;
+  numericCustomFields: DealCustomFieldDef[];
+  dealCustomFields: DealCustomFieldDef[];
+  onPick: (next: {
+    dataMeasure: DataMeasure;
+    customFieldKey: string;
+    aggregation: Aggregation;
+  }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const label = barYMeasureButtonLabel(
+    dataMeasure,
+    customFieldKey,
+    dealCustomFields,
+  );
+  const flat = useMemo(() => {
+    const head: {
+      id: string;
+      label: string;
+      Icon: LucideIcon;
+      search: string;
+      payload: { dataMeasure: DataMeasure; customFieldKey: string; aggregation: Aggregation };
+    }[] = [
+      {
+        id: "qty",
+        label: "Número de deals",
+        Icon: CircleDot,
+        search: "número quantidade deals negócios",
+        payload: {
+          dataMeasure: "QUANTITY",
+          customFieldKey: "",
+          aggregation: "SUM",
+        },
+      },
+      {
+        id: "money",
+        label: "Valor do negócio (R$)",
+        Icon: DollarSign,
+        search: "dinheiro valor real pipeline",
+        payload: {
+          dataMeasure: "MONEY",
+          customFieldKey: "",
+          aggregation: "SUM",
+        },
+      },
+    ];
+    const nums = numericCustomFields.map((f) => ({
+      id: `cf:${f.key}`,
+      label: f.name,
+      Icon: iconForDealCustomFieldType(f.fieldType),
+      search: `${f.name} ${f.key} número`.toLowerCase(),
+      payload: {
+        dataMeasure: "CUSTOM_NUMBER" as const,
+        customFieldKey: f.key,
+        aggregation: "SUM" as Aggregation,
+      },
+    }));
+    return [...head, ...nums];
+  }, [numericCustomFields]);
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return flat;
+    return flat.filter((x) => x.search.includes(t));
+  }, [flat, q]);
+  const currentId =
+    dataMeasure === "QUANTITY"
+      ? "qty"
+      : dataMeasure === "MONEY"
+        ? "money"
+        : `cf:${customFieldKey}`;
+  const headOpts = filtered.filter((x) => x.id === "qty" || x.id === "money");
+  const numOpts = filtered.filter((x) => x.id.startsWith("cf:"));
+  const noResults = headOpts.length === 0 && numOpts.length === 0;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={dashComboTriggerClass}
+        >
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+          <ChevronsUpDown className="ml-1 size-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[min(20rem,calc(100vw-2rem))] border-border/60 p-0 shadow-lg"
+        align="start"
+      >
+        <div className="border-b border-border/60 p-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Pesquisar…"
+              className="h-9 pl-9"
+            />
+          </div>
+        </div>
+        <div className="max-h-72 overflow-y-auto overscroll-contain p-1">
+          {noResults ? (
+            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+              Nada encontrado.
+            </p>
+          ) : (
+            <>
+              {headOpts.length > 0 ? (
+                <>
+                  <p className="px-2 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Deals e valor
+                  </p>
+                  {headOpts.map((opt) => {
+                    const Icon = opt.Icon;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted/80",
+                          currentId === opt.id && "bg-muted/60",
+                        )}
+                        onClick={() => {
+                          onPick(opt.payload);
+                          setOpen(false);
+                          setQ("");
+                        }}
+                      >
+                        <Icon
+                          className="size-4 shrink-0 text-muted-foreground"
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          {opt.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </>
+              ) : null}
+              {numericCustomFields.length > 0 && numOpts.length > 0 ? (
+                <>
+                  <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Campos numéricos
+                  </p>
+                  {numOpts.map((opt) => {
+                    const Icon = opt.Icon;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted/80",
+                          currentId === opt.id && "bg-muted/60",
+                        )}
+                        onClick={() => {
+                          onPick(opt.payload);
+                          setOpen(false);
+                          setQ("");
+                        }}
+                      >
+                        <Icon
+                          className="size-4 shrink-0 text-muted-foreground"
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          {opt.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </>
+              ) : null}
+            </>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** Estilos alinhados ao tema (light/dark via tokens do app). */
 const panel = {
   shell:
@@ -1166,17 +1575,14 @@ export function DashboardWidgetConfigDialog({
   const [barXGroupBy, setBarXGroupBy] = useState<BarXGroupBy>("DAY");
   /** BY_DAY: chave do campo DATE para eixo; vazio = criação do deal. */
   const [timelineBucketFieldKey, setTimelineBucketFieldKey] = useState("");
+  /** Eixo X do gráfico em barras (estágio, status, responsável, timeline, campo). */
+  const [barXColumnId, setBarXColumnId] = useState(BAR_X_STAGE);
   const [filterGroups, setFilterGroups] = useState<DashFilterGroupState[]>(() => [
     defaultFilterGroup(),
   ]);
 
   const numericCustomFields = useMemo(
     () => dealCustomFields.filter(numericFieldTypes),
-    [dealCustomFields],
-  );
-
-  const dateCustomFields = useMemo(
-    () => dealCustomFields.filter((f) => f.fieldType === "DATE"),
     [dealCustomFields],
   );
 
@@ -1209,6 +1615,7 @@ export function DashboardWidgetConfigDialog({
       setBarFillFullMonth(s.fillTimelineMonth === true);
       setBarXGroupBy(bc.xGroupBy ?? "DAY");
       setBarCustomDays(s.days ?? 30);
+      setBarXColumnId(inferBarXColumnIdFromSpec(s, dealCustomFields));
     }
   }, [widget, open, dealCustomFields]);
 
@@ -1243,6 +1650,17 @@ export function DashboardWidgetConfigDialog({
     if (raw === "true") return true;
     if (raw === "false") return false;
     return raw;
+  }
+
+  function onBarXColumnSelect(id: string) {
+    setBarXColumnId(id);
+    const p = parseBarXColumnId(id);
+    setDimension(p.dimension);
+    if (p.dimension === "BY_DAY") {
+      setTimelineBucketFieldKey(p.timelineBucketFieldKey ?? "");
+    } else {
+      setTimelineBucketFieldKey("");
+    }
   }
 
   function removeFilterRow(groupId: string, rowId: string) {
@@ -1437,43 +1855,36 @@ export function DashboardWidgetConfigDialog({
       delete spec.timelineBucketFieldKey;
       delete spec.days;
     } else if (isBar) {
-      spec.dimension = (dimension || "BY_STAGE") as NonNullable<
-        WidgetQuerySpec["dimension"]
-      >;
-      if (spec.dimension === "BY_DAY") {
-        const tb = timelineBucketFieldKey.trim();
+      const x = parseBarXColumnId(barXColumnId);
+      spec.dimension = x.dimension;
+      delete spec.groupByCustomFieldKey;
+      delete spec.timelineBucketFieldKey;
+      delete spec.timelineStart;
+      delete spec.fillTimelineMonth;
+      delete spec.days;
+
+      if (x.dimension === "BY_CUSTOM_VALUE" && x.groupByCustomFieldKey) {
+        spec.groupByCustomFieldKey = x.groupByCustomFieldKey;
+      }
+
+      if (x.dimension === "BY_DAY") {
+        const tb = x.timelineBucketFieldKey?.trim();
         if (tb) spec.timelineBucketFieldKey = tb;
-        else delete spec.timelineBucketFieldKey;
         if (barTimePreset === "THIS_MONTH") {
           spec.timelineStart = firstDayOfMonthIsoLocal();
           spec.fillTimelineMonth = barFillFullMonth;
-          delete spec.days;
         } else if (barTimePreset === "NEXT_MONTH") {
           spec.timelineStart = firstDayOfNextMonthIsoLocal();
           spec.fillTimelineMonth = barFillFullMonth;
-          delete spec.days;
         } else if (barTimePreset === "LAST_7_DAYS") {
-          delete spec.timelineStart;
-          delete spec.fillTimelineMonth;
           spec.days = 7;
         } else if (barTimePreset === "LAST_30_DAYS") {
-          delete spec.timelineStart;
-          delete spec.fillTimelineMonth;
           spec.days = 30;
         } else if (barTimePreset === "LAST_90_DAYS") {
-          delete spec.timelineStart;
-          delete spec.fillTimelineMonth;
           spec.days = 90;
         } else {
-          delete spec.timelineStart;
-          delete spec.fillTimelineMonth;
           spec.days = Math.min(366, Math.max(1, barCustomDays));
         }
-      } else {
-        delete spec.timelineStart;
-        delete spec.fillTimelineMonth;
-        delete spec.timelineBucketFieldKey;
-        delete spec.days;
       }
     } else {
       spec.dimension = (dimension || "BY_STAGE") as NonNullable<
@@ -1500,7 +1911,6 @@ export function DashboardWidgetConfigDialog({
         showLegend: barShowLegend,
         timePreset: barTimePreset,
         xGroupBy: spec.dimension === "BY_DAY" ? barXGroupBy : "DAY",
-        yGroupBy: "NONE",
       };
     }
     onSave(next);
@@ -1586,33 +1996,19 @@ export function DashboardWidgetConfigDialog({
                   <div className={`grid gap-3 border-t pt-5 ${panel.divider}`}>
                     <p className="text-sm font-medium text-foreground">Eixo X</p>
                     <div className="grid gap-1.5">
-                      <Label htmlFor="dw-bar-x-measure" className="text-foreground">
-                        Medida
-                      </Label>
-                      <select
-                        id="dw-bar-x-measure"
-                        className={panel.control}
-                        value={dimension || "BY_STAGE"}
-                        onChange={(e) =>
-                          setDimension(
-                            e.target.value as NonNullable<
-                              WidgetQuerySpec["dimension"]
-                            >,
-                          )
-                        }
-                      >
-                        {BAR_X_DIMENSION_OPTIONS.map((o) => (
-                          <option
-                            key={o.value}
-                            value={o.value}
-                            className="bg-popover text-popover-foreground"
-                          >
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
+                      <Label className="text-foreground">O que cada barra representa</Label>
+                      <BarXAxisFieldPicker
+                        columnId={barXColumnId}
+                        dealCustomFields={dealCustomFields}
+                        onSelect={onBarXColumnSelect}
+                      />
+                      <p className={cn(panel.muted, "text-[11px] leading-snug")}>
+                        Mesmo estilo da lista de campos dos filtros do cartão:
+                        estágio, status, responsável, data de criação ou qualquer
+                        campo do negócio (datas viram linha do tempo).
+                      </p>
                     </div>
-                    {(dimension || "BY_STAGE") === "BY_DAY" ? (
+                    {parseBarXColumnId(barXColumnId).dimension === "BY_DAY" ? (
                       <>
                         <div className="grid gap-1.5">
                           <Label htmlFor="dw-bar-time" className="text-foreground">
@@ -1697,76 +2093,24 @@ export function DashboardWidgetConfigDialog({
                             ))}
                           </select>
                         </div>
-                        <div className="grid gap-1.5">
-                          <Label
-                            htmlFor="dw-bar-timeline-bucket"
-                            className="text-foreground"
-                          >
-                            Data de cada barra
-                          </Label>
-                          <select
-                            id="dw-bar-timeline-bucket"
-                            className={panel.control}
-                            value={timelineBucketFieldKey}
-                            onChange={(e) =>
-                              setTimelineBucketFieldKey(e.target.value)
-                            }
-                          >
-                            <option value="">
-                              Criação do deal (padrão)
-                            </option>
-                            {dateCustomFields.map((f) => (
-                              <option
-                                key={f.id}
-                                value={f.key}
-                                className="bg-popover text-popover-foreground"
-                              >
-                                {f.name}
-                              </option>
-                            ))}
-                          </select>
-                          <p className={cn(panel.muted, "text-[11px] leading-snug")}>
-                            Use um campo do tipo Data (ex.: agendamento ou
-                            qualificação) para contar deals por esse dia. O padrão
-                            é a data de criação do negócio.
-                          </p>
-                        </div>
                       </>
                     ) : null}
                   </div>
                   <div className={`grid gap-3 border-t pt-5 ${panel.divider}`}>
                     <p className="text-sm font-medium text-foreground">Eixo Y</p>
                     <div className="grid gap-1.5">
-                      <Label htmlFor="dw-bar-y-measure" className="text-foreground">
-                        Medida
-                      </Label>
-                      <select
-                        id="dw-bar-y-measure"
-                        className={panel.control}
-                        value={dataMeasure}
-                        onChange={(e) =>
-                          setDataMeasure(e.target.value as DataMeasure)
-                        }
-                      >
-                        <option
-                          value="QUANTITY"
-                          className="bg-popover text-popover-foreground"
-                        >
-                          Número de deals
-                        </option>
-                        <option
-                          value="MONEY"
-                          className="bg-popover text-popover-foreground"
-                        >
-                          Valor (R$)
-                        </option>
-                        <option
-                          value="CUSTOM_NUMBER"
-                          className="bg-popover text-popover-foreground"
-                        >
-                          Campo customizado
-                        </option>
-                      </select>
+                      <Label className="text-foreground">Medida</Label>
+                      <BarYMeasurePicker
+                        dataMeasure={dataMeasure}
+                        customFieldKey={customFieldKey}
+                        numericCustomFields={numericCustomFields}
+                        dealCustomFields={dealCustomFields}
+                        onPick={(next) => {
+                          setDataMeasure(next.dataMeasure);
+                          setCustomFieldKey(next.customFieldKey);
+                          setAggregation(next.aggregation);
+                        }}
+                      />
                     </div>
                     {dataMeasure !== "QUANTITY" ? (
                       <div className="grid gap-1.5">
@@ -1796,53 +2140,11 @@ export function DashboardWidgetConfigDialog({
                         </select>
                       </div>
                     ) : null}
-                    {dataMeasure === "CUSTOM_NUMBER" ? (
-                      <div className="grid gap-1.5">
-                        <Label htmlFor="dw-bar-cf-key" className="text-foreground">
-                          Campo
-                        </Label>
-                        <select
-                          id="dw-bar-cf-key"
-                          className={panel.control}
-                          value={customFieldKey}
-                          onChange={(e) => setCustomFieldKey(e.target.value)}
-                        >
-                          <option
-                            value=""
-                            className="bg-popover text-popover-foreground"
-                          >
-                            Selecione…
-                          </option>
-                          {numericCustomFields.map((f) => (
-                            <option
-                              key={f.id}
-                              value={f.key}
-                              className="bg-popover text-popover-foreground"
-                            >
-                              {f.name}
-                            </option>
-                          ))}
-                        </select>
-                        {numericCustomFields.length === 0 ? (
-                          <p className={panel.muted}>
-                            Nenhum campo numérico em Deals.
-                          </p>
-                        ) : null}
-                      </div>
+                    {dataMeasure === "CUSTOM_NUMBER" && !customFieldKey ? (
+                      <p className={panel.muted}>
+                        Escolha um campo numérico na medida acima.
+                      </p>
                     ) : null}
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="dw-bar-y-group" className="text-foreground">
-                        Agrupar por
-                      </Label>
-                      <select
-                        id="dw-bar-y-group"
-                        className={cn(panel.control, "opacity-80")}
-                        disabled
-                        value="NONE"
-                      >
-                        <option value="NONE">Nenhum</option>
-                      </select>
-                    </div>
                   </div>
                 </>
               ) : (

@@ -45,7 +45,21 @@ export type WidgetFilterGroupInput = z.infer<typeof widgetFilterGroupSchema>;
 export const widgetQuerySpecInputSchema = z.object({
   source: z.literal("DEALS"),
   pipelineId: z.string().min(1),
-  dimension: z.enum(["BY_STAGE", "BY_STATUS", "BY_DAY"]).optional().nullable(),
+  dimension: z
+    .enum([
+      "BY_STAGE",
+      "BY_STATUS",
+      "BY_DAY",
+      "BY_ASSIGNEE",
+      "BY_CUSTOM_VALUE",
+    ])
+    .optional()
+    .nullable(),
+  /**
+   * Com BY_CUSTOM_VALUE: chave do campo em `customData` usada para fatiar as barras.
+   * Não usar com campos DATE (use BY_DAY + timelineBucketFieldKey).
+   */
+  groupByCustomFieldKey: z.string().min(1).max(64).optional(),
   days: z.number().int().min(1).max(366).optional(),
   /** Com BY_DAY: primeiro dia da série (YYYY-MM-DD). Se definido, substitui janela rolante de `days`. */
   timelineStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -91,11 +105,19 @@ export type WidgetQuerySpecInput = z.infer<typeof widgetQuerySpecInputSchema>;
 export type ResolvedWidgetQuerySpec = {
   source: "DEALS";
   pipelineId: string;
-  dimension: "BY_STAGE" | "BY_STATUS" | "BY_DAY" | null;
+  dimension:
+    | "BY_STAGE"
+    | "BY_STATUS"
+    | "BY_DAY"
+    | "BY_ASSIGNEE"
+    | "BY_CUSTOM_VALUE"
+    | null;
   days?: number;
   timelineStart?: string;
   fillTimelineMonth?: boolean;
   timelineBucketFieldKey?: string;
+  /** Só com dimension = BY_CUSTOM_VALUE */
+  groupByCustomFieldKey?: string;
   dataMeasure: "QUANTITY" | "MONEY" | "CUSTOM_NUMBER";
   aggregation: "SUM" | "AVG";
   customFieldKey?: string;
@@ -155,6 +177,7 @@ export function resolveWidgetQuerySpec(
 
   const dim = input.dimension ?? null;
   const timelineBucketTrim = input.timelineBucketFieldKey?.trim();
+  const groupByTrim = input.groupByCustomFieldKey?.trim();
 
   return {
     source: "DEALS",
@@ -165,6 +188,8 @@ export function resolveWidgetQuerySpec(
     fillTimelineMonth: input.fillTimelineMonth === true ? true : undefined,
     timelineBucketFieldKey:
       dim === "BY_DAY" && timelineBucketTrim ? timelineBucketTrim : undefined,
+    groupByCustomFieldKey:
+      dim === "BY_CUSTOM_VALUE" && groupByTrim ? groupByTrim : undefined,
     dataMeasure,
     aggregation,
     customFieldKey: input.customFieldKey,
@@ -192,6 +217,17 @@ export const widgetQuerySpecSchema = widgetQuerySpecInputSchema.superRefine(
         code: z.ZodIssueCode.custom,
         message: "customFieldKey é obrigatório para medida Número (campo customizado)",
         path: ["customFieldKey"],
+      });
+    }
+    if (
+      val.dimension === "BY_CUSTOM_VALUE" &&
+      !val.groupByCustomFieldKey?.trim()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "groupByCustomFieldKey é obrigatório quando a dimensão é valor de campo customizado",
+        path: ["groupByCustomFieldKey"],
       });
     }
   },

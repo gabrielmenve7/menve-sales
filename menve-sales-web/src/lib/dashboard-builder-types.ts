@@ -75,14 +75,20 @@ export type BarChartConfig = {
   showLegend?: boolean;
   timePreset?: BarTimePreset;
   xGroupBy?: BarXGroupBy;
-  /** Reservado (ex.: barras empilhadas); hoje só "NONE". */
-  yGroupBy?: "NONE";
 };
 
 export type WidgetQuerySpec = {
   source: "DEALS";
   pipelineId: string;
-  dimension?: "BY_STAGE" | "BY_STATUS" | "BY_DAY" | null;
+  dimension?:
+    | "BY_STAGE"
+    | "BY_STATUS"
+    | "BY_DAY"
+    | "BY_ASSIGNEE"
+    | "BY_CUSTOM_VALUE"
+    | null;
+  /** Eixo X por valor de campo (não-Data) em customData. */
+  groupByCustomFieldKey?: string;
   days?: number;
   /**
    * Início fixo da linha do tempo (YYYY-MM-DD), inclusive.
@@ -188,7 +194,6 @@ export function defaultBarChartConfig(): BarChartConfig {
     showLegend: false,
     timePreset: "LAST_30_DAYS",
     xGroupBy: "DAY",
-    yGroupBy: "NONE",
   };
 }
 
