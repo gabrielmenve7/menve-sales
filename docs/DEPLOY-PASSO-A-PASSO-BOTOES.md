@@ -53,6 +53,22 @@ Use este guia **depois** de ter o código no GitHub (ou GitLab/Bitbucket) na bra
 
 6. **Settings** → **Networking** → **Generate domain** (a Railway mostra algo como `xxx.up.railway.app`). Clique para gerar se ainda não existir.
 7. **Deployments:** espere o deploy ficar **Success** (verde). Se falhar, abra os **Logs** e corrija env faltando.
+
+### Se o build falhar em `npm ci` (Railpack / monorepo na raiz)
+
+O `package-lock.json` da API usa **lockfile version 3**, que exige **npm 7+** (Node 16+). Se a Railway usar Node/npm velhos, o `npm ci` quebra e o log parece “ajuda” do npm (`Usage: npm ci`).
+
+**Opção 1 — variável (rápido):** no serviço, aba **Variables** → adicione:
+
+| Nome | Valor |
+|------|--------|
+| `NIXPACKS_NODE_VERSION` | `20` |
+
+Mantenha o **Build Command:** `cd menve-sales-api && npm ci && npm run build` e o **Start Command:** `cd menve-sales-api && npm run start`. **Redeploy**.
+
+**Opção 2 — Docker (mais estável):** em **Settings → Build**, troque **Builder** de **Railpack** para **Dockerfile**. Em **Settings → Source**, defina **Root Directory** = `menve-sales-api` (use a busca “Filter Settings…” com a palavra `root` se não achar). **Apague** Custom Build e Custom Start (a imagem já faz build e `node dist/main.js`). **Redeploy**.
+
+**Opção 3 — sem `ci` (só se ainda falhar):** Build Command temporário: `cd menve-sales-api && npm install && npm run build` (menos reproduzível que `npm ci`, use só para destravar).
 8. **Domínio customizado da API:** **Settings** → **Networking** → **Custom Domain** → digite `api.vendas.menvedigital.com.br` → **Add**. A Railway mostra um **CNAME** alvo (ex.: `xxxx.railway.app` ou similar). **Anote** esse alvo — você vai colar no DNS na Parte D.
 
 9. No navegador, teste `https://<domínio-gerado-pela-railway>/health` até retornar JSON com `"ok":true`. Depois que o DNS da Parte D propagar, teste `https://api.vendas.menvedigital.com.br/health`.
