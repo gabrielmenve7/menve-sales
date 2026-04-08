@@ -213,7 +213,7 @@ export function DashboardWidgetRenderer({
               {title}
             </CardTitle>
             <div
-              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-foreground dark:bg-sky-400/15"
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
               aria-hidden
             >
               <Icon className="size-4 stroke-[1.75]" />
