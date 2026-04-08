@@ -26,7 +26,7 @@ export function DashboardKpiCard({
         <CardTitle className="text-[13px] font-medium text-muted-foreground">
           {label}
         </CardTitle>
-        <div className="rounded-md bg-muted p-1.5 text-foreground">
+        <div className="rounded-md bg-primary/10 p-1.5 text-primary">
           <Icon className="size-4" strokeWidth={1.75} />
         </div>
       </CardHeader>
