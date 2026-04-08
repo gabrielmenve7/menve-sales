@@ -19,7 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CHART_BAR_SEQUENCE } from "@/lib/chart-colors";
+import { CHART_BAR_SEQUENCE, CHART_LINE_STROKE } from "@/lib/chart-colors";
 import {
   customFieldByKey,
   defaultBarChartConfig,
@@ -485,13 +485,13 @@ function BarChartCardBody({
                   >
                     <stop
                       offset="0%"
-                      stopColor="var(--primary)"
+                      stopColor={CHART_LINE_STROKE}
                       stopOpacity={0.32}
                     />
                     <stop
                       offset="100%"
-                      stopColor="var(--primary)"
-                      stopOpacity={0.02}
+                      stopColor={CHART_LINE_STROKE}
+                      stopOpacity={0.04}
                     />
                   </linearGradient>
                 </defs>
@@ -539,7 +539,7 @@ function BarChartCardBody({
                   type="monotone"
                   dataKey="value"
                   name={title}
-                  stroke="var(--primary)"
+                  stroke={CHART_LINE_STROKE}
                   strokeWidth={2.25}
                   fill={`url(#${areaFillGradientId})`}
                   dot={false}
