@@ -2,6 +2,8 @@
 
 Guia operacional para o modelo **Next.js na Vercel** e **NestJS em outro PaaS**, com Postgres (ex.: Neon) compartilhado.
 
+**Passo a passo clique a clique (Neon, Railway, Vercel, DNS, seed, smoke):** [`DEPLOY-PASSO-A-PASSO-BOTOES.md`](./DEPLOY-PASSO-A-PASSO-BOTOES.md).
+
 ## Arquitetura
 
 - **Web:** Vercel, domínio `https://vendas.menvedigital.com.br` (repositório na **raiz** do monorepo — há [`vercel.json`](../vercel.json)).
