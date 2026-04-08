@@ -50,7 +50,7 @@ export function getDealCreatedInterval(
         end: endOfDay(now),
       };
     case "thisMonth":
-      return { start: startOfMonth(now), end: endOfDay(now) };
+      return { start: startOfMonth(now), end: endOfMonth(now) };
     case "lastMonth": {
       const ref = subMonths(now, 1);
       return { start: startOfMonth(ref), end: endOfMonth(ref) };

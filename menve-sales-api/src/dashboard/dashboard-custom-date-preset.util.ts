@@ -1,5 +1,6 @@
 import {
   addCalendarDaysIso,
+  endOfMonthYmd,
   firstOfMonthYmd,
   firstOfPreviousMonthYmd,
   lastDayOfPreviousMonthYmd,
@@ -62,7 +63,7 @@ export function isoRangeFromRollingPreset(
     case "thisWeek":
       return { from: mondayOfWeekBrazilYmd(today), to: today };
     case "thisMonth":
-      return { from: firstOfMonthYmd(today), to: today };
+      return { from: firstOfMonthYmd(today), to: endOfMonthYmd(today) };
     case "lastMonth": {
       const from = firstOfPreviousMonthYmd(today);
       const to = lastDayOfPreviousMonthYmd(today);
