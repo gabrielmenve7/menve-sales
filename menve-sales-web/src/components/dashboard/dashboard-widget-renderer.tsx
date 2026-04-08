@@ -28,7 +28,6 @@ import {
   type LayoutWidget,
   type WidgetDataResult,
 } from "@/lib/dashboard-builder-types";
-import { cn } from "@/lib/utils";
 
 function formatDayLabel(iso: string) {
   const [, m, d] = iso.split("-");
@@ -81,25 +80,6 @@ function metricIconForSpec(spec: LayoutWidget["querySpec"]) {
   return Target;
 }
 
-function formatComparePercent(current: number, previous: number): {
-  text: string;
-  positive: boolean;
-  neutral: boolean;
-} {
-  if (previous === 0) {
-    if (current === 0) return { text: "0%", positive: true, neutral: true };
-    return { text: "—", positive: true, neutral: true };
-  }
-  const raw = ((current - previous) / previous) * 100;
-  const abs = Math.abs(raw);
-  const text = `${new Intl.NumberFormat("pt-BR", {
-    maximumFractionDigits: 1,
-    minimumFractionDigits: 1,
-  }).format(abs)}%`;
-  if (raw === 0) return { text, positive: true, neutral: true };
-  return { text, positive: raw > 0, neutral: false };
-}
-
 function rollupBarSeries(
   series: { label: string; value: number }[],
   xGroupBy: BarXGroupBy | undefined,
@@ -131,15 +111,12 @@ function rollupBarSeries(
 export function DashboardWidgetRenderer({
   widget,
   data,
-  previousScalar,
   loading,
   error,
   dealCustomFields,
 }: {
   widget: LayoutWidget;
   data: WidgetDataResult | null;
-  /** Só métrica escalar: valor no período anterior (para seta e %). */
-  previousScalar?: number;
   loading: boolean;
   error: string | null;
   dealCustomFields: DealCustomFieldDef[];
@@ -169,10 +146,7 @@ export function DashboardWidgetRenderer({
             </div>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col px-5 pb-5 pt-4">
-            <div className="flex flex-wrap items-baseline gap-2">
-              <div className="h-9 w-28 animate-pulse rounded bg-muted" />
-              <div className="h-5 w-16 animate-pulse rounded bg-muted" />
-            </div>
+            <div className="h-9 w-28 animate-pulse rounded bg-muted" />
           </CardContent>
         </Card>
       );
@@ -230,10 +204,6 @@ export function DashboardWidgetRenderer({
         ? cfMap.get(widget.querySpec.customFieldKey) ?? null
         : null,
     );
-    const showCompare = previousScalar !== undefined;
-    const cmp = showCompare
-      ? formatComparePercent(data.value, previousScalar as number)
-      : null;
 
     return (
       <Card className="flex h-full flex-col rounded-xl border border-border/60 bg-card shadow-sm">
@@ -251,40 +221,9 @@ export function DashboardWidgetRenderer({
           </div>
         </CardHeader>
         <CardContent className="flex flex-1 flex-col justify-center px-5 pb-5 pt-4">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <p className="text-3xl font-bold tabular-nums tracking-tight text-foreground">
-              {formatted}
-            </p>
-            {cmp && !cmp.neutral ? (
-              <span
-                className={cn(
-                  "text-sm font-medium tabular-nums",
-                  cmp.positive ? "text-emerald-600 dark:text-emerald-500" : "text-red-600 dark:text-red-500",
-                )}
-                aria-label={
-                  cmp.positive
-                    ? `Alta de ${cmp.text} em relação ao período anterior`
-                    : `Queda de ${cmp.text} em relação ao período anterior`
-                }
-              >
-                {cmp.positive ? "↑" : "↓"} {cmp.text}
-              </span>
-            ) : cmp && cmp.neutral && cmp.text !== "—" ? (
-              <span
-                className="text-sm font-medium tabular-nums text-muted-foreground"
-                aria-label="Sem variação em relação ao período anterior"
-              >
-                {cmp.text}
-              </span>
-            ) : cmp && cmp.text === "—" ? (
-              <span
-                className="text-sm font-medium text-muted-foreground"
-                title="Sem base no período anterior para calcular percentual"
-              >
-                —
-              </span>
-            ) : null}
-          </div>
+          <p className="text-3xl font-bold tabular-nums tracking-tight text-foreground">
+            {formatted}
+          </p>
         </CardContent>
       </Card>
     );
