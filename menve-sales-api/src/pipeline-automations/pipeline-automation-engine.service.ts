@@ -8,6 +8,10 @@ import { DealsService } from "../deals/deals.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PIPELINE_AUTOMATION_MAX_DEPTH } from "./pipeline-automation.constants";
 import {
+  addCalendarDaysIso,
+  todayYmdBrazil,
+} from "../common/calendar-brazil.util";
+import {
   automationActionsSchema,
   parseCompositeTriggerFilter,
 } from "./pipeline-automation.dto";
@@ -65,20 +69,6 @@ function automationFilterValueMatches(
   return JSON.stringify(expected) === JSON.stringify(actual);
 }
 
-function todayUtcIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function addDaysUtcIsoDate(isoDate: string, days: number): string {
-  const parts = isoDate.split("-").map((x) => parseInt(x, 10));
-  const y = parts[0] ?? 1970;
-  const m = parts[1] ?? 1;
-  const d = parts[2] ?? 1;
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-}
-
 @Injectable()
 export class PipelineAutomationEngineService {
   private readonly log = new Logger(PipelineAutomationEngineService.name);
@@ -114,14 +104,14 @@ export class PipelineAutomationEngineService {
       return null;
     }
     if (p === "ON_TRIGGER_DATE" || p === "TRIGGER_FIELDS") {
-      return todayUtcIsoDate();
+      return todayYmdBrazil();
     }
     if (p === "ON_TRIGGER_DATETIME") {
       return new Date().toISOString();
     }
     if (p === "DAYS_AFTER_TRIGGER") {
       const n = action.daysAfter ?? 0;
-      return addDaysUtcIsoDate(todayUtcIsoDate(), n);
+      return addCalendarDaysIso(todayYmdBrazil(), n);
     }
     if (p === "PICK_DATE") {
       const s = (action.pickDate ?? "").trim();

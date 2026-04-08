@@ -54,6 +54,11 @@ export const widgetQuerySpecInputSchema = z.object({
    * (dias futuros com valor 0). Se false, a série vai só até hoje (comportamento anterior).
    */
   fillTimelineMonth: z.boolean().optional(),
+  /**
+   * Com BY_DAY: agrupar por esta chave de campo DATE em `customData` (YYYY-MM-DD ou ISO).
+   * Se omitido, mantém o comportamento anterior (bucket pela data de criação do deal).
+   */
+  timelineBucketFieldKey: z.string().min(1).max(64).optional(),
 
   /** Legado */
   measure: z.enum(["COUNT", "SUM_VALUE"]).optional(),
@@ -90,6 +95,7 @@ export type ResolvedWidgetQuerySpec = {
   days?: number;
   timelineStart?: string;
   fillTimelineMonth?: boolean;
+  timelineBucketFieldKey?: string;
   dataMeasure: "QUANTITY" | "MONEY" | "CUSTOM_NUMBER";
   aggregation: "SUM" | "AVG";
   customFieldKey?: string;
@@ -147,13 +153,18 @@ export function resolveWidgetQuerySpec(
       ? input.filterGroups
       : undefined;
 
+  const dim = input.dimension ?? null;
+  const timelineBucketTrim = input.timelineBucketFieldKey?.trim();
+
   return {
     source: "DEALS",
     pipelineId: input.pipelineId,
-    dimension: input.dimension ?? null,
+    dimension: dim,
     days: input.days,
     timelineStart: input.timelineStart?.trim() || undefined,
     fillTimelineMonth: input.fillTimelineMonth === true ? true : undefined,
+    timelineBucketFieldKey:
+      dim === "BY_DAY" && timelineBucketTrim ? timelineBucketTrim : undefined,
     dataMeasure,
     aggregation,
     customFieldKey: input.customFieldKey,

@@ -94,6 +94,10 @@ export type WidgetQuerySpec = {
    * dias sem dados ficam 0. Se false, a série vai só até hoje.
    */
   fillTimelineMonth?: boolean;
+  /**
+   * BY_DAY: agrupar por este campo Data do deal (customData). Vazio = data de criação do deal.
+   */
+  timelineBucketFieldKey?: string;
   /** Legado — ainda aceito pela API */
   measure?: "COUNT" | "SUM_VALUE";
   includeClosed?: boolean;

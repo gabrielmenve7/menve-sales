@@ -1164,12 +1164,19 @@ export function DashboardWidgetConfigDialog({
   const [barFillFullMonth, setBarFillFullMonth] = useState(false);
   const [barCustomDays, setBarCustomDays] = useState(30);
   const [barXGroupBy, setBarXGroupBy] = useState<BarXGroupBy>("DAY");
+  /** BY_DAY: chave do campo DATE para eixo; vazio = criação do deal. */
+  const [timelineBucketFieldKey, setTimelineBucketFieldKey] = useState("");
   const [filterGroups, setFilterGroups] = useState<DashFilterGroupState[]>(() => [
     defaultFilterGroup(),
   ]);
 
   const numericCustomFields = useMemo(
     () => dealCustomFields.filter(numericFieldTypes),
+    [dealCustomFields],
+  );
+
+  const dateCustomFields = useMemo(
+    () => dealCustomFields.filter((f) => f.fieldType === "DATE"),
     [dealCustomFields],
   );
 
@@ -1192,6 +1199,7 @@ export function DashboardWidgetConfigDialog({
       s.dimension === null || s.dimension === undefined ? "" : s.dimension,
     );
     setDays(s.days ?? 30);
+    setTimelineBucketFieldKey(s.timelineBucketFieldKey ?? "");
     setFilterGroups(specToFilterGroups(s, dealCustomFields));
     if (widget.type === "BAR") {
       const bc = { ...defaultBarChartConfig(), ...widget.barChart };
@@ -1426,12 +1434,16 @@ export function DashboardWidgetConfigDialog({
       spec.dimension = null;
       delete spec.timelineStart;
       delete spec.fillTimelineMonth;
+      delete spec.timelineBucketFieldKey;
       delete spec.days;
     } else if (isBar) {
       spec.dimension = (dimension || "BY_STAGE") as NonNullable<
         WidgetQuerySpec["dimension"]
       >;
       if (spec.dimension === "BY_DAY") {
+        const tb = timelineBucketFieldKey.trim();
+        if (tb) spec.timelineBucketFieldKey = tb;
+        else delete spec.timelineBucketFieldKey;
         if (barTimePreset === "THIS_MONTH") {
           spec.timelineStart = firstDayOfMonthIsoLocal();
           spec.fillTimelineMonth = barFillFullMonth;
@@ -1460,6 +1472,7 @@ export function DashboardWidgetConfigDialog({
       } else {
         delete spec.timelineStart;
         delete spec.fillTimelineMonth;
+        delete spec.timelineBucketFieldKey;
         delete spec.days;
       }
     } else {
@@ -1468,6 +1481,7 @@ export function DashboardWidgetConfigDialog({
       >;
       delete spec.timelineStart;
       delete spec.fillTimelineMonth;
+      delete spec.timelineBucketFieldKey;
       if (spec.dimension === "BY_DAY") {
         spec.days = Math.min(366, Math.max(1, days));
       }
@@ -1682,6 +1696,40 @@ export function DashboardWidgetConfigDialog({
                               </option>
                             ))}
                           </select>
+                        </div>
+                        <div className="grid gap-1.5">
+                          <Label
+                            htmlFor="dw-bar-timeline-bucket"
+                            className="text-foreground"
+                          >
+                            Data de cada barra
+                          </Label>
+                          <select
+                            id="dw-bar-timeline-bucket"
+                            className={panel.control}
+                            value={timelineBucketFieldKey}
+                            onChange={(e) =>
+                              setTimelineBucketFieldKey(e.target.value)
+                            }
+                          >
+                            <option value="">
+                              Criação do deal (padrão)
+                            </option>
+                            {dateCustomFields.map((f) => (
+                              <option
+                                key={f.id}
+                                value={f.key}
+                                className="bg-popover text-popover-foreground"
+                              >
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                          <p className={cn(panel.muted, "text-[11px] leading-snug")}>
+                            Use um campo do tipo Data (ex.: agendamento ou
+                            qualificação) para contar deals por esse dia. O padrão
+                            é a data de criação do negócio.
+                          </p>
                         </div>
                       </>
                     ) : null}

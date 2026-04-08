@@ -6,6 +6,13 @@ import {
 import { DealStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import {
+  addCalendarDaysIso,
+  enumerateYmdInclusive,
+  endOfMonthYmd,
+  minYmd,
+  todayYmdBrazil,
+} from "../common/calendar-brazil.util";
+import {
   isoRangeFromRollingPreset,
   isWidgetFilterRollingDatePreset,
 } from "./dashboard-custom-date-preset.util";
@@ -30,18 +37,6 @@ function endOfDayUtc(isoDate: string): Date {
   return new Date(`${isoDate}T23:59:59.999Z`);
 }
 
-/** Último instante (UTC) do último dia do mês civil que contém `isoYmd` (YYYY-MM-DD). */
-function endOfMonthContainingUtc(isoYmd: string): Date {
-  const y = Number(isoYmd.slice(0, 4));
-  const mo = Number(isoYmd.slice(5, 7));
-  if (!Number.isFinite(y) || !Number.isFinite(mo) || mo < 1 || mo > 12) {
-    const d = new Date();
-    d.setUTCHours(23, 59, 59, 999);
-    return d;
-  }
-  return new Date(Date.UTC(y, mo, 0, 23, 59, 59, 999));
-}
-
 function extractJsonNumber(
   customData: Prisma.JsonValue | null,
   key: string,
@@ -52,6 +47,22 @@ function extractJsonNumber(
   const v = (customData as Record<string, unknown>)[key];
   if (typeof v === "number" && Number.isFinite(v)) return v;
   return null;
+}
+
+/** Valor de campo DATE em customData → YYYY-MM-DD (ou null). */
+function extractIsoDateKeyFromCustomData(
+  customData: Prisma.JsonValue | null,
+  key: string,
+): string | null {
+  if (customData == null || typeof customData !== "object" || Array.isArray(customData)) {
+    return null;
+  }
+  const v = (customData as Record<string, unknown>)[key];
+  if (v == null || v === "") return null;
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return null;
+  return s.slice(0, 10);
 }
 
 @Injectable()
@@ -89,27 +100,46 @@ export class DashboardQueryService {
     if (!p) throw new NotFoundException("Pipeline não encontrado");
   }
 
-  /** Garante que a chave existe e é numérica (NUMBER ou MONEY_BRL) no deal. */
+  /** Garante chave de medida numérica e/ou campo DATE do eixo temporal. */
   private async assertCustomFieldIfNeeded(
     tenantId: string,
     spec: ResolvedWidgetQuerySpec,
   ) {
-    if (spec.dataMeasure !== "CUSTOM_NUMBER" || !spec.customFieldKey) return;
-    const cf = await this.prisma.customField.findFirst({
-      where: {
-        tenantId,
-        entity: "DEAL",
-        key: spec.customFieldKey,
-      },
-      select: { fieldType: true },
-    });
-    if (!cf) {
-      throw new BadRequestException("Campo customizado inválido para este tenant");
+    if (spec.dataMeasure === "CUSTOM_NUMBER" && spec.customFieldKey) {
+      const cf = await this.prisma.customField.findFirst({
+        where: {
+          tenantId,
+          entity: "DEAL",
+          key: spec.customFieldKey,
+        },
+        select: { fieldType: true },
+      });
+      if (!cf) {
+        throw new BadRequestException("Campo customizado inválido para este tenant");
+      }
+      if (cf.fieldType !== "NUMBER" && cf.fieldType !== "MONEY_BRL") {
+        throw new BadRequestException(
+          "A medida Número só aceita campos do tipo Número ou Dinheiro (R$)",
+        );
+      }
     }
-    if (cf.fieldType !== "NUMBER" && cf.fieldType !== "MONEY_BRL") {
-      throw new BadRequestException(
-        "A medida Número só aceita campos do tipo Número ou Dinheiro (R$)",
-      );
+    if (spec.timelineBucketFieldKey) {
+      const cf = await this.prisma.customField.findFirst({
+        where: {
+          tenantId,
+          entity: "DEAL",
+          key: spec.timelineBucketFieldKey,
+        },
+        select: { fieldType: true },
+      });
+      if (!cf) {
+        throw new BadRequestException("Campo do eixo temporal inválido para este tenant");
+      }
+      if (cf.fieldType !== "DATE") {
+        throw new BadRequestException(
+          "Agrupar linha do tempo por data só aceita campos do tipo Data",
+        );
+      }
     }
   }
 
@@ -513,64 +543,70 @@ export class DashboardQueryService {
     spec: ResolvedWidgetQuerySpec,
   ): Promise<SeriesResult> {
     const baseWhere = this.buildWhere(tenantId, spec);
+    const bucketKey = spec.timelineBucketFieldKey;
 
-    let since: Date;
     let dateKeys: string[];
+    let sinceForCreatedFilter: Date;
 
     if (spec.timelineStart?.trim()) {
       const startKey = spec.timelineStart.trim();
-      since = startOfDayUtc(startKey);
-      const end =
+      const monthEndYmd = endOfMonthYmd(startKey);
+      const todayBr = todayYmdBrazil();
+      const endKey =
         spec.fillTimelineMonth === true
-          ? endOfMonthContainingUtc(startKey)
-          : (() => {
-              const t = new Date();
-              t.setUTCHours(23, 59, 59, 999);
-              return t;
-            })();
-      dateKeys = [];
-      for (
-        let d = new Date(since.getTime());
-        d.getTime() <= end.getTime();
-        d.setUTCDate(d.getUTCDate() + 1)
-      ) {
-        dateKeys.push(d.toISOString().slice(0, 10));
-        if (dateKeys.length > 366) break;
+          ? monthEndYmd
+          : minYmd(todayBr, monthEndYmd);
+      dateKeys = enumerateYmdInclusive(startKey, endKey);
+      if (dateKeys.length === 0) {
+        dateKeys = [];
       }
+      sinceForCreatedFilter = startOfDayUtc(startKey);
     } else {
       const days = Math.min(366, Math.max(1, spec.days ?? 30));
-      const rollingSince = new Date();
-      rollingSince.setDate(rollingSince.getDate() - days);
-      rollingSince.setUTCHours(0, 0, 0, 0);
-      since = rollingSince;
+      const todayBr = todayYmdBrazil();
       dateKeys = [];
       for (let i = days - 1; i >= 0; i--) {
-        const dt = new Date();
-        dt.setDate(dt.getDate() - i);
-        dateKeys.push(dt.toISOString().slice(0, 10));
+        dateKeys.push(addCalendarDaysIso(todayBr, -i));
       }
+      sinceForCreatedFilter = startOfDayUtc(dateKeys[0] ?? todayBr);
     }
 
-    const where: Prisma.DealWhereInput = {
-      AND: [baseWhere, { createdAt: { gte: since } }],
-    };
+    const firstKey = dateKeys[0] ?? todayYmdBrazil();
+    const lastKey = dateKeys[dateKeys.length - 1] ?? firstKey;
+
+    const where: Prisma.DealWhereInput = bucketKey
+      ? {
+          AND: [
+            baseWhere,
+            { customData: { path: [bucketKey], gte: firstKey } },
+            { customData: { path: [bucketKey], lte: lastKey } },
+          ],
+        }
+      : {
+          AND: [baseWhere, { createdAt: { gte: sinceForCreatedFilter } }],
+        };
 
     const rows = await this.prisma.deal.findMany({
       where,
       select: { createdAt: true, value: true, customData: true },
     });
 
-    const key = spec.customFieldKey;
+    const measureKey = spec.customFieldKey;
+    const keySet = new Set(dateKeys);
     const map = new Map<string, number[]>();
     for (const r of rows) {
-      const dkey = r.createdAt.toISOString().slice(0, 10);
+      const dkey = bucketKey
+        ? extractIsoDateKeyFromCustomData(r.customData, bucketKey)
+        : r.createdAt.toISOString().slice(0, 10);
+      if (dkey == null) continue;
+      if (!keySet.has(dkey)) continue;
       let v: number;
       if (spec.dataMeasure === "QUANTITY") {
         v = 1;
       } else if (spec.dataMeasure === "MONEY") {
         v = Number(r.value ?? 0);
       } else {
-        const n = extractJsonNumber(r.customData, key!);
+        const n = extractJsonNumber(r.customData, measureKey!);
         if (n == null) continue;
         v = n;
       }
