@@ -1,8 +1,11 @@
+import "./load-api-env";
 import { createServer } from "node:http";
-import prisma from "../../menve-sales-web/src/lib/prisma";
-import { sendOutboundText } from "../../menve-sales-web/src/lib/whatsapp/message-service";
+import { scriptPrisma as prisma } from "./_prisma";
+import { MessageProcessingService } from "../src/whatsapp/message-processing.service";
 
 async function main() {
+  const messages = new MessageProcessingService(prisma as never);
+
   const tenant = await prisma.tenant.findFirst({
     select: { id: true },
     orderBy: { createdAt: "asc" },
@@ -71,7 +74,7 @@ async function main() {
   const phone = "+5511888888888";
 
   try {
-    const sent = await sendOutboundText({
+    const sent = await messages.sendOutboundText({
       tenantId: tenant.id,
       connectionId: connection.id,
       userId: user.id,
@@ -85,7 +88,7 @@ async function main() {
     const persisted = await prisma.message.findFirst({
       where: {
         tenantId: tenant.id,
-        whatsappConnectionId: connection.id,
+        whatsAppConnectionId: connection.id,
         externalId,
       },
       select: { id: true, body: true, direction: true },

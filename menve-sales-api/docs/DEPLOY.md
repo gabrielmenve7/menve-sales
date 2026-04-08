@@ -2,6 +2,10 @@
 
 Recomendação para o primeiro go-live: **Path A (PaaS)** — menos manutenção, TLS e escala geridos pelo provedor. **Path B (VPS + Docker)** quando você precisa rodar Evolution na mesma máquina ou controle total do host.
 
+### Web Vercel + API Nest (domínio próprio)
+
+O produto atual separa **Next.js** (Vercel) e **NestJS** (outro PaaS ou VPS). O Next chama a API via `INTERNAL_API_URL` com `INTERNAL_API_KEY`. Guia passo a passo (ex.: `vendas.menvedigital.com.br`): **[`docs/DEPLOY-VENDAS-VERCEL-API.md`](../../docs/DEPLOY-VENDAS-VERCEL-API.md)**.
+
 ---
 
 ## Path A — PaaS (ex.: Vercel + Neon)
@@ -46,7 +50,7 @@ No painel da Vercel (valores padrão costumam bastar):
 
 ### Variáveis de ambiente (produção)
 
-Ver [`.env.example`](../.env.example). Mínimo na Vercel (Environment Variables → Production):
+Ver [`.env.example`](../.env.example) e a raiz do monorepo. Mínimo na Vercel (Environment Variables → Production):
 
 | Variável | Descrição |
 |----------|-----------|
@@ -55,6 +59,8 @@ Ver [`.env.example`](../.env.example). Mínimo na Vercel (Environment Variables 
 | `NEXTAUTH_SECRET` | ≥ 32 caracteres aleatórios (não reutilizar o de desenvolvimento) |
 | `NEXTAUTH_URL` | URL canônica **https** do app (`https://<projeto>.vercel.app` ou domínio próprio) |
 | `NEXT_PUBLIC_APP_URL` | **Igual** a `NEXTAUTH_URL` (webhooks Evolution e links públicos) |
+| `INTERNAL_API_URL` | URL **HTTPS** pública da API Nest (obrigatório quando a API não está em localhost) |
+| `INTERNAL_API_KEY` | Mesmo segredo que `INTERNAL_API_KEY` no processo Nest |
 | `DEFAULT_TENANT_SLUG` | Ex.: `demo` — deve existir no banco após seed/migração inicial |
 | `EVOLUTION_BASE_URL` | URL pública da API Evolution |
 | `EVOLUTION_API_KEY` | Mesmo `apikey` da Evolution |

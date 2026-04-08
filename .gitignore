@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+menve-sales-api/node_modules/
+menve-sales-api/dist/
 /.pnp
 .pnp.*
 .yarn/*

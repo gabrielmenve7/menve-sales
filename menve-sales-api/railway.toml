@@ -1,0 +1,10 @@
+# Menve Sales API — Railway (https://railway.app)
+# Crie um serviço apontando para esta pasta (menve-sales-api) ou defina Dockerfile path no painel.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"

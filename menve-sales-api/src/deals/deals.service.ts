@@ -1,7 +1,10 @@
 import {
   BadRequestException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { ActivityType, type Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -10,6 +13,8 @@ import {
   findContactCustomFieldDefinitions,
   findDealCustomFieldDefinitions,
 } from "../custom-fields/custom-fields-load.util";
+import { PIPELINE_AUTOMATION_MAX_DEPTH } from "../pipeline-automations/pipeline-automation.constants";
+import { PipelineAutomationEngineService } from "../pipeline-automations/pipeline-automation-engine.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 const dealSchema = z.object({
@@ -36,7 +41,12 @@ const MENVE_ACTIVITY_META_PREFIX = "__MENVE_META__:";
 
 @Injectable()
 export class DealsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(forwardRef(() => PipelineAutomationEngineService))
+    private readonly pipelineAutomationEngine?: PipelineAutomationEngineService,
+  ) {}
 
   private metaDescription(payload: Record<string, unknown>): string {
     return MENVE_ACTIVITY_META_PREFIX + JSON.stringify(payload);
@@ -119,9 +129,16 @@ export class DealsService {
     actorUserId: string,
     dealId: string,
     values: Record<string, unknown>,
+    opts?: { automationDepth?: number },
   ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, tenantId },
+      select: {
+        id: true,
+        contactId: true,
+        pipelineId: true,
+        customData: true,
+      },
     });
     if (!deal) throw new BadRequestException("Deal não encontrado");
 
@@ -132,6 +149,11 @@ export class DealsService {
     const prev = (deal.customData as Record<string, unknown> | null) ?? {};
     const merged: Record<string, unknown> = { ...prev };
     const changedLabels: string[] = [];
+    const automationChanges: {
+      fieldKey: string;
+      fromValue: unknown;
+      toValue: unknown;
+    }[] = [];
 
     for (const f of fields) {
       if (!(f.key in values)) continue;
@@ -143,6 +165,11 @@ export class DealsService {
         delete merged[f.key];
         if (before !== undefined && before !== null && before !== "") {
           changedLabels.push(f.name);
+          automationChanges.push({
+            fieldKey: f.key,
+            fromValue: before,
+            toValue: undefined,
+          });
         }
         continue;
       }
@@ -158,6 +185,11 @@ export class DealsService {
         merged[f.key] = next;
         if (JSON.stringify(before) !== JSON.stringify(next)) {
           changedLabels.push(f.name);
+          automationChanges.push({
+            fieldKey: f.key,
+            fromValue: before,
+            toValue: next,
+          });
         }
       } catch (e) {
         if (e instanceof BadRequestException) throw e;
@@ -206,6 +238,27 @@ export class DealsService {
         data: { customData: merged as Prisma.InputJsonValue },
       });
     }
+
+    const autoDepth = opts?.automationDepth ?? 0;
+    if (this.pipelineAutomationEngine && automationChanges.length > 0) {
+      for (const ch of automationChanges) {
+        try {
+          await this.pipelineAutomationEngine.afterDealCustomFieldChanged({
+            tenantId,
+            actorUserId,
+            dealId,
+            pipelineId: deal.pipelineId,
+            fieldKey: ch.fieldKey,
+            fromValue: ch.fromValue,
+            toValue: ch.toValue,
+            depth: autoDepth,
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
     return { ok: true as const };
   }
 
@@ -300,6 +353,19 @@ export class DealsService {
           },
         }),
       ]);
+      if (this.pipelineAutomationEngine) {
+        try {
+          await this.pipelineAutomationEngine.afterDealAssigneeRemoved({
+            tenantId,
+            actorUserId,
+            dealId,
+            pipelineId: deal.pipelineId,
+            depth: 0,
+          });
+        } catch {
+          /* ignore */
+        }
+      }
       return { ok: true as const };
     }
 
@@ -338,6 +404,19 @@ export class DealsService {
         },
       }),
     ]);
+    if (this.pipelineAutomationEngine) {
+      try {
+        await this.pipelineAutomationEngine.afterDealAssigneeAssigned({
+          tenantId,
+          actorUserId,
+          dealId,
+          pipelineId: deal.pipelineId,
+          depth: 0,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
     return { ok: true as const };
   }
 
@@ -346,6 +425,7 @@ export class DealsService {
     actorUserId: string,
     dealId: string,
     stageId: string,
+    opts?: { automationDepth?: number },
   ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, tenantId },
@@ -357,6 +437,7 @@ export class DealsService {
     if (deal.stageId === stageId) {
       return { ok: true as const };
     }
+    const oldStageId = deal.stageId;
     const oldStage = deal.pipeline.stages.find((s) => s.id === deal.stageId);
     const fromName = oldStage?.name ?? "—";
     const title = `Movido de ${fromName} para ${newStage.name}`;
@@ -388,6 +469,25 @@ export class DealsService {
         },
       }),
     ]);
+    const parentDepth = opts?.automationDepth ?? 0;
+    if (
+      parentDepth < PIPELINE_AUTOMATION_MAX_DEPTH &&
+      this.pipelineAutomationEngine
+    ) {
+      try {
+        await this.pipelineAutomationEngine.afterDealStageChanged({
+          tenantId,
+          actorUserId,
+          dealId,
+          pipelineId: deal.pipelineId,
+          fromStageId: oldStageId,
+          toStageId: stageId,
+          depth: parentDepth,
+        });
+      } catch {
+        /* automação não deve falhar a requisição do usuário */
+      }
+    }
     return { ok: true as const };
   }
 
@@ -417,6 +517,24 @@ export class DealsService {
         }),
       },
     });
+    if (this.pipelineAutomationEngine) {
+      try {
+        const contact = await this.prisma.contact.findFirst({
+          where: { id: deal.contactId, tenantId },
+          select: { campaignSourceId: true },
+        });
+        await this.pipelineAutomationEngine.afterDealCreated({
+          tenantId,
+          actorUserId,
+          dealId: deal.id,
+          pipelineId: deal.pipelineId,
+          campaignSourceId: contact?.campaignSourceId ?? null,
+          depth: 0,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   async markWon(tenantId: string, actorUserId: string, dealId: string) {
@@ -441,6 +559,19 @@ export class DealsService {
         },
       }),
     ]);
+    if (this.pipelineAutomationEngine) {
+      try {
+        await this.pipelineAutomationEngine.afterDealMarkedWon({
+          tenantId,
+          actorUserId,
+          dealId,
+          pipelineId: deal.pipelineId,
+          depth: 0,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   async markLost(
@@ -476,6 +607,19 @@ export class DealsService {
         },
       }),
     ]);
+    if (this.pipelineAutomationEngine) {
+      try {
+        await this.pipelineAutomationEngine.afterDealMarkedLost({
+          tenantId,
+          actorUserId,
+          dealId: parsed.dealId,
+          pipelineId: deal.pipelineId,
+          depth: 0,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   async remove(tenantId: string, dealId: string) {
