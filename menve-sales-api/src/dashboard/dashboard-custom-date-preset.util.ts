@@ -36,6 +36,15 @@ export function isWidgetFilterRollingDatePreset(
  * Limites inclusivos em YYYY-MM-DD para comparar com strings em customData (campo DATE).
  * Calendário em America/Sao_Paulo (independe do TZ do servidor).
  */
+/**
+ * Filtros Prisma em `customData` (JSON) usam comparação de string.
+ * `lte: "2026-04-07"` exclui `"2026-04-07T12:00:00.000Z"` (lexicograficamente maior).
+ * Use este limite superior para incluir qualquer horário naquele dia civil.
+ */
+export function jsonDateStringLteUpperBound(ymdDateOnly: string): string {
+  return `${ymdDateOnly}T23:59:59.999Z`;
+}
+
 export function isoRangeFromRollingPreset(
   _now: Date,
   preset: WidgetFilterRollingDatePreset,

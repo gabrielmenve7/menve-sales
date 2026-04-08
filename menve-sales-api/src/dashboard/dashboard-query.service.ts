@@ -14,6 +14,7 @@ import {
 } from "../common/calendar-brazil.util";
 import {
   isoRangeFromRollingPreset,
+  jsonDateStringLteUpperBound,
   isWidgetFilterRollingDatePreset,
 } from "./dashboard-custom-date-preset.util";
 import {
@@ -284,7 +285,7 @@ export class DashboardQueryService {
             parts.push({
               customData: {
                 path: [k],
-                lte: dt,
+                lte: jsonDateStringLteUpperBound(dt),
               },
             });
           }
@@ -300,7 +301,12 @@ export class DashboardQueryService {
           return {
             AND: [
               { customData: { path: [k], gte: range.from } },
-              { customData: { path: [k], lte: range.to } },
+              {
+                customData: {
+                  path: [k],
+                  lte: jsonDateStringLteUpperBound(range.to),
+                },
+              },
             ],
           };
         }
@@ -579,7 +585,12 @@ export class DashboardQueryService {
           AND: [
             baseWhere,
             { customData: { path: [bucketKey], gte: firstKey } },
-            { customData: { path: [bucketKey], lte: lastKey } },
+            {
+              customData: {
+                path: [bucketKey],
+                lte: jsonDateStringLteUpperBound(lastKey),
+              },
+            },
           ],
         }
       : {
