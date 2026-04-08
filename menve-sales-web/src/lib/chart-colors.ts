@@ -13,16 +13,16 @@ export const CHART = {
 } as const;
 
 /**
- * Barras e fatias: segue `--primary`, `--foreground`, etc., para contraste em
- * light e dark (cartão claro vs escuro).
+ * Barras e fatias: `globals.css` define `--chart-bar-*` (cinza no tema claro,
+ * branco/off-white no `.dark`).
  */
 export const CHART_BAR_SEQUENCE = [
-  "var(--primary)",
-  "var(--foreground)",
-  "var(--muted-foreground)",
-  "var(--ring)",
-  "var(--secondary-foreground)",
+  "var(--chart-bar-1)",
+  "var(--chart-bar-2)",
+  "var(--chart-bar-3)",
+  "var(--chart-bar-4)",
+  "var(--chart-bar-5)",
 ] as const;
 
-/** Linhas (ex.: LineChart) — mesma lógica tema-aware */
-export const CHART_LINE_STROKE = "var(--primary)";
+/** Linhas (ex.: LineChart) — acompanha contraste do tema */
+export const CHART_LINE_STROKE = "var(--chart-line-stroke)";

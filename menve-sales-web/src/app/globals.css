@@ -26,6 +26,13 @@
   --ring: #171717;
   --radius: 0.625rem;
   --sidebar: #f7f7f8;
+  /* Barras / pizza no dashboard (fundo de cartão claro → cinzas) */
+  --chart-bar-1: #3f3f46;
+  --chart-bar-2: #52525b;
+  --chart-bar-3: #71717a;
+  --chart-bar-4: #27272a;
+  --chart-bar-5: #525252;
+  --chart-line-stroke: #3f3f46;
 }
 
 /* Dark — cartões levemente elevados vs fundo */
@@ -50,6 +57,13 @@
   --input: #2a2a2a;
   --ring: #d4d4d4;
   --sidebar: #0d0d0d;
+  /* Barras / pizza no dashboard (fundo de cartão escuro → brancos/off-white) */
+  --chart-bar-1: #ffffff;
+  --chart-bar-2: #f5f5f5;
+  --chart-bar-3: #e5e5e5;
+  --chart-bar-4: #fafafa;
+  --chart-bar-5: #d4d4d4;
+  --chart-line-stroke: #fafafa;
 }
 
 @theme inline {
