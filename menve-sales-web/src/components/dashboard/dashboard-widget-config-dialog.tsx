@@ -5,7 +5,6 @@ import {
   Calendar,
   ChevronsUpDown,
   CircleDot,
-  Filter,
   Hash,
   Info,
   Link2,
@@ -37,8 +36,6 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   Aggregation,
   BarTimePreset,
@@ -1130,7 +1127,6 @@ const panel = {
     "h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/40",
   divider: "border-border",
   muted: "text-xs text-muted-foreground",
-  tabsList: "border-border",
 } as const;
 
 export function DashboardWidgetConfigDialog({
@@ -1161,7 +1157,6 @@ export function DashboardWidgetConfigDialog({
     NonNullable<WidgetQuerySpec["dimension"]> | ""
   >("");
   const [days, setDays] = useState(30);
-  const [dialogTab, setDialogTab] = useState("config");
   const [barShowAverage, setBarShowAverage] = useState(true);
   const [barShowLabels, setBarShowLabels] = useState(false);
   const [barShowLegend, setBarShowLegend] = useState(false);
@@ -1178,10 +1173,6 @@ export function DashboardWidgetConfigDialog({
     () => dealCustomFields.filter(numericFieldTypes),
     [dealCustomFields],
   );
-
-  useEffect(() => {
-    if (open) setDialogTab("config");
-  }, [open]);
 
   useEffect(() => {
     if (!widget || !open) return;
@@ -1227,11 +1218,6 @@ export function DashboardWidgetConfigDialog({
       r.statusCodes[0] === "OPEN"
     );
   }, [filterGroups]);
-
-  const dataTabBadgeCount = useMemo(() => {
-    if (filtersAreDefault) return 0;
-    return filterGroups.reduce((n, g) => n + g.rows.length, 0);
-  }, [filterGroups, filtersAreDefault]);
 
   if (!widget) return null;
 
@@ -1533,31 +1519,8 @@ export function DashboardWidgetConfigDialog({
             <X className="size-4" />
           </DialogClose>
         </DialogHeader>
-        <Tabs
-          value={dialogTab}
-          onValueChange={setDialogTab}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <TabsList
-            className={`mx-6 mt-3 w-auto shrink-0 justify-start bg-transparent ${panel.tabsList}`}
-          >
-            <TabsTrigger value="config">Configurações</TabsTrigger>
-            <TabsTrigger value="filters" className="relative">
-              {isBar ? "Dados" : "Filtros"}
-              {isBar && dataTabBadgeCount > 0 ? (
-                <Badge
-                  variant="secondary"
-                  className="ml-1.5 min-w-5 px-1 py-0 text-[10px] leading-none"
-                >
-                  {dataTabBadgeCount}
-                </Badge>
-              ) : null}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent
-            value="config"
-            className="mt-0 flex-1 overflow-y-auto px-6 pb-4 pt-4 focus-visible:outline-none"
-          >
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 pt-4">
             <div className="grid gap-5">
               <div className="grid gap-1.5">
                 <Label htmlFor="dw-title" className="text-foreground">
@@ -1577,39 +1540,22 @@ export function DashboardWidgetConfigDialog({
                     <Label htmlFor="dw-pipeline" className="text-foreground">
                       Fonte de dados
                     </Label>
-                    <div className="flex flex-wrap items-stretch gap-2">
-                      <select
-                        id="dw-pipeline"
-                        className={cn(panel.control, "min-w-0 flex-1")}
-                        value={pipelineId}
-                        onChange={(e) => setPipelineId(e.target.value)}
-                      >
-                        {pipelines.map((p) => (
-                          <option
-                            key={p.id}
-                            value={p.id}
-                            className="bg-popover text-popover-foreground"
-                          >
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="relative h-9 w-9 shrink-0"
-                        onClick={() => setDialogTab("filters")}
-                        aria-label="Abrir dados e filtros"
-                      >
-                        <Filter className="size-4" strokeWidth={2} />
-                        {dataTabBadgeCount > 0 ? (
-                          <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
-                            {dataTabBadgeCount}
-                          </span>
-                        ) : null}
-                      </Button>
-                    </div>
+                    <select
+                      id="dw-pipeline"
+                      className={panel.control}
+                      value={pipelineId}
+                      onChange={(e) => setPipelineId(e.target.value)}
+                    >
+                      {pipelines.map((p) => (
+                        <option
+                          key={p.id}
+                          value={p.id}
+                          className="bg-popover text-popover-foreground"
+                        >
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className={`grid gap-1 border-t pt-5 ${panel.divider}`}>
                     <p className="text-sm font-medium text-foreground">Tela</p>
@@ -2030,16 +1976,11 @@ export function DashboardWidgetConfigDialog({
                   ) : null}
                 </>
               )}
-            </div>
-          </TabsContent>
-          <TabsContent
-            value="filters"
-            className="mt-0 flex-1 overflow-y-auto px-6 pb-4 pt-4 focus-visible:outline-none"
-          >
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className={`grid gap-4 border-t pt-5 ${panel.divider}`}>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-semibold text-foreground">
-                  {isBar ? "Dados e filtros" : "Filtros de cartões"}
+                  Filtros do cartão
                 </p>
                 <span
                   className="inline-flex text-muted-foreground"
@@ -2428,8 +2369,10 @@ export function DashboardWidgetConfigDialog({
                 Limpar filtros
               </Button>
             ) : null}
-          </TabsContent>
-        </Tabs>
+              </div>
+            </div>
+          </div>
+        </div>
         <DialogFooter
           className={`border-t px-6 py-4 sm:justify-end ${panel.divider}`}
         >
