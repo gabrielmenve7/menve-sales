@@ -30,8 +30,9 @@ function friendlyRegisterFailure(status: number, raw: string | undefined) {
     t.includes("Cannot GET")
   ) {
     return (
-      "A API não expõe esta rota nesse endereço. Na Vercel, INTERNAL_API_URL deve ser a URL " +
-      "pública do backend Nest (ex.: Railway), sem barra no final — não use a URL do site Next."
+      "Cadastro indisponível nesse endereço (404). Ou INTERNAL_API_URL na Vercel não é a API Nest " +
+      "(sem barra no final, não use a URL do site Next), ou o deploy da API no Railway está **antigo** " +
+      "e ainda não inclui POST /auth/register — abra Railway → Deployments e faça deploy do último commit do repositório."
     );
   }
   return t || "Não foi possível cadastrar.";
