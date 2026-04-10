@@ -67,7 +67,7 @@ O `package-lock.json` da API usa **lockfile version 3**, que exige **npm 7+** (N
 
 Mantenha o **Build Command:** `cd menve-sales-api && npm ci && npm run build` e o **Start Command:** `cd menve-sales-api && npm run start`. **Redeploy**.
 
-**Opção 2 — Docker (recomendado):** em **Settings → Build**, **Builder** = **Dockerfile**, **Dockerfile path** = `menve-sales-api/Dockerfile`, **Root Directory** = vazio (raiz do repo). **Apague** Custom Build e Custom Start. **Redeploy**.
+**Opção 2 — Docker (recomendado):** em **Settings → Build**, **Builder** = **Dockerfile**, **Dockerfile path** = `menve-sales-api/Dockerfile`, **Root Directory** = vazio (raiz do repo). **Apague** Custom Build e Custom Start. **Redeploy**. O monorepo tem **dois** `package-lock.json` (raiz e `menve-sales-api/`); o Dockerfile roda `npm ci` nos dois — só o da raiz não instala o Nest (`nest` / `@nestjs/cli`).
 
 **Opção 3 — sem `ci` (só se ainda falhar):** Build Command temporário: `cd menve-sales-api && npm install && npm run build` (menos reproduzível que `npm ci`, use só para destravar).
 8. **Domínio customizado da API:** **Settings** → **Networking** → **Custom Domain** → digite `api.vendas.menvedigital.com.br` → **Add**. A Railway mostra um **CNAME** alvo (ex.: `xxxx.railway.app` ou similar). **Anote** esse alvo — você vai colar no DNS na Parte D.
