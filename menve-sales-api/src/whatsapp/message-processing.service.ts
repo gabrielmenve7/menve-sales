@@ -454,4 +454,46 @@ export class MessageProcessingService {
       mediaType: args.mimeType,
     });
   }
+
+  async sendOutboundTemplate(args: {
+    tenantId: string;
+    connectionId: string;
+    userId: string;
+    toPhone: string;
+    templateName: string;
+    language: string;
+    components?: unknown[];
+  }) {
+    const conn = await this.prisma.whatsAppConnection.findFirst({
+      where: {
+        id: args.connectionId,
+        tenantId: args.tenantId,
+        isActive: true,
+      },
+    });
+    if (!conn) throw new Error("Conexão não encontrada");
+    if (conn.provider !== "META") {
+      throw new Error("Templates só são suportados na API Oficial (Meta)");
+    }
+    const provider = createWhatsAppProvider(conn);
+    if (!provider.sendTemplate) {
+      throw new Error("Este canal não suporta envio de template");
+    }
+    const sent = await provider.sendTemplate(
+      args.toPhone,
+      args.templateName,
+      args.language,
+      args.components,
+    );
+    if (!sent.ok) throw new Error(sent.error ?? "Falha ao enviar template");
+    const body = `[Template] ${args.templateName} (${args.language})`;
+    return this.recordOutboundMessage({
+      tenantId: args.tenantId,
+      userId: args.userId,
+      toPhone: args.toPhone,
+      conn,
+      body,
+      externalId: sent.externalId,
+    });
+  }
 }

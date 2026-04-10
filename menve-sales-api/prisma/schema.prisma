@@ -45,6 +45,7 @@ enum PipelineAutomationTriggerType {
   CONTACT_TAG_REMOVED
   DEAL_MARKED_WON
   DEAL_MARKED_LOST
+  COMPOSITE
 }
 
 enum PipelineAutomationRunStatus {
@@ -327,8 +328,9 @@ model Deal {
   updatedAt     DateTime   @updatedAt
 
   activities               Activity[]
-  dealTags                 DealTag[]
-  pipelineAutomationRuns   PipelineAutomationRun[]
+  dealTags                        DealTag[]
+  pipelineAutomationRuns        PipelineAutomationRun[]
+  pipelineAutomationAndProgress PipelineAutomationAndProgress[]
 
   @@index([tenantId, stageId])
 }
@@ -350,8 +352,24 @@ model PipelineAutomationRule {
   createdAt       DateTime                      @default(now())
   updatedAt       DateTime                      @updatedAt
   runs            PipelineAutomationRun[]
+  andProgress     PipelineAutomationAndProgress[]
 
   @@index([tenantId, pipelineId, enabled])
+}
+
+model PipelineAutomationAndProgress {
+  id        String   @id @default(cuid())
+  tenantId  String
+  ruleId    String
+  dealId    String
+  mask      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  rule      PipelineAutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  deal      Deal                   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, dealId])
+  @@index([tenantId, ruleId])
 }
 
 model PipelineAutomationRun {

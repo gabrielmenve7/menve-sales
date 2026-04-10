@@ -7,6 +7,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { assertCanConfigureTenant } from "../common/rbac";
 import type { RequestUser } from "../common/request-user";
+import { createWhatsAppProvider } from "../whatsapp/factory";
 import {
   createEvolutionInstance,
   deleteEvolutionInstance,
@@ -15,6 +16,29 @@ import {
   getPairingQrDataUrl,
   setEvolutionInstanceWebhook,
 } from "../whatsapp/evolution-admin";
+
+const META_GRAPH_VERSION = "v21.0";
+
+async function assertMetaGraphPhoneAccess(
+  phoneNumberId: string,
+  accessToken: string,
+) {
+  const res = await fetch(
+    `https://graph.facebook.com/${META_GRAPH_VERSION}/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  const json = (await res.json().catch(() => ({}))) as {
+    error?: { message?: string };
+  };
+  if (!res.ok) {
+    const msg =
+      json.error?.message ??
+      `Graph API HTTP ${res.status} ao validar Phone Number ID`;
+    throw new BadRequestException(
+      `Credenciais Meta inválidas ou sem permissão: ${msg}`,
+    );
+  }
+}
 
 function appPublicUrl() {
   const u =
@@ -218,6 +242,9 @@ export class WhatsappConnectionsService {
     if (!input.phoneNumberId?.trim() || !input.accessToken?.trim()) {
       throw new BadRequestException("phoneNumberId e accessToken são obrigatórios");
     }
+    const phoneNumberId = input.phoneNumberId.trim();
+    const accessToken = input.accessToken.trim();
+    await assertMetaGraphPhoneAccess(phoneNumberId, accessToken);
     const connection = await this.prisma.whatsAppConnection.create({
       data: {
         tenantId: u.tenantId,
@@ -225,13 +252,171 @@ export class WhatsappConnectionsService {
         provider: "META",
         isActive: true,
         config: {
-          phoneNumberId: input.phoneNumberId.trim(),
-          accessToken: input.accessToken.trim(),
+          phoneNumberId,
+          accessToken,
           businessAccountId: input.businessAccountId?.trim() ?? "",
         },
       },
     });
     return { ok: true as const, connectionId: connection.id };
+  }
+
+  getMetaOnboardingInfo(u: RequestUser) {
+    assertCanConfigureTenant(u.role);
+    const base = appPublicUrl();
+    const verify = process.env.META_VERIFY_TOKEN ?? "";
+    return {
+      callbackUrl: base ? `${base}/webhooks/whatsapp/meta` : "",
+      verifyToken: verify,
+      verifyTokenConfigured: !!verify.trim(),
+      metaAppSecretConfigured: !!process.env.META_APP_SECRET?.trim(),
+      publicAppUrlConfigured: !!base,
+      subscribedFieldsSuggestion: ["messages"],
+    };
+  }
+
+  /** Placeholder até implementar exchange code→token + persistência por tenant. */
+  exchangeMetaOAuthCode(
+    u: RequestUser,
+    _body: { code?: string; state?: string },
+  ): never {
+    assertCanConfigureTenant(u.role);
+    throw new BadRequestException(
+      "Embedded Signup: troca do código OAuth pelo token ainda não está implementada. Use Phone Number ID + Access Token manual em Canais, ou conclua esta rota no backend quando o app Meta estiver aprovado.",
+    );
+  }
+
+  getMetaEmbeddedSignupInfo(u: RequestUser) {
+    assertCanConfigureTenant(u.role);
+    const clientId = process.env.META_EMBEDDED_SIGNUP_CLIENT_ID?.trim();
+    const redirectUri = process.env.META_EMBEDDED_SIGNUP_REDIRECT_URI?.trim();
+    const docsUrl =
+      "https://developers.facebook.com/docs/whatsapp/embedded-signup";
+    if (!clientId || !redirectUri) {
+      return {
+        enabled: false as const,
+        docsUrl,
+        message:
+          "Defina META_EMBEDDED_SIGNUP_CLIENT_ID e META_EMBEDDED_SIGNUP_REDIRECT_URI no servidor quando o app Meta estiver aprovado para Embedded Signup. Até lá, use Phone Number ID + token manual na aba Canais.",
+      };
+    }
+    const scope = [
+      "whatsapp_business_management",
+      "business_management",
+    ].join(",");
+    const oauthAuthorizationUrl =
+      `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth?` +
+      new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        scope,
+        response_type: "code",
+        state: `tenant:${u.tenantId}`,
+      }).toString();
+    return {
+      enabled: true as const,
+      docsUrl,
+      oauthAuthorizationUrl,
+      redirectUri,
+    };
+  }
+
+  async listMetaMessageTemplates(u: RequestUser, connectionId: string) {
+    assertCanConfigureTenant(u.role);
+    const conn = await this.prisma.whatsAppConnection.findFirst({
+      where: { id: connectionId, tenantId: u.tenantId, provider: "META" },
+    });
+    if (!conn) throw new BadRequestException("Conexão Meta não encontrada");
+    const cfg = conn.config as {
+      accessToken?: string;
+      businessAccountId?: string;
+    };
+    const waba = cfg.businessAccountId?.trim();
+    const token = cfg.accessToken?.trim();
+    if (!waba) {
+      throw new BadRequestException(
+        "Informe o WhatsApp Business Account ID (WABA) na conexão para listar templates.",
+      );
+    }
+    if (!token) throw new BadRequestException("Access token ausente na conexão");
+    const url = new URL(
+      `https://graph.facebook.com/${META_GRAPH_VERSION}/${waba}/message_templates`,
+    );
+    url.searchParams.set("fields", "name,status,language,category");
+    url.searchParams.set("limit", "100");
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      data?: { name: string; status: string; language?: string; category?: string }[];
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      throw new BadRequestException(
+        json.error?.message ??
+          `Falha ao listar templates (HTTP ${res.status})`,
+      );
+    }
+    const data = json.data ?? [];
+    const approved = data.filter((t) => t.status === "APPROVED");
+    return { ok: true as const, templates: approved };
+  }
+
+  async patchMetaConnection(
+    u: RequestUser,
+    connectionId: string,
+    input: {
+      name?: string;
+      phoneNumberId?: string;
+      accessToken?: string;
+      businessAccountId?: string;
+    },
+  ) {
+    assertCanConfigureTenant(u.role);
+    const conn = await this.prisma.whatsAppConnection.findFirst({
+      where: { id: connectionId, tenantId: u.tenantId, provider: "META" },
+    });
+    if (!conn) throw new BadRequestException("Conexão Meta não encontrada");
+    const prev = conn.config as Record<string, string>;
+    const phoneNumberId = (input.phoneNumberId ?? prev.phoneNumberId ?? "").trim();
+    const accessToken = (input.accessToken ?? prev.accessToken ?? "").trim();
+    const businessAccountId = (
+      input.businessAccountId ?? prev.businessAccountId ??
+      ""
+    ).trim();
+    if (!phoneNumberId || !accessToken) {
+      throw new BadRequestException("phoneNumberId e accessToken são obrigatórios");
+    }
+    const tokenOrPhoneChanged =
+      input.accessToken !== undefined || input.phoneNumberId !== undefined;
+    if (tokenOrPhoneChanged) {
+      await assertMetaGraphPhoneAccess(phoneNumberId, accessToken);
+    }
+    const name =
+      input.name !== undefined ? input.name.trim() || conn.name : conn.name;
+    await this.prisma.whatsAppConnection.update({
+      where: { id: connectionId },
+      data: {
+        name,
+        config: {
+          ...prev,
+          phoneNumberId,
+          accessToken,
+          businessAccountId,
+        },
+      },
+    });
+    return { ok: true as const };
+  }
+
+  async testMetaConnection(u: RequestUser, connectionId: string) {
+    assertCanConfigureTenant(u.role);
+    const conn = await this.prisma.whatsAppConnection.findFirst({
+      where: { id: connectionId, tenantId: u.tenantId, provider: "META" },
+    });
+    if (!conn) throw new BadRequestException("Conexão Meta não encontrada");
+    const provider = createWhatsAppProvider(conn);
+    return provider.getConnectionStatus();
   }
 
   async createInstagramConnection(

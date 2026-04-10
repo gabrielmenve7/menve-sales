@@ -202,11 +202,13 @@ export class MetaWhatsAppProvider implements IWhatsAppProvider {
           },
         }),
       });
+      const json = (await res.json().catch(() => ({}))) as {
+        messages?: { id?: string }[];
+      };
       if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
         return { ok: false, error: JSON.stringify(json) };
       }
-      return { ok: true };
+      return { ok: true, externalId: json.messages?.[0]?.id };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Erro" };
     }
@@ -232,25 +234,138 @@ export class MetaWhatsAppProvider implements IWhatsAppProvider {
       entry?: {
         changes?: {
           value?: {
-            messages?: {
-              id?: string;
-              from?: string;
-              text?: { body?: string };
-              timestamp?: string;
-            }[];
+            messages?: MetaWebhookMessage[];
           };
         }[];
       }[];
     };
     const messages = body.entry?.[0]?.changes?.[0]?.value?.messages;
     if (!messages?.length) return [];
-    return messages
-      .filter((m) => m.text?.body)
-      .map((m) => ({
-        externalId: m.id ?? "",
-        from: m.from ?? "",
-        body: m.text?.body ?? "",
-        timestamp: new Date(Number(m.timestamp ?? 0) * 1000),
-      }));
+    const out: NormalizedInbound[] = [];
+    for (const m of messages) {
+      const normalized = normalizeMetaInboundMessage(m);
+      if (normalized) out.push(normalized);
+    }
+    return out;
   }
+}
+
+type MetaWebhookMessage = {
+  id?: string;
+  from?: string;
+  timestamp?: string;
+  type?: string;
+  text?: { body?: string };
+  image?: { caption?: string; mime_type?: string; id?: string };
+  video?: { caption?: string; mime_type?: string; id?: string };
+  audio?: { mime_type?: string; id?: string };
+  document?: {
+    caption?: string;
+    filename?: string;
+    mime_type?: string;
+    id?: string;
+  };
+  sticker?: { mime_type?: string; id?: string };
+  interactive?: {
+    type?: string;
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string; description?: string };
+  };
+};
+
+function normalizeMetaInboundMessage(
+  m: MetaWebhookMessage,
+): NormalizedInbound | null {
+  const externalId = m.id ?? "";
+  const from = m.from ?? "";
+  if (!externalId || !from) return null;
+  const ts = new Date(Number(m.timestamp ?? 0) * 1000);
+  const type = (m.type ?? "text").toLowerCase();
+
+  if (type === "text" && m.text?.body) {
+    return { externalId, from, body: m.text.body, timestamp: ts };
+  }
+
+  if (type === "image") {
+    const cap = m.image?.caption?.trim();
+    return {
+      externalId,
+      from,
+      body: cap || "[Imagem recebida]",
+      timestamp: ts,
+      mediaType: m.image?.mime_type ?? "image/*",
+    };
+  }
+
+  if (type === "video") {
+    const cap = m.video?.caption?.trim();
+    return {
+      externalId,
+      from,
+      body: cap || "[Vídeo recebido]",
+      timestamp: ts,
+      mediaType: m.video?.mime_type ?? "video/*",
+    };
+  }
+
+  if (type === "audio") {
+    return {
+      externalId,
+      from,
+      body: "[Áudio recebido]",
+      timestamp: ts,
+      mediaType: m.audio?.mime_type ?? "audio/*",
+    };
+  }
+
+  if (type === "document") {
+    const name = m.document?.filename?.trim();
+    const cap = m.document?.caption?.trim();
+    const label = [cap, name].filter(Boolean).join(" — ");
+    return {
+      externalId,
+      from,
+      body: label || "[Documento recebido]",
+      timestamp: ts,
+      mediaType: m.document?.mime_type ?? "application/octet-stream",
+    };
+  }
+
+  if (type === "sticker") {
+    return {
+      externalId,
+      from,
+      body: "[Figurinha]",
+      timestamp: ts,
+      mediaType: m.sticker?.mime_type ?? "image/webp",
+    };
+  }
+
+  if (type === "interactive" && m.interactive) {
+    const ir = m.interactive;
+    if (ir.type === "button_reply" && ir.button_reply?.title) {
+      return {
+        externalId,
+        from,
+        body: ir.button_reply.title,
+        timestamp: ts,
+      };
+    }
+    if (ir.type === "list_reply" && ir.list_reply?.title) {
+      const desc = ir.list_reply.description?.trim();
+      const title = ir.list_reply.title;
+      return {
+        externalId,
+        from,
+        body: desc ? `${title} — ${desc}` : title,
+        timestamp: ts,
+      };
+    }
+  }
+
+  if (m.text?.body) {
+    return { externalId, from, body: m.text.body, timestamp: ts };
+  }
+
+  return null;
 }

@@ -21,6 +21,79 @@ function fieldDescriptionHint(f: CustomField): string | undefined {
   return t.length > 0 ? t : undefined;
 }
 
+/** `YYYY-MM-DD` → `dd/mm/aaaa` para exibição no modo minimal (input nativo fica invisível). */
+function formatIsoDatePtBr(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return iso;
+  const [, y, mo, d] = m;
+  return `${d}/${mo}/${y}`;
+}
+
+/** Texto vazio estilo SELECT minimal: descrição do campo ou "Adicionar …". */
+function minimalDatePlaceholder(f: CustomField): string {
+  return fieldDescriptionHint(f) ?? `Adicionar ${f.name.toLowerCase()}`;
+}
+
+/**
+ * Modo minimal: sem texto "dd/mm/aaaa" nem ícone de calendário à direita; clique na linha abre o picker.
+ * O indicador WebKit é esticado à área inteira (transparente) para o alvo de clique cobrir o valor.
+ */
+const dateMinimalOverlayChrome =
+  "[&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0";
+
+function MinimalDateFieldInput({
+  id,
+  value,
+  disabled,
+  required,
+  placeholder,
+  inputClassName,
+  onValueChange,
+  onCommitBlur,
+}: {
+  id: string;
+  value: string;
+  disabled: boolean;
+  required: boolean;
+  placeholder: string;
+  inputClassName: string;
+  onValueChange: (next: string) => void;
+  onCommitBlur: (current: string) => void;
+}) {
+  return (
+    <div className="relative min-h-8 w-full">
+      <Input
+        id={id}
+        type="date"
+        disabled={disabled}
+        required={required}
+        value={value}
+        onChange={(e) => onValueChange(e.target.value)}
+        onBlur={(e) => onCommitBlur(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        className={cn(
+          inputClassName,
+          "absolute inset-0 z-[1] h-full min-h-8 w-full cursor-pointer opacity-0",
+          dateMinimalOverlayChrome,
+        )}
+      />
+      <span
+        className={cn(
+          "pointer-events-none relative z-0 flex min-h-8 w-full items-center text-left text-sm leading-tight",
+          value
+            ? "not-italic text-foreground"
+            : "italic text-muted-foreground/80",
+        )}
+        aria-hidden
+      >
+        {value ? formatIsoDatePtBr(value) : placeholder}
+      </span>
+    </div>
+  );
+}
+
 /** Valor neutro em repouso; borda/pill só no hover da linha ou foco (como ClickUp). */
 const valueShell =
   "min-w-0 flex-1 rounded-md border border-transparent bg-transparent transition-[border-color,box-shadow,background-color] group-hover:border-border/60 group-hover:bg-background/90 focus-within:border-border focus-within:bg-background focus-within:ring-1 focus-within:ring-ring/35";
@@ -354,21 +427,36 @@ export function CustomFieldsInlineTable({
                     ))}
                   </select>
                 ) : f.fieldType === "DATE" ? (
-                  <Input
-                    id={inputId}
-                    type="date"
-                    className={cn(ic, "pr-1")}
-                    disabled={disabled}
-                    required={f.required}
-                    value={val}
-                    onChange={(e) =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        [f.key]: e.target.value,
-                      }))
-                    }
-                    onBlur={(e) => void commitField(f, e.target.value)}
-                  />
+                  isMinimal ? (
+                    <MinimalDateFieldInput
+                      id={inputId}
+                      value={val}
+                      disabled={disabled}
+                      required={f.required}
+                      placeholder={minimalDatePlaceholder(f)}
+                      inputClassName={ic}
+                      onValueChange={(next) =>
+                        setDraft((prev) => ({ ...prev, [f.key]: next }))
+                      }
+                      onCommitBlur={(current) => void commitField(f, current)}
+                    />
+                  ) : (
+                    <Input
+                      id={inputId}
+                      type="date"
+                      className={cn(ic, "pr-1")}
+                      disabled={disabled}
+                      required={f.required}
+                      value={val}
+                      onChange={(e) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          [f.key]: e.target.value,
+                        }))
+                      }
+                      onBlur={(e) => void commitField(f, e.target.value)}
+                    />
+                  )
                 ) : (
                   <Input
                     id={inputId}
