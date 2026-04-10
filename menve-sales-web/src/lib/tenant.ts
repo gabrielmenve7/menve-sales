@@ -6,16 +6,21 @@ function apiBase() {
   return process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://localhost:4000";
 }
 
-export async function getTenantFromRequest() {
+/** Slug usado em `/tenants/by-slug/:slug` (subdomínio, header ou DEFAULT_TENANT_SLUG). */
+export async function getTenantSlugFromRequest(): Promise<string> {
   const h = await headers();
   const forwarded =
     h.get("x-forwarded-host")?.split(",")[0]?.trim().toLowerCase() ?? "";
   const host = (forwarded || h.get("host")?.toLowerCase() || "").trim();
   const sub = getSubdomain(host);
-  const slug = resolveTenantSlug(
+  return resolveTenantSlug(
     sub ?? h.get("x-tenant-slug"),
     process.env.DEFAULT_TENANT_SLUG,
   );
+}
+
+export async function getTenantFromRequest() {
+  const slug = await getTenantSlugFromRequest();
   try {
     const res = await fetch(
       `${apiBase()}/tenants/by-slug/${encodeURIComponent(slug)}`,
