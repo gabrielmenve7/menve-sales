@@ -1,8 +1,9 @@
 # Menve Sales API — Railway (https://railway.app)
-# Crie um serviço apontando para esta pasta (menve-sales-api) ou defina Dockerfile path no painel.
+# Painel: Root Directory = raiz do monorepo (onde está o package.json principal).
+# Dockerfile path = menve-sales-api/Dockerfile
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "menve-sales-api/Dockerfile"
 
 [deploy]
 healthcheckPath = "/health"

@@ -7,6 +7,7 @@ const appRoot = __dirname;
 loadEnvConfig(appRoot);
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@prisma/client"],
   turbopack: {
     root: path.join(__dirname, ".."),
   },

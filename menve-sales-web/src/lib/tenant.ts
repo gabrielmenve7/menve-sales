@@ -21,6 +21,25 @@ export async function getTenantSlugFromRequest(): Promise<string> {
 
 export async function getTenantFromRequest() {
   const slug = await getTenantSlugFromRequest();
+
+  // Produção na Vercel: mesmo DATABASE_URL do `migrate deploy` → leitura direta,
+  // sem depender de INTERNAL_API_URL / rede até a Railway.
+  if (process.env.DATABASE_URL?.trim()) {
+    try {
+      const { getTenantBySlugFromDb } = await import("@/lib/tenant-db");
+      const fromDb = await getTenantBySlugFromDb(slug);
+      if (fromDb) return fromDb;
+      return null;
+    } catch (e) {
+      console.error(
+        "[menve/tenant] Postgres (DATABASE_URL) indisponível para slug:",
+        slug,
+        e,
+      );
+      // fallback HTTP abaixo
+    }
+  }
+
   try {
     const res = await fetch(
       `${apiBase()}/tenants/by-slug/${encodeURIComponent(slug)}`,
@@ -31,7 +50,7 @@ export async function getTenantFromRequest() {
     return tenant;
   } catch (e) {
     console.error(
-      "[menve/tenant] Falha ao resolver tenant por slug:",
+      "[menve/tenant] Falha ao resolver tenant por slug (API):",
       slug,
       e,
     );

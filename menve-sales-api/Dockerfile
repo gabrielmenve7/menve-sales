@@ -1,27 +1,38 @@
-# Menve Nest API
+# Menve Nest API — build a partir da RAIZ do monorepo (mesmo layout que Prisma `output = ../../node_modules/.prisma/client`).
+#
+# Railway / Docker:
+#   Root Directory = raiz do repo (pasta com package.json e menve-sales-api/)
+#   Dockerfile path = menve-sales-api/Dockerfile
+#
+# Local:
+#   docker build -f menve-sales-api/Dockerfile .
+
 FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
-WORKDIR /app
+WORKDIR /repo
 
 FROM base AS deps
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
+COPY menve-sales-api/package.json ./menve-sales-api/
 RUN npm ci
 
 FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npx prisma generate --schema prisma/schema.prisma
+COPY --from=deps /repo/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY menve-sales-api ./menve-sales-api
+RUN npx prisma generate --schema menve-sales-api/prisma/schema.prisma
+WORKDIR /repo/menve-sales-api
 RUN npm run build
 
 FROM base AS runner
 ENV NODE_ENV=production
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nestjs
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/package-lock.json* ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nestjs
+WORKDIR /app
+COPY --from=builder /repo/node_modules ./node_modules
+COPY --from=builder /repo/menve-sales-api/dist ./dist
+COPY --from=builder /repo/menve-sales-api/prisma ./prisma
+COPY --from=builder /repo/menve-sales-api/package.json ./
 USER nestjs
 EXPOSE 4000
 ENV PORT=4000

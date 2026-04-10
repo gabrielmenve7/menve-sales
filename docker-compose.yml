@@ -41,8 +41,8 @@ services:
 
   api:
     build:
-      context: ./menve-sales-api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: menve-sales-api/Dockerfile
     restart: unless-stopped
     ports:
       - "4000:4000"

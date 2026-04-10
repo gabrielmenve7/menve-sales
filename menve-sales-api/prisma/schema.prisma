@@ -1,5 +1,7 @@
 generator client {
   provider = "prisma-client-js"
+  /// Um único client na raiz: API Nest + Next (Vercel) compartilham o mesmo schema.
+  output   = "../../node_modules/.prisma/client"
 }
 
 datasource db {

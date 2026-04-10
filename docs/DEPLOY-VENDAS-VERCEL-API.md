@@ -20,7 +20,7 @@ Guia operacional para o modelo **Next.js na Vercel** e **NestJS em outro PaaS**,
 
 ## 2. API Nest (PaaS)
 
-1. **Contexto de build:** pasta [`menve-sales-api`](../menve-sales-api) (Dockerfile na raiz dessa pasta).
+1. **Contexto de build Docker:** **raiz do monorepo** (onde está o `package.json` principal). O [`Dockerfile`](../menve-sales-api/Dockerfile) copia `menve-sales-api/` e o `node_modules` gerado com Prisma na raiz. No Railway: *Root Directory* = raiz do repo; *Dockerfile path* = `menve-sales-api/Dockerfile`.
 2. **Arquivos de referência:** [`menve-sales-api/railway.toml`](../menve-sales-api/railway.toml), [`menve-sales-api/render.yaml`](../menve-sales-api/render.yaml).
 3. **Variáveis mínimas** (alinhar com [`menve-sales-api/.env.example`](../menve-sales-api/.env.example)):
 
@@ -55,6 +55,8 @@ Migrações: o repositório roda **`prisma migrate deploy` no build da Vercel** 
 | `INTERNAL_API_URL` | `https://api.vendas.menvedigital.com.br` (sem barra final) |
 | `INTERNAL_API_KEY` | Idêntico ao da API |
 | `DEFAULT_TENANT_SLUG` | Com hostname `vendas.menvedigital.com.br`, o slug vem do host (`vendas`); este fallback vale para `www` / apex |
+
+**Resolução de tenant no Next:** com `DATABASE_URL` definido, o servidor lê a tabela `Tenant` **direto no Postgres** (mesmo banco do `migrate deploy`). Assim, subdomínios como `crm.*` funcionam mesmo se `INTERNAL_API_URL` estiver errado temporariamente; login e APIs autenticadas continuam exigindo API + `INTERNAL_API_KEY` corretos.
 
 Opcional: Evolution, Meta — ver [`menve-sales-api/docs/WHATSAPP-GOLIVE.md`](../menve-sales-api/docs/WHATSAPP-GOLIVE.md).
 

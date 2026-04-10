@@ -1,12 +1,11 @@
 # Menve Sales API — Render Blueprint (https://render.com)
-# Conecte o repositório na raiz do monorepo. Se o Blueprint usar só menve-sales-api como root,
-# ajuste dockerfilePath para ./Dockerfile e dockerContext para .
+# dockerContext = raiz do monorepo (igual ao Dockerfile da API).
 services:
   - type: web
     name: menve-sales-api
     runtime: docker
     dockerfilePath: ./menve-sales-api/Dockerfile
-    dockerContext: ./menve-sales-api
+    dockerContext: .
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV

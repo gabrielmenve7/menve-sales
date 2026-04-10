@@ -36,18 +36,25 @@ export default async function SetupPage() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>
-            <strong>1)</strong> Faça um <strong>redeploy da API</strong> (Railway)
-            com a versão atual do código: ao subir, ela cria automaticamente os
-            tenants <strong>demo</strong>, <strong>vendas</strong>,{" "}
-            <strong>crm</strong> e <strong>menve-digital</strong> no{" "}
-            <code className="rounded bg-muted px-1">DATABASE_URL</code> dela, mais
-            pipeline/tags mínimos — desde que{" "}
-            <code className="rounded bg-muted px-1">INTERNAL_API_URL</code> na
-            Vercel aponte para essa API.
+            <strong>1)</strong> Na Vercel (Production), confira{" "}
+            <code className="rounded bg-muted px-1">DATABASE_URL</code> — tem que
+            ser o <strong>mesmo Postgres</strong> da API. O app lê o tenant{" "}
+            <code className="rounded bg-muted px-1">{resolvedSlug}</code> direto
+            nesse banco (não depende só da Railway para esta tela).
           </p>
           <p>
-            <strong>2)</strong> Se ainda aparecer esta página, rode manualmente no
-            mesmo Postgres da API:
+            <strong>2)</strong> <strong>Redeploy da API</strong> (Railway) com o
+            código atual: ao subir, ela garante os tenants{" "}
+            <strong>demo</strong>, <strong>vendas</strong>, <strong>crm</strong>{" "}
+            e <strong>menve-digital</strong> nesse mesmo{" "}
+            <code className="rounded bg-muted px-1">DATABASE_URL</code>. Na Railway:
+            Root Directory = <strong>raiz do repo</strong>, Dockerfile ={" "}
+            <code className="rounded bg-muted px-1">menve-sales-api/Dockerfile</code>
+            .
+          </p>
+          <p>
+            <strong>3)</strong> Se ainda aparecer, rode manualmente no Postgres da
+            API:
           </p>
           <pre className="overflow-x-auto rounded-md border bg-muted/50 p-3 text-xs text-foreground">
             {`cd menve-sales-api
