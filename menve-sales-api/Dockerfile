@@ -14,7 +14,8 @@ WORKDIR /repo
 FROM base AS deps
 COPY package.json package-lock.json ./
 COPY menve-sales-api/package.json ./menve-sales-api/
-RUN npm ci
+# postinstall na raiz roda prisma generate; o schema ainda não foi copiado nesta etapa.
+RUN npm ci --ignore-scripts
 
 FROM base AS builder
 COPY --from=deps /repo/node_modules ./node_modules
