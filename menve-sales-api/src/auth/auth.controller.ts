@@ -5,6 +5,7 @@ import {
   Headers,
   Patch,
   Post,
+  Query,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -12,12 +13,14 @@ import { AuthService } from "./auth.service";
 import { Public } from "../common/public.decorator";
 import { ReqUser } from "../common/req-user.decorator";
 import type { RequestUser } from "../common/request-user";
+import { WorkspacesService } from "../workspaces/workspaces.service";
 
 @Controller("auth")
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly jwt: JwtService,
+    private readonly workspaces: WorkspacesService,
   ) {}
 
   @Public()
@@ -29,6 +32,27 @@ export class AuthController {
       return { error: "missing_credentials" };
     }
     return this.auth.login(email, password);
+  }
+
+  @Public()
+  @Post("register")
+  register(@Body() body: { email?: string; password?: string; name?: string }) {
+    return this.auth.register(body);
+  }
+
+  @Public()
+  @Get("invite-preview")
+  invitePreview(@Query("token") token: string) {
+    return this.workspaces.invitePreview(token ?? "");
+  }
+
+  @Public()
+  @Patch("active-workspace")
+  patchActiveWorkspace(
+    @Headers("authorization") authorization: string | undefined,
+    @Body() body: { tenantId?: string },
+  ) {
+    return this.auth.setActiveWorkspaceFromBearer(authorization, body.tenantId);
   }
 
   /** Server-side profile refresh (Next session) — x-api-key + x-user-id only. */

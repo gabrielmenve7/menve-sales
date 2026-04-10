@@ -1,6 +1,7 @@
 import {
   PrismaClient,
   UserRole,
+  WorkspaceRole,
   DealStatus,
   WhatsAppProvider,
 } from "@prisma/client";
@@ -12,6 +13,39 @@ import {
 } from "../src/prisma/workspace-bootstrap";
 
 const prisma = new PrismaClient();
+
+function userRoleToWorkspaceRole(r: UserRole): WorkspaceRole {
+  switch (r) {
+    case UserRole.OWNER:
+      return WorkspaceRole.OWNER;
+    case UserRole.ADMIN:
+      return WorkspaceRole.ADMIN;
+    case UserRole.MANAGER:
+      return WorkspaceRole.MANAGER;
+    case UserRole.SELLER:
+      return WorkspaceRole.SELLER;
+    case UserRole.SUPER_ADMIN:
+      return WorkspaceRole.OWNER;
+  }
+}
+
+async function ensureWorkspaceMembership(
+  userId: string,
+  tenantId: string | null,
+  role: UserRole,
+) {
+  if (!tenantId || role === UserRole.SUPER_ADMIN) return;
+  const wr = userRoleToWorkspaceRole(role);
+  await prisma.workspaceMembership.upsert({
+    where: { userId_tenantId: { userId, tenantId } },
+    create: { userId, tenantId, role: wr },
+    update: { role: wr },
+  });
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastActiveTenantId: tenantId },
+  });
+}
 
 async function main() {
   const password = await bcrypt.hash("admin123", 12);
@@ -69,56 +103,65 @@ async function main() {
   });
 
   /** `update` inclui `passwordHash` para `db:seed` realinhar senha seed (ex.: admin123) após deploys antigos. */
-  await prisma.user.upsert({
-    where: { email: "owner@menvedigital.local" },
-    update: {
-      tenantId: menveDigital.id,
-      role: UserRole.OWNER,
-      name: "Owner Menve Digital",
-      passwordHash: password,
-    },
-    create: {
-      email: "owner@menvedigital.local",
-      name: "Owner Menve Digital",
-      passwordHash: password,
-      role: UserRole.OWNER,
-      tenantId: menveDigital.id,
-    },
-  });
+  {
+    const u = await prisma.user.upsert({
+      where: { email: "owner@menvedigital.local" },
+      update: {
+        tenantId: menveDigital.id,
+        role: UserRole.OWNER,
+        name: "Owner Menve Digital",
+        passwordHash: password,
+      },
+      create: {
+        email: "owner@menvedigital.local",
+        name: "Owner Menve Digital",
+        passwordHash: password,
+        role: UserRole.OWNER,
+        tenantId: menveDigital.id,
+      },
+    });
+    await ensureWorkspaceMembership(u.id, u.tenantId, u.role);
+  }
 
-  await prisma.user.upsert({
-    where: { email: "owner@vendas.menvedigital.local" },
-    update: {
-      tenantId: vendasTenant.id,
-      role: UserRole.OWNER,
-      name: "Owner Vendas (produção)",
-      passwordHash: password,
-    },
-    create: {
-      email: "owner@vendas.menvedigital.local",
-      name: "Owner Vendas (produção)",
-      passwordHash: password,
-      role: UserRole.OWNER,
-      tenantId: vendasTenant.id,
-    },
-  });
+  {
+    const u = await prisma.user.upsert({
+      where: { email: "owner@vendas.menvedigital.local" },
+      update: {
+        tenantId: vendasTenant.id,
+        role: UserRole.OWNER,
+        name: "Owner Vendas (produção)",
+        passwordHash: password,
+      },
+      create: {
+        email: "owner@vendas.menvedigital.local",
+        name: "Owner Vendas (produção)",
+        passwordHash: password,
+        role: UserRole.OWNER,
+        tenantId: vendasTenant.id,
+      },
+    });
+    await ensureWorkspaceMembership(u.id, u.tenantId, u.role);
+  }
 
-  await prisma.user.upsert({
-    where: { email: "owner@crm.menvedigital.local" },
-    update: {
-      tenantId: crmTenant.id,
-      role: UserRole.OWNER,
-      name: "Owner CRM (crm.*.menvedigital)",
-      passwordHash: password,
-    },
-    create: {
-      email: "owner@crm.menvedigital.local",
-      name: "Owner CRM (crm.*.menvedigital)",
-      passwordHash: password,
-      role: UserRole.OWNER,
-      tenantId: crmTenant.id,
-    },
-  });
+  {
+    const u = await prisma.user.upsert({
+      where: { email: "owner@crm.menvedigital.local" },
+      update: {
+        tenantId: crmTenant.id,
+        role: UserRole.OWNER,
+        name: "Owner CRM (crm.*.menvedigital)",
+        passwordHash: password,
+      },
+      create: {
+        email: "owner@crm.menvedigital.local",
+        name: "Owner CRM (crm.*.menvedigital)",
+        passwordHash: password,
+        role: UserRole.OWNER,
+        tenantId: crmTenant.id,
+      },
+    });
+    await ensureWorkspaceMembership(u.id, u.tenantId, u.role);
+  }
 
   await prisma.user.upsert({
     where: { email: "admin@menve.com" },
@@ -151,6 +194,7 @@ async function main() {
       tenantId: tenant.id,
     },
   });
+  await ensureWorkspaceMembership(owner.id, owner.tenantId, owner.role);
 
   const { pipeline, stages, source } = await ensureDefaultWorkspace(
     prisma,

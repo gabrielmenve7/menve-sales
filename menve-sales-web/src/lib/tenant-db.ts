@@ -48,3 +48,23 @@ export async function getTenantBySlugFromDb(
     updatedAt: t.updatedAt,
   };
 }
+
+export async function getTenantByIdFromDb(
+  id: string,
+): Promise<TenantDto | null> {
+  const prisma = getPrisma();
+  const t = await prisma.tenant.findUnique({
+    where: { id },
+  });
+  if (!t) return null;
+  return {
+    id: t.id,
+    name: t.name,
+    slug: t.slug,
+    plan: t.plan,
+    image: t.image ?? null,
+    researchEnabled: t.researchEnabled,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  };
+}

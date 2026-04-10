@@ -2,6 +2,8 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { assertValidProfileImage } from "../common/profile-image.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { findContactCustomFieldDefinitions } from "../custom-fields/custom-fields-load.util";
+import { useWorkspaceMembership } from "../common/use-workspace-membership";
+import { workspaceRoleToUserRole } from "../common/workspace-role.util";
 
 @Injectable()
 export class SettingsService {
@@ -47,11 +49,7 @@ export class SettingsService {
         orderBy: { name: "asc" },
       }),
       findContactCustomFieldDefinitions(this.prisma, tenantId),
-      this.prisma.user.findMany({
-        where: { tenantId },
-        select: { id: true, name: true, email: true, role: true, image: true },
-        orderBy: { name: "asc" },
-      }),
+      this.loadMembers(tenantId),
     ]);
     return {
       tenant,
@@ -64,12 +62,34 @@ export class SettingsService {
     };
   }
 
-  async getMembers(tenantId: string) {
+  private async loadMembers(tenantId: string) {
+    if (useWorkspaceMembership()) {
+      const rows = await this.prisma.workspaceMembership.findMany({
+        where: { tenantId },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true, image: true },
+          },
+        },
+        orderBy: { joinedAt: "asc" },
+      });
+      return rows.map((r) => ({
+        id: r.user.id,
+        name: r.user.name,
+        email: r.user.email,
+        image: r.user.image,
+        role: workspaceRoleToUserRole(r.role),
+      }));
+    }
     return this.prisma.user.findMany({
       where: { tenantId },
       select: { id: true, name: true, email: true, role: true, image: true },
       orderBy: { name: "asc" },
     });
+  }
+
+  async getMembers(tenantId: string) {
+    return this.loadMembers(tenantId);
   }
 
   async updateTenant(

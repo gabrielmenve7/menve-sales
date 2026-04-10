@@ -1,7 +1,8 @@
 generator client {
   provider = "prisma-client-js"
-  /// Um único client na raiz: API Nest + Next (Vercel) compartilham o mesmo schema.
-  output   = "../../node_modules/.prisma/client"
+  /// Client dentro de menve-sales-api/node_modules para o Nest resolver @prisma/client local.
+  /// Na Vercel (web), use o mesmo schema com `prisma generate` apontando para o client da app ou hoisted.
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -13,6 +14,14 @@ datasource db {
 
 enum UserRole {
   SUPER_ADMIN
+  OWNER
+  ADMIN
+  MANAGER
+  SELLER
+}
+
+/// Papel dentro de um workspace (Tenant). Alinhado a OWNER..SELLER; sem SUPER_ADMIN.
+enum WorkspaceRole {
   OWNER
   ADMIN
   MANAGER
@@ -127,6 +136,41 @@ model Tenant {
   prospectResults     ProspectResult[]
   dashboardBoards            DashboardBoard[]
   pipelineAutomationRules    PipelineAutomationRule[]
+  workspaceMemberships       WorkspaceMembership[]
+  workspaceInvites           WorkspaceInvite[]
+}
+
+model WorkspaceMembership {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      WorkspaceRole
+  joinedAt  DateTime      @default(now())
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model WorkspaceInvite {
+  id                String         @id @default(cuid())
+  tenantId          String
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  emailNormalized   String
+  role              WorkspaceRole
+  tokenHash         String         @unique
+  expiresAt         DateTime
+  invitedByUserId   String?
+  invitedBy         User?          @relation("WorkspaceInviteInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  createdAt         DateTime       @default(now())
+  acceptedAt        DateTime?
+  revokedAt         DateTime?
+
+  @@index([tenantId, emailNormalized])
 }
 
 /// Etapa / macro-fase (ex.: Qualificação) — agrupa scripts de resposta rápida no Inbox.
@@ -167,8 +211,13 @@ model User {
   role         UserRole @default(SELLER)
   tenantId     String?
   tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Último workspace ativo (sessão); usado ao fazer login com vários memberships.
+  lastActiveTenantId String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  workspaceMemberships WorkspaceMembership[]
+  invitesSent          WorkspaceInvite[]     @relation("WorkspaceInviteInviter")
 
   assignedDeals    Deal[]         @relation("AssignedDeals")
   activities       Activity[]

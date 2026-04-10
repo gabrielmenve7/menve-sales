@@ -4,9 +4,11 @@ import { APP_GUARD } from "@nestjs/core";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { AppAuthGuard } from "../common/app-auth.guard";
+import { WorkspacesModule } from "../workspaces/workspaces.module";
 
 @Module({
   imports: [
+    WorkspacesModule,
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET || "dev-jwt-secret-change-in-production",

@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { getSubdomain, resolveTenantSlug } from "@/lib/tenant-edge";
 
 function apiBase() {
@@ -19,11 +20,38 @@ export async function getTenantSlugFromRequest(): Promise<string> {
   );
 }
 
+/**
+ * Resolve o tenant do contexto atual.
+ * Usuário logado: prioriza `session.user.tenantId` (workspace ativo na sessão).
+ * Visitante: slug do host / DEFAULT_TENANT_SLUG.
+ */
 export async function getTenantFromRequest() {
+  const session = await auth();
+  const isSuperAdmin =
+    session?.user != null &&
+    (session.user.globalRole ?? session.user.role) === "SUPER_ADMIN";
+
+  if (session?.user?.tenantId && process.env.DATABASE_URL?.trim()) {
+    try {
+      const { getTenantByIdFromDb } = await import("@/lib/tenant-db");
+      const fromDb = await getTenantByIdFromDb(session.user.tenantId);
+      if (fromDb) return fromDb;
+    } catch (e) {
+      console.error(
+        "[menve/tenant] Postgres indisponível para tenantId da sessão:",
+        session.user.tenantId,
+        e,
+      );
+    }
+    return null;
+  }
+
+  if (session?.user?.id && !session.user.tenantId && !isSuperAdmin) {
+    return null;
+  }
+
   const slug = await getTenantSlugFromRequest();
 
-  // Produção na Vercel: mesmo DATABASE_URL do `migrate deploy` → leitura direta,
-  // sem depender de INTERNAL_API_URL / rede até a Railway.
   if (process.env.DATABASE_URL?.trim()) {
     try {
       const { getTenantBySlugFromDb } = await import("@/lib/tenant-db");
@@ -36,7 +64,6 @@ export async function getTenantFromRequest() {
         slug,
         e,
       );
-      // fallback HTTP abaixo
     }
   }
 

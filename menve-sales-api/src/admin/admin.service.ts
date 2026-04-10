@@ -8,7 +8,7 @@ export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   assertSuperAdmin(u: RequestUser) {
-    if (u.role !== UserRole.SUPER_ADMIN) {
+    if (u.globalRole !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException();
     }
   }

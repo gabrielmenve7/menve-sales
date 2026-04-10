@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useState, useTransition } from "react";
+import { switchWorkspace } from "@/actions/workspace";
 import { ChevronDown, Settings2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -12,11 +15,14 @@ import {
 } from "@/components/ui/popover";
 
 export type WorkspaceSwitcherTenant = {
+  id: string;
   name: string;
   slug: string;
   plan: string;
   image?: string | null;
 };
+
+export type WorkspaceOption = WorkspaceSwitcherTenant;
 
 function planLabel(plan: string) {
   const p = plan.trim().toLowerCase();
@@ -34,16 +40,46 @@ function workspaceInitial(name: string) {
 
 export function WorkspaceSwitcher({
   tenant,
+  workspaces = [],
   className,
   compactIconOnly = false,
 }: {
   tenant: WorkspaceSwitcherTenant;
+  /** Lista para troca de contexto (vários memberships). */
+  workspaces?: WorkspaceOption[];
   className?: string;
-  /** Só logo do workspace (sidebar recolhida). */
   compactIconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const { update } = useSession();
+  const router = useRouter();
   const label = planLabel(tenant.plan);
+
+  const list =
+    workspaces.length > 0 ? workspaces : [{ ...tenant }];
+
+  function onSwitch(tenantId: string) {
+    if (tenantId === tenant.id) {
+      setOpen(false);
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const data = await switchWorkspace(tenantId);
+        await update({
+          accessToken: data.accessToken,
+          tenantId: data.user.tenantId,
+          workspaces: data.workspaces,
+          needsOnboarding: data.needsOnboarding,
+        });
+        setOpen(false);
+        router.refresh();
+      } catch {
+        /* toast opcional */
+      }
+    });
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -145,6 +181,32 @@ export function WorkspaceSwitcher({
             </div>
           </div>
         </div>
+
+        {list.length > 1 ? (
+          <div className="border-b border-border/60 px-3 py-2 dark:border-border/50">
+            <p className="px-1 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Workspaces
+            </p>
+            <ul className="max-h-44 space-y-0.5 overflow-y-auto">
+              {list.map((w) => (
+                <li key={w.id}>
+                  <button
+                    type="button"
+                    disabled={pending || w.id === tenant.id}
+                    className={cn(
+                      "w-full rounded-lg px-2 py-2 text-left text-[13px] transition-colors hover:bg-muted/80",
+                      w.id === tenant.id && "bg-muted font-medium",
+                    )}
+                    onClick={() => onSwitch(w.id)}
+                  >
+                    {w.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-2 p-3">
           <Link
             href="/settings"

@@ -121,7 +121,11 @@ export function SettingsClient({
       </TabsContent>
 
       <TabsContent value="members">
-        <SettingsMembers members={members} />
+        <SettingsMembers
+          tenantId={tenant.id}
+          members={members}
+          canInvite={canManageWorkspace}
+        />
       </TabsContent>
 
       <TabsContent value="tags">

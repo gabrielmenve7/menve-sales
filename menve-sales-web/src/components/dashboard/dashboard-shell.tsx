@@ -36,6 +36,7 @@ function readStoredCollapsed(): boolean {
 export function DashboardShell({
   children,
   tenant,
+  workspaces = [],
   isSuperAdmin,
   researchEnabled,
   userName,
@@ -44,6 +45,7 @@ export function DashboardShell({
 }: {
   children: React.ReactNode;
   tenant: WorkspaceSwitcherTenant;
+  workspaces?: WorkspaceSwitcherTenant[];
   isSuperAdmin: boolean;
   researchEnabled: boolean;
   userName?: string | null;
@@ -159,13 +161,18 @@ export function DashboardShell({
             <div className="flex flex-col items-center gap-2">
               <WorkspaceSwitcher
                 tenant={tenant}
+                workspaces={workspaces}
                 compactIconOnly
                 className="w-full shrink-0"
               />
             </div>
           ) : (
             <div className="flex min-w-0 items-start gap-1.5">
-              <WorkspaceSwitcher tenant={tenant} className="min-w-0 flex-1" />
+              <WorkspaceSwitcher
+                tenant={tenant}
+                workspaces={workspaces}
+                className="min-w-0 flex-1"
+              />
               <Button
                 type="button"
                 variant="outline"

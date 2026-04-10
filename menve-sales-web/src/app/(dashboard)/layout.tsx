@@ -11,14 +11,23 @@ export default async function DashboardLayout({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
+  if (
+    session.user.needsOnboarding &&
+    !session.user.tenantId
+  ) {
+    redirect("/workspace");
+  }
+
   const tenant = await getTenantFromRequest();
   if (!tenant) redirect("/setup");
 
-  const isSuperAdmin = session.user.role === "SUPER_ADMIN";
+  const isSuperAdmin =
+    (session.user.globalRole ?? session.user.role) === "SUPER_ADMIN";
   const researchEnabled =
     (tenant as { researchEnabled?: boolean }).researchEnabled !== false;
 
   const tenantForShell = tenant as {
+    id: string;
     name: string;
     slug: string;
     plan: string;
@@ -28,6 +37,7 @@ export default async function DashboardLayout({
   return (
     <DashboardShell
       tenant={tenantForShell}
+      workspaces={session.user.workspaces ?? []}
       isSuperAdmin={isSuperAdmin}
       researchEnabled={researchEnabled}
       userName={session.user.name}

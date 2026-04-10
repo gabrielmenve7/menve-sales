@@ -4,7 +4,6 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import type { UserRole } from "@/types/domain";
 
-// Turbopack pode carregar este módulo cedo; garante .env da raiz antes de ler o secret.
 const cwd = process.cwd();
 const monorepoRoot =
   path.basename(cwd) === "menve-sales-web" ? path.resolve(cwd, "..") : cwd;
@@ -15,7 +14,6 @@ function apiBase() {
   return process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://localhost:4000";
 }
 
-/** Auth.js exige `secret` não vazio. Em dev, fallback se não houver .env. Em produção, defina no deploy ou verá MissingSecret em runtime. */
 function resolveAuthSecret(): string | undefined {
   const fromEnv =
     process.env.AUTH_SECRET?.trim() || process.env.NEXTAUTH_SECRET?.trim();
@@ -29,6 +27,15 @@ function resolveAuthSecret(): string | undefined {
   return undefined;
 }
 
+type WorkspaceRow = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  image?: string | null;
+  role: UserRole;
+};
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   secret: resolveAuthSecret(),
@@ -39,8 +46,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Senha", type: "password" },
+        accessToken: { label: "accessToken", type: "text" },
       },
       authorize: async (credentials) => {
+        const tokenOnly = credentials?.accessToken as string | undefined;
+        if (tokenOnly?.trim()) {
+          const r = await fetch(`${apiBase()}/auth/me`, {
+            headers: { Authorization: `Bearer ${tokenOnly.trim()}` },
+          });
+          if (!r.ok) return null;
+          const u = (await r.json()) as {
+            id: string;
+            email: string;
+            name: string | null;
+            image?: string | null;
+            role: UserRole;
+            tenantId: string | null;
+            globalRole?: UserRole;
+            workspaces?: WorkspaceRow[];
+            needsOnboarding?: boolean;
+          };
+          return {
+            id: u.id,
+            email: u.email,
+            name: u.name,
+            image: u.image ?? undefined,
+            role: u.role,
+            globalRole: u.globalRole ?? u.role,
+            tenantId: u.tenantId,
+            accessToken: tokenOnly.trim(),
+            workspaces: u.workspaces ?? [],
+            needsOnboarding: Boolean(u.needsOnboarding),
+          };
+        }
+
         const email = credentials?.email as string | undefined;
         const password = credentials?.password as string | undefined;
         if (!email || !password) return null;
@@ -82,6 +121,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
         const data = (await res.json()) as {
           accessToken?: string;
+          needsOnboarding?: boolean;
+          workspaces?: WorkspaceRow[];
           user?: {
             id: string;
             email: string;
@@ -89,9 +130,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             image?: string | null;
             role: UserRole;
             tenantId: string | null;
+            globalRole?: UserRole;
           };
         };
-        if (!data.user?.id) return null;
+        if (!data.user?.id || !data.accessToken) return null;
 
         return {
           id: data.user.id,
@@ -99,8 +141,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: data.user.name,
           image: data.user.image ?? undefined,
           role: data.user.role,
+          globalRole: data.user.globalRole ?? data.user.role,
           tenantId: data.user.tenantId,
           accessToken: data.accessToken,
+          workspaces: data.workspaces ?? [],
+          needsOnboarding: Boolean(data.needsOnboarding),
         };
       },
     }),
@@ -109,8 +154,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.role = (user as { role: UserRole }).role;
+        token.globalRole =
+          (user as { globalRole?: UserRole }).globalRole ?? token.role;
         token.tenantId = (user as { tenantId: string | null }).tenantId;
         token.accessToken = (user as { accessToken?: string }).accessToken;
+        token.workspaces = (user as { workspaces?: WorkspaceRow[] }).workspaces;
+        token.needsOnboarding = (user as { needsOnboarding?: boolean })
+          .needsOnboarding;
         token.name = user.name ?? undefined;
         token.email = user.email ?? undefined;
         token.picture =
@@ -120,13 +170,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       if (trigger === "update") {
         const s = session as
-          | { user?: { name?: string | null; image?: string | null } }
+          | {
+              user?: {
+                name?: string | null;
+                image?: string | null;
+              };
+              accessToken?: string;
+              tenantId?: string | null;
+              workspaces?: WorkspaceRow[];
+              needsOnboarding?: boolean;
+            }
           | undefined;
         if (s?.user?.name !== undefined) {
           token.name = s.user.name ?? undefined;
         }
         if (s?.user?.image !== undefined) {
           token.picture = s.user.image ?? undefined;
+        }
+        if (s?.accessToken !== undefined) {
+          token.accessToken = s.accessToken;
+        }
+        if (s?.tenantId !== undefined) {
+          token.tenantId = s.tenantId;
+        }
+        if (s?.workspaces !== undefined) {
+          token.workspaces = s.workspaces;
+        }
+        if (s?.needsOnboarding !== undefined) {
+          token.needsOnboarding = s.needsOnboarding;
         }
       }
       if (token.sub && token.accessToken) {
@@ -135,7 +206,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role === "" ||
           (typeof token.role === "string" && token.role.trim() === "");
         const needsTenant =
-          token.role === "SUPER_ADMIN"
+          token.globalRole === "SUPER_ADMIN"
             ? false
             : token.tenantId == null || token.tenantId === "";
         if (roleMissing || needsTenant) {
@@ -149,11 +220,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               const u = (await r.json()) as {
                 role: UserRole;
                 tenantId: string | null;
+                globalRole?: UserRole;
                 name?: string | null;
                 image?: string | null;
+                workspaces?: WorkspaceRow[];
+                needsOnboarding?: boolean;
               };
               token.role = u.role;
+              token.globalRole = u.globalRole ?? u.role;
               token.tenantId = u.tenantId;
+              token.workspaces = u.workspaces;
+              token.needsOnboarding = u.needsOnboarding;
               if (u.name !== undefined) token.name = u.name ?? undefined;
               if (u.image !== undefined) {
                 token.picture = u.image ?? undefined;
@@ -170,7 +247,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = token.sub!;
         session.user.role = token.role as UserRole;
+        session.user.globalRole = (token.globalRole as UserRole) ?? session.user.role;
         session.user.tenantId = token.tenantId as string | null;
+        session.user.accessToken = token.accessToken as string | undefined;
+        session.user.workspaces = (token.workspaces as WorkspaceRow[]) ?? [];
+        session.user.needsOnboarding = Boolean(token.needsOnboarding);
         if (token.name !== undefined) {
           session.user.name = token.name as string | null;
         }
