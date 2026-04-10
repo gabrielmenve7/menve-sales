@@ -45,12 +45,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = credentials?.password as string | undefined;
         if (!email || !password) return null;
 
-        const res = await fetch(`${apiBase()}/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-        if (!res.ok) return null;
+        const base = apiBase();
+        const loginUrl = `${base}/auth/login`;
+        if (
+          process.env.NODE_ENV === "production" &&
+          (base.includes("127.0.0.1") || base.includes("localhost"))
+        ) {
+          console.error(
+            "[menve/auth] INTERNAL_API_URL ausente ou apontando para localhost — defina a URL HTTPS da API na Vercel (Production) e faça redeploy.",
+          );
+        }
+
+        let res: Response;
+        try {
+          res = await fetch(loginUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+        } catch (err) {
+          console.error(
+            "[menve/auth] Falha de rede ao chamar auth/login:",
+            loginUrl,
+            err,
+          );
+          return null;
+        }
+        if (!res.ok) {
+          const snippet = await res.text().catch(() => "");
+          console.error(
+            "[menve/auth] auth/login não OK:",
+            res.status,
+            snippet.slice(0, 400),
+          );
+          return null;
+        }
         const data = (await res.json()) as {
           accessToken?: string;
           user?: {
