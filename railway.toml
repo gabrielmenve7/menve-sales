@@ -5,6 +5,10 @@ builder = "DOCKERFILE"
 dockerfilePath = "menve-sales-api/Dockerfile"
 
 [deploy]
+# Imagem Docker já usa WORKDIR /app e CMD node dist/main.js. Se no painel existir
+# "Start Command" com `cd ... &&`, a Railway tenta executar `cd` como binário → erro.
+# Este valor fixa o start via config-as-code (substitui overrides inválidos ao merge).
+startCommand = "node dist/main.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"

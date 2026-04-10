@@ -7,6 +7,8 @@ builder = "DOCKERFILE"
 dockerfilePath = "menve-sales-api/Dockerfile"
 
 [deploy]
+# Ver ../railway.toml na raiz (fonte usada com Root Directory vazio).
+startCommand = "node dist/main.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
