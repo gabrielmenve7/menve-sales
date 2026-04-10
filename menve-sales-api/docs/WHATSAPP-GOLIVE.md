@@ -39,20 +39,25 @@ Pré-requisito comum: URL pública **HTTPS** acessível pela internet (Evolution
 
 ---
 
-## Meta (Cloud API)
+## Meta (Cloud API) — API Nest (`menve-sales-api`)
+
+O webhook é servido pela **API Nest**, não pelo Next.js. Use a mesma base pública que `PUBLIC_APP_URL` (HTTPS em produção).
 
 1. **App no Meta for Developers** — produto WhatsApp configurado.
-2. **Verify token** — defina `META_VERIFY_TOKEN` igual ao configurado no painel do webhook.
-3. **App secret** — `META_APP_SECRET` para validar assinatura `X-Hub-Signature-256` (se o código validar; conferir [`src/app/api/webhooks/whatsapp/meta`](../../menve-sales-web/src/app/api/webhooks/whatsapp/meta)).
-4. **URL do callback** — `https://app.seudominio.com/api/webhooks/whatsapp/meta`.
-5. **Assine os campos** de mensagens/conversas necessários no painel Meta.
+2. **Verify token** — `META_VERIFY_TOKEN` no `.env` da API deve ser **idêntico** ao “Verify token” do webhook no painel Meta. O assistente em **Configurações → Canais → WhatsApp Official** exibe o valor para copiar (usuário autenticado com permissão de configurar tenant).
+3. **App secret** — com `META_APP_SECRET` definido, o `POST /webhooks/whatsapp/meta` exige o header `X-Hub-Signature-256` válido (HMAC-SHA256 do **corpo bruto** JSON). O `json()` do Express grava o buffer em `req.rawBody` só nessa rota (`main.ts`).
+4. **URL do callback** — `{PUBLIC_APP_URL}/webhooks/whatsapp/meta` (ex.: `https://api.seudominio.com/webhooks/whatsapp/meta`).
+5. **Assine o campo** `messages` (mínimo para o Inbox).
+6. **Multi-tenant** — cada evento traz `metadata.phone_number_id`; a API resolve `WhatsAppConnection` com `config.phoneNumberId` correspondente (vários clientes no mesmo app Meta).
+7. **Embedded Signup** — opcional: `META_EMBEDDED_SIGNUP_CLIENT_ID` + `META_EMBEDDED_SIGNUP_REDIRECT_URI`; `GET /whatsapp-connections/meta-embedded-signup-info` retorna a URL de OAuth. A troca `code → token` (`POST /whatsapp-connections/meta/oauth-exchange`) é placeholder até o app estar aprovado e o fluxo implementado.
 
 ### Checklist rápido
 
-- [ ] URL de callback com HTTPS.
-- [ ] GET de verificação (challenge) retornando o `hub.challenge`.
-- [ ] POST de eventos recebido com status 200.
-- [ ] Teste de mensagem de exibição no Inbox.
+- [ ] `PUBLIC_APP_URL` com HTTPS e igual à URL usada no painel Meta.
+- [ ] GET de verificação (`hub.verify_token` / `hub.challenge`) retornando o challenge em texto puro.
+- [ ] `META_APP_SECRET` em produção + assinaturas válidas nos POST.
+- [ ] POST de eventos com status 200; logs da API: `meta webhook connectionId=… parsed=… processed=…`.
+- [ ] Teste de mensagem no Inbox; **Testar** na lista de canais ou após o assistente chama a Graph no Phone Number ID.
 
 ---
 

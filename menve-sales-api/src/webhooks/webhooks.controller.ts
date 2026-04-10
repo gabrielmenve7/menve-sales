@@ -16,6 +16,7 @@ import { Public } from "../common/public.decorator";
 import { createWhatsAppProvider } from "../whatsapp/factory";
 import { getEvolutionWebhookParseMeta } from "../whatsapp/evolution-provider";
 import { MessageProcessingService } from "../whatsapp/message-processing.service";
+import { verifyMetaHubSignature256 } from "./meta-signature";
 
 @Controller("webhooks/whatsapp")
 export class WebhooksController {
@@ -46,8 +47,21 @@ export class WebhooksController {
   @Post("meta")
   async metaWebhook(@Req() req: Request, @Body() body: unknown) {
     const signature = req.headers["x-hub-signature-256"];
-    if (process.env.META_APP_SECRET && !signature) {
-      throw new HttpException("no_sig", HttpStatus.UNAUTHORIZED);
+    const appSecret = process.env.META_APP_SECRET?.trim();
+    if (appSecret) {
+      if (!signature) {
+        throw new HttpException("no_sig", HttpStatus.UNAUTHORIZED);
+      }
+      const raw = req.rawBody;
+      if (!raw?.length) {
+        this.log.warn(
+          "meta webhook: META_APP_SECRET definido mas rawBody ausente; verifique middleware json.verify em main.ts",
+        );
+        throw new HttpException("no_raw_body", HttpStatus.UNAUTHORIZED);
+      }
+      if (!verifyMetaHubSignature256(raw, signature, appSecret)) {
+        throw new HttpException("bad_sig", HttpStatus.FORBIDDEN);
+      }
     }
     if (!body || typeof body !== "object") {
       throw new HttpException({ ok: false }, HttpStatus.BAD_REQUEST);
@@ -58,26 +72,59 @@ export class WebhooksController {
     const phoneNumberId = b.entry?.[0]?.changes?.[0]?.value?.metadata
       ?.phone_number_id;
     if (!phoneNumberId) {
-      return { ok: true, skipped: true };
+      return { ok: true, skipped: true, reason: "no_phone_number_id" };
     }
     const conn = await this.prisma.whatsAppConnection.findFirst({
-      where: { provider: "META", isActive: true },
+      where: {
+        provider: "META",
+        isActive: true,
+        config: {
+          path: ["phoneNumberId"],
+          equals: phoneNumberId,
+        },
+      },
     });
-    if (!conn) return { ok: true, skipped: true };
-    const cfg = conn.config as { phoneNumberId?: string };
-    if (cfg.phoneNumberId && cfg.phoneNumberId !== phoneNumberId) {
-      return { ok: true, skipped: true };
+    if (!conn) {
+      this.log.warn(
+        `meta webhook: nenhuma conexão META para phone_number_id=${phoneNumberId}`,
+      );
+      return { ok: true, skipped: true, reason: "unknown_phone_number_id" };
     }
     const provider = createWhatsAppProvider(conn);
     const items = provider.parseWebhook(body);
+    let processed = 0;
+    let failed = 0;
+    let duplicated = 0;
     for (const inbound of items) {
-      await this.messages.processInboundWhatsApp({
-        tenantId: conn.tenantId,
-        connectionId: conn.id,
-        inbound,
-      });
+      try {
+        const res = await this.messages.processInboundWhatsApp({
+          tenantId: conn.tenantId,
+          connectionId: conn.id,
+          inbound,
+        });
+        if ("duplicated" in res && res.duplicated) {
+          duplicated += 1;
+          continue;
+        }
+        processed += 1;
+      } catch (e) {
+        failed += 1;
+        this.log.error(
+          `meta inbound falhou connectionId=${conn.id} externalId=${inbound.externalId}`,
+          e instanceof Error ? e.stack : String(e),
+        );
+      }
     }
-    return { ok: true, processed: items.length };
+    this.log.log(
+      `meta webhook connectionId=${conn.id} phoneNumberId=${phoneNumberId} parsed=${items.length} processed=${processed} duplicated=${duplicated} failed=${failed}`,
+    );
+    if (failed > 0) {
+      throw new HttpException(
+        { ok: false, processed, duplicated, failed },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    return { ok: true, processed, duplicated, failed: 0 };
   }
 
   @Public()

@@ -1,0 +1,353 @@
+---
+description: Squad AUTOMACAO COMERCIAL - time de engenharia dedicado a automacao empresarial (vendas, gatilhos, integracoes e filas) do Menve Sales
+globs:
+  - menve-sales-api/src/automation/**
+  - menve-sales-api/src/workflows/**
+  - menve-sales-api/src/integrations/**
+  - menve-sales-api/src/webhooks-outbound/**
+  - menve-sales-web/src/app/(dashboard)/automacao/**
+  - menve-sales-web/src/components/automacao/**
+  - menve-sales-web/src/actions/automation*.ts
+  - menve-sales-web/src/lib/automation*.ts
+alwaysApply: false
+---
+
+# Squad AUTOMACAO COMERCIAL
+
+## Identidade
+
+- **Squad**: squad-automacao-comercial
+- **Dominio**: Automacao empresarial comercial -- gatilhos de negocio, motor de regras e acoes, integracoes com ferramentas externas, webhooks de saida, jobs agendados e orquestracao assincrona ligados ao ciclo de vendas (pipeline, contatos, inbox como *fonte de eventos*).
+- **Missao**: permitir que o tenant automatize o funil e operacoes comerciais com confiabilidade, rastreabilidade e governanca -- sem duplicar responsabilidades de UI de inbox/pipeline ou de conectores de canal (WhatsApp/Instagram).
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-api/src/automation/**` -- definicoes de automacao, orquestracao, servicos de dominio (quando existir)
+- `menve-sales-api/src/workflows/**` -- motor de execucao, filas, workers, steps tipados (quando existir)
+- `menve-sales-api/src/integrations/**` -- conectores externos, OAuth de apps, normalizacao de payload (quando existir)
+- `menve-sales-api/src/webhooks-outbound/**` -- assinatura, retry e entrega de webhooks de saida (quando existir; distinto de webhooks *inbound* de canais)
+- `menve-sales-web/src/app/(dashboard)/automacao/**` -- telas de configuracao de automacoes (builder, lista, logs)
+- `menve-sales-web/src/components/automacao/**` -- componentes do builder e historico de execucoes
+- `menve-sales-web/src/actions/automation*.ts` -- server actions do dominio de automacao
+- `menve-sales-web/src/lib/automation*.ts` -- tipos e helpers compartilhados no web
+- Schemas Prisma e migracoes dedicados a: regras, execucoes, integracoes, filas persistentes, *idempotency keys*
+- Testes unitarios, de integracao e E2E do dominio de automacao
+
+### Fora de escopo
+
+- UI e API primaria de **Inbox** (`squad-inbox`) -- o squad de automacao **consome eventos** e pode **disparar acoes** via APIs publicas/contratos, nao reimplementar chat
+- **Providers de canal** e webhooks **inbound** de WhatsApp/Instagram (`squad-canais` -- `whatsapp/`, `webhooks/` para Meta/Evolution)
+- Kanban, deals e estagios como produto **core** (`squad-pipeline`) -- automacao chama endpoints ou servicos compartilhados, nao redefine modelo de deal
+- Auth global, sessao, tenant (`squad-auth`)
+- Componentes UI genericos em `src/components/ui/` (design system)
+- Infra de deploy e CI/CD globais (exceto jobs/workers especificos do squad, quando existirem)
+
+---
+
+## Organograma
+
+```
+squad-automacao-comercial (15 pessoas)
+|
+|-- LIDERANCA (3)
+|   |-- Helena Vasconcelos ........ Squad Lead / Tech Lead
+|   |-- Rodrigo Nunes ............. Engineering Manager
+|   |-- Bianca Teixeira ........... Product Designer / UX (automation & integracoes)
+|
+|-- TIME GATILHOS & EVENTOS (3)
+|   |-- Renan Cardoso ............. Senior Backend Dev
+|   |-- Larissa Pires ............. Frontend Dev
+|   |-- Gustavo Amaral ............ Fullstack Dev
+|
+|-- TIME MOTOR DE AUTOMACOES (3)
+|   |-- Mateus Lopes .............. Senior Backend Dev
+|   |-- Patricia Nogueira ......... Backend Dev
+|   |-- Felipe Duarte ............. Frontend Dev
+|
+|-- TIME INTEGRACOES & API (3)
+|   |-- Andre Cavalcanti .......... Backend Dev (API publica, contratos)
+|   |-- Simone Ribeiro ............ Fullstack Dev (OAuth, conectores)
+|   |-- Tiago Barros .............. Backend Dev (adaptadores ERP/planilhas)
+|
+|-- TIME PLATAFORMA & QUALIDADE (3)
+|   |-- Leticia Freitas ........... Backend Dev (filas, workers, idempotencia)
+|   |-- Paulo Henrique Monteiro ... SRE / Observabilidade
+|   |-- Renata Dias ............... QA Engineer
+```
+
+---
+
+## Lideranca (3 pessoas)
+
+### Helena Vasconcelos -- Squad Lead / Tech Lead
+
+- **Funcao**: dona da arquitetura de automacao comercial e da qualidade tecnica do dominio.
+- **Responsabilidades**:
+  - Definir arquitetura de eventos, motor de regras, limites de tenant e *sandbox* de execucao.
+  - Aprovar RFCs que afetem contratos com pipeline, inbox e canais.
+  - Code review final em PRs de alto impacto (motor, API publica, seguranca).
+  - Garantir padroes de idempotencia, auditoria e versionamento de definicoes de workflow.
+- **Entradas**: backlog priorizado por Rodrigo, specs de Bianca, alertas de Paulo Henrique.
+- **Saidas**: ADRs, contratos tipados entre dominios, diretrizes de implementacao.
+- **Handoff**: Rodrigo prioriza -> Helena aloca senior do subtime -> entrega com Definition of Done do squad.
+
+### Rodrigo Nunes -- Engineering Manager
+
+- **Funcao**: delivery, dependencias entre squads e saude do time.
+- **Responsabilidades**:
+  - Facilitar ritos, remover blockers e alinhar roadmap com produto comercial.
+  - Negociar SLAs com squads consumidos (pipeline, canais, auth).
+  - Comunicar riscos (ex.: quota de integracao, abuso de webhooks).
+- **Entradas**: roadmap, metricas de plataforma, feedback de CS/suporte.
+- **Saidas**: backlog priorizado, status, escopo claro por sprint.
+
+### Bianca Teixeira -- Product Designer / UX
+
+- **Funcao**: experiencia do builder de automacoes, logs de execucao e erros acionaveis.
+- **Responsabilidades**:
+  - Especificar fluxos: criar regra, testar com dados de exemplo, publicar, depurar falhas.
+  - Padroes de empty state, erro, permissao e limites do plano.
+  - Acessibilidade (WCAG AA) nas telas de `automacao/`.
+- **Entradas**: pesquisa com usuarios, requisitos de GTM/revops.
+- **Saidas**: prototipos, criterios de aceitacao, copy orientada a acao.
+
+---
+
+## Time Gatilhos & Eventos (3 pessoas)
+
+**Dominio**: catalogo de eventos de negocio (deal movido, contato criado, mensagem recebida como *evento de dominio*, tag aplicada), assinaturas, fan-out controlado.
+
+**Caminhos principais** (planejados):
+
+- Camada de *domain events* na API e/ou tabela de *outbox* -- integracao com servicos existentes sem acoplar UI
+- Configuracao de quais eventos o tenant habilita para automacao
+
+### Renan Cardoso -- Senior Backend Dev
+
+- **Funcao**: lider tecnico de eventos e contratos entre dominios.
+- **Responsabilidades**:
+  - Modelar payload de eventos versionado (`schema` + migracao de consumidores).
+  - Garantir ordenacao e deduplicacao onde necessario.
+  - Definir limites por tenant (taxa, profundidade de encadeamento).
+- **Criterios de qualidade**:
+  - Eventos documentados e testados com fixtures.
+  - Breaking changes apenas com versao major e plano de deprecacao.
+
+### Larissa Pires -- Frontend Dev
+
+- **Funcao**: UX de selecao de gatilhos e preview de payload no builder.
+- **Responsabilidades**:
+  - Componentes de escolha de evento, filtros de contexto (pipeline, estagio, canal).
+  - Estados de carregamento e erro alinhados ao design system do produto.
+
+### Gustavo Amaral -- Fullstack Dev
+
+- **Funcao**: ligacao entre catalogo de eventos e persistencia de regras.
+- **Responsabilidades**:
+  - Server actions e tipos compartilhados web/API.
+  - Testes de integracao “evento disparado -> job enfileirado”.
+
+---
+
+## Time Motor de Automacoes (3 pessoas)
+
+**Dominio**: definicao de automacao (condicoes, acoes), interpretacao/execucao, historico de runs, cancelamento e reprocessamento seguro.
+
+### Mateus Lopes -- Senior Backend Dev
+
+- **Funcao**: arquitetura do motor (DAG linear ou maquina de estados, politica de erro).
+- **Responsabilidades**:
+  - API interna de execucao: *dry-run*, publicacao, rollback de versao de definicao.
+  - Garantir que acoes sejam *sandboxed* por tenant.
+
+### Patricia Nogueira -- Backend Dev
+
+- **Funcao**: implementacao de acoes comerciais padrao (mover deal, atribuir, criar tarefa, enviar template via contrato de canais).
+- **Responsabilidades**:
+  - Integrar com servicos existentes via interfaces -- sem fork de regras de negocio do pipeline.
+
+### Felipe Duarte -- Frontend Dev
+
+- **Funcao**: builder visual ou formulario guiado de passos.
+- **Responsabilidades**:
+  - Validacao client-side coerente com o servidor; feedback imediato de dependencias invalidas.
+
+---
+
+## Time Integracoes & API (3 pessoas)
+
+**Dominio**: webhooks de saida, assinaturas HMAC, conectores (Make, Zapier-like), API keys por tenant, documentacao de API publica.
+
+### Andre Cavalcanti -- Backend Dev
+
+- **Funcao**: desenho da API publica e politicas de seguranca.
+- **Responsabilidades**:
+  - Rate limit, escopos, rotacao de segredos, auditoria de chamadas.
+
+### Simone Ribeiro -- Fullstack Dev
+
+- **Funcao**: fluxos OAuth e “conectar app” no settings/automacao.
+- **Responsabilidades**:
+  - Armazenamento seguro de tokens; revogacao e reconexao.
+
+### Tiago Barros -- Backend Dev
+
+- **Funcao**: adaptadores para sistemas externos (ERP, planilhas, BI).
+- **Responsabilidades**:
+  - Mapeamento de campos, retries e *circuit breaker* por destino.
+
+---
+
+## Time Plataforma & Qualidade (3 pessoas)
+
+**Dominio**: filas (ex.: BullMQ/Redis quando adotado), workers, DLQ, metricas, testes de carga e confiabilidade.
+
+### Leticia Freitas -- Backend Dev
+
+- **Funcao**: infra de execucao assincrona do squad.
+- **Responsabilidades**:
+  - Idempotencia por `idempotency-key`, backoff, *dead letter* com reprocessamento seguro.
+
+### Paulo Henrique Monteiro -- SRE / Observabilidade
+
+- **Funcao**: monitoramento de filas, latencia de execucao, alertas de falha em massa.
+- **Responsabilidades**:
+  - Dashboards, SLOs do motor (ex.: p95 de tempo ate primeira acao), runbooks.
+
+### Renata Dias -- QA Engineer
+
+- **Funcao**: estrategia de testes do dominio.
+- **Responsabilidades**:
+  - Cenarios E2E: gatilho real -> acao observavel; matriz de regressao por versao do motor.
+
+---
+
+## Protocolo operacional
+
+### Fluxo de feature (ponta a ponta)
+
+```
+Rodrigo prioriza
+  -> Bianca especifica UX (builder, logs, erros)
+    -> Helena define arquitetura / contrato com outros squads
+      -> Subtime implementa (branch por feature)
+        -> Code review pelo senior do subtime + Helena em PRs criticos
+          -> Renata valida (auto + exploratorio)
+            -> Merge
+              -> Paulo Henrique monitora filas e alertas
+```
+
+### Escalonamento
+
+```
+Dev do subtime
+  -> Senior do subtime (Renan, Mateus, Andre ou Leticia conforme area)
+    -> Helena (decisao tecnica)
+      -> Rodrigo (blocker organizacional / dependencia externa)
+        -> Outro squad (pipeline, canais, inbox, auth) quando fora do escopo
+```
+
+### Handoff entre times
+
+- PRs que alterem contratos consumidos por inbox/pipeline/canais exigem review do squad dono do dominio.
+- Descricao do PR deve incluir: eventos novos ou alterados, impacto em API publica, flags de feature.
+
+### Contexto incompleto
+
+- Blocker com label `blocked` e owner em Rodrigo; stakeholder de produto em ate 4h uteis.
+- Prazo alvo de desbloqueio: 24h uteis ou replanejamento explicito.
+
+### Definition of Done
+
+- [ ] Code review aprovado pelo senior do subtime.
+- [ ] Code review de Helena em mudancas de motor, API publica ou seguranca.
+- [ ] Testes relevantes verdes (unit + integracao; E2E quando houver fluxo critico).
+- [ ] Validacao de UX por Bianca nas telas de `automacao/`.
+- [ ] Metricas e alertas atualizados quando houver novo caminho assincrono (Paulo Henrique).
+- [ ] Documentacao de evento ou endpoint publico atualizada.
+
+---
+
+## Governanca
+
+### SLA interno (espelho squad-inbox; ajustar por acordo interno)
+
+| Atividade              | SLA                          |
+|------------------------|------------------------------|
+| PR review              | ate 4h uteis                 |
+| Bug critico (parada de filas / vazamento entre tenants) | resposta em ate 2h |
+| Bug nao-critico        | sprint corrente              |
+| Desbloqueio de blocker | ate 24h uteis                |
+| Post-mortem (incidente de automacao) | ate 48h         |
+
+### Metricas do squad
+
+- **Throughput de execucoes**: automacoes concluidas vs falhas por tenant.
+- **Tempo ate primeira acao** (p50/p95) apos evento.
+- **Taxa de retry / DLQ** e tempo medio de recuperacao.
+- **Cobertura de testes** do motor e dos conectores criticos.
+
+### Melhoria continua
+
+- Retrospectiva quinzenal com Rodrigo.
+- Revisao trimestral de modelo de eventos e limites de plataforma com Helena.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                         | Squad responsavel      | Tipo de interacao |
+|-------------------------------------|--------------------------|-------------------|
+| Eventos de conversa / envio         | squad-inbox + squad-canais | consumir contratos; nao duplicar providers |
+| Deals, estagios, atribuicao         | squad-pipeline           | APIs ou servicos compartilhados; sem fork de regras |
+| Webhooks inbound Meta/Evolution     | squad-canais             | apenas saida e orquestracao comercial no squad-automacao |
+| Auth, tenant, API keys globais      | squad-auth               | consumir guards e contexto de tenant |
+| Schema Prisma transversal           | squad de dados           | propor migrations; review cruzado |
+| UI generica                         | design-system            | nao alterar `components/ui/` sem alinhamento |
+
+---
+
+## Referencias de caminhos (planejados)
+
+**Estado atual**: o repositorio pode ainda nao conter todas as pastas abaixo; o squad cria e passa a ser dono delas. Ajuste este bloco quando o codigo existir.
+
+```
+menve-sales-api/
+  src/
+    automation/ ..................... definicoes, servicos de aplicacao, modulo Nest
+    workflows/ .................... engine, steps, persistencia de runs
+    integrations/ ................. conectores externos, normalizacao
+    webhooks-outbound/ ............ assinatura, entrega, retry (saida)
+
+menve-sales-web/
+  src/
+    app/(dashboard)/automacao/ ..... paginas de lista, builder, logs
+    components/automacao/ ......... UI especifica do dominio
+    actions/automation*.ts .......... server actions
+    lib/automation*.ts ............ tipos e helpers
+
+menve-sales-api/prisma/
+  schema.prisma ................... modelos Automation*, WorkflowRun*, Integration* (quando existirem)
+```
+
+## Arquitetura (resumo)
+
+```
+[Eventos de dominio]
+  (deal, contato, mensagem como evento agregado, tag, etc.)
+        |
+        v
+[Outbox / bus interno] --> [Fila] --> [Worker do motor]
+        |                      |
+        |                      +--> Acoes internas (API Nest / servicos)
+        |                      +--> Webhooks de saida / conectores externos
+        |
+        v
+[Persistencia: definicoes, runs, logs, DLQ]
+
+[Browser: /automacao] --> server actions --> API do squad-automacao
+```
+
+---

@@ -63,6 +63,33 @@ export class ConversationsService {
       return;
     }
 
+    const templateMsg = z
+      .object({
+        connectionId: z.string().min(1),
+        toPhone: z.string().min(1),
+        templateName: z.string().min(1).max(512),
+        language: z.string().min(2).max(16),
+        components: z.array(z.unknown()).optional(),
+      })
+      .safeParse(body);
+
+    if (templateMsg.success) {
+      const conv = await this.prisma.conversation.findFirst({
+        where: { id: conversationId, tenantId },
+      });
+      if (!conv) throw new BadRequestException("Conversa não encontrada");
+      await this.messages.sendOutboundTemplate({
+        tenantId,
+        connectionId: templateMsg.data.connectionId,
+        userId,
+        toPhone: templateMsg.data.toPhone,
+        templateName: templateMsg.data.templateName,
+        language: templateMsg.data.language,
+        components: templateMsg.data.components,
+      });
+      return;
+    }
+
     const mediaMsg = z
       .object({
         connectionId: z.string().min(1),
@@ -83,7 +110,7 @@ export class ConversationsService {
 
     if (!mediaMsg.success) {
       throw new BadRequestException(
-        "Envie `text` ou mídia: `mediaKind` + `mediaDataUrl` (data URL), com `connectionId` e `toPhone`.",
+        "Envie `text`, template (`templateName` + `language`), ou mídia (`mediaKind` + `mediaDataUrl`), com `connectionId` e `toPhone`.",
       );
     }
 

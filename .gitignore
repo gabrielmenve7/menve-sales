@@ -1,6 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# dependencies (monorepo: qualquer pacote)
+node_modules/
 /node_modules
 menve-sales-api/node_modules/
 menve-sales-api/dist/
@@ -16,7 +17,7 @@ menve-sales-api/dist/
 /coverage
 
 # next.js
-/.next/
+**/.next/
 /out/
 
 # production

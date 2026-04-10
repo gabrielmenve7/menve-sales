@@ -121,7 +121,7 @@ function CreateLeadDialog({
                 Nenhum funil configurado. Crie um funil em{" "}
                 <Link
                   href="/settings"
-                  className="font-medium text-primary underline-offset-4 hover:underline"
+                  className="font-medium text-primary-solid underline-offset-4 hover:underline"
                 >
                   Configurações
                 </Link>

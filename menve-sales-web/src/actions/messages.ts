@@ -50,3 +50,24 @@ export async function sendWhatsAppMediaMessage(input: {
   });
   scheduleInboxRevalidation();
 }
+
+export async function sendWhatsAppTemplateMessage(input: {
+  conversationId: string;
+  connectionId: string;
+  toPhone: string;
+  templateName: string;
+  language: string;
+  components?: unknown[];
+}) {
+  await apiServer(`/conversations/${input.conversationId}/messages`, {
+    method: "POST",
+    json: {
+      connectionId: input.connectionId,
+      toPhone: input.toPhone,
+      templateName: input.templateName,
+      language: input.language,
+      components: input.components,
+    },
+  });
+  scheduleInboxRevalidation();
+}

@@ -1,15 +1,31 @@
 import "./load-env";
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import type { Request } from "express";
 import { json, urlencoded } from "express";
 import { AppModule } from "./app.module";
 
 /** Limite do body parser (webhooks Evolution/WhatsApp podem enviar payloads > 100kb). */
 const BODY_LIMIT = process.env.BODY_JSON_LIMIT ?? "10mb";
 
+function isMetaWebhookPost(req: Request) {
+  if (req.method !== "POST") return false;
+  const path = (req.url ?? "").split("?")[0] ?? "";
+  return path === "/webhooks/whatsapp/meta" || path.endsWith("/webhooks/whatsapp/meta");
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
-  app.use(json({ limit: BODY_LIMIT }));
+  app.use(
+    json({
+      limit: BODY_LIMIT,
+      verify: (req: Request, _res, buf: Buffer) => {
+        if (isMetaWebhookPost(req)) {
+          req.rawBody = buf;
+        }
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: BODY_LIMIT }));
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(",").map((s) => s.trim()) ?? true,

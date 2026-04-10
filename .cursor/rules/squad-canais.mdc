@@ -1,0 +1,407 @@
+---
+description: Squad CANAIS - time de engenharia dedicado a integracao multicanal do Menve Sales
+globs:
+  - menve-sales-web/src/app/(dashboard)/settings/settings-channels.tsx
+  - menve-sales-web/src/actions/channels.ts
+  - menve-sales-web/src/actions/whatsapp-connections.ts
+  - menve-sales-web/src/actions/quick-replies.ts
+  - menve-sales-api/src/whatsapp/**
+  - menve-sales-api/src/whatsapp-connections/**
+  - menve-sales-api/src/webhooks/**
+  - menve-sales-api/src/quick-replies/**
+alwaysApply: false
+---
+
+# Squad CANAIS
+
+## Identidade
+
+- **Squad**: squad-canais
+- **Dominio**: Canais (integracao multicanal -- Evolution API, Meta Cloud API, Instagram API -- conexoes, webhooks, quick replies)
+- **Missao**: construir, evoluir e manter toda a infraestrutura de canais de comunicacao do Menve Sales -- providers de WhatsApp e Instagram, gestao de conexoes, recebimento de webhooks, envio de mensagens, quick replies -- garantindo confiabilidade, extensibilidade e zero perda de mensagens.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/settings/settings-channels.tsx` -- UI de canais
+- `menve-sales-web/src/actions/channels.ts` -- server actions de criacao de canais Meta/Instagram
+- `menve-sales-web/src/actions/whatsapp-connections.ts` -- server actions de conexoes Evolution
+- `menve-sales-web/src/actions/quick-replies.ts` -- server actions de respostas rapidas
+- `menve-sales-api/src/whatsapp/` -- providers, factory, processamento de mensagens
+- `menve-sales-api/src/whatsapp-connections/` -- controller, service, module de conexoes
+- `menve-sales-api/src/webhooks/` -- controller e module de webhooks
+- `menve-sales-api/src/quick-replies/` -- controller, service, module
+- Schemas Prisma: `WhatsAppConnection`, `WhatsAppProvider`, `QuickReply`
+- Scripts E2E: `scripts/whatsapp-*.ts`
+
+### Fora de escopo
+
+- UI de chat/inbox (pertence ao squad-inbox; canais fornece providers)
+- Contatos, pipeline, dashboard
+- Auth, sessao, tenant
+- Componentes UI genericos
+
+---
+
+## Organograma
+
+```
+squad-canais (9 pessoas)
+|
+|-- LIDERANCA (2)
+|   |-- Marcelo Vieira ............. Squad Lead / Tech Lead
+|   |-- Juliana Ferraz ............. Product Designer
+|
+|-- TIME PROVIDERS (3)
+|   |-- Diego Araújo ............... Senior Backend Dev
+|   |-- Camila Bastos .............. Backend Dev
+|   |-- Rafael Torres .............. Fullstack Dev
+|
+|-- TIME CONEXOES & UI (2)
+|   |-- Fernanda Alves ............. Frontend Dev
+|   |-- Paulo Henrique ............. Fullstack Dev
+|
+|-- TIME QUALIDADE (2)
+|   |-- Alexandre Dias ............. SRE / Observabilidade
+|   |-- Isabela Santos ............. QA Engineer
+```
+
+---
+
+## Lideranca (2 pessoas)
+
+### Marcelo Vieira -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura multicanal.
+- **Responsabilidades**:
+  - Definir e manter o adapter pattern (`IWhatsAppProvider`) e a factory.
+  - Aprovar RFCs para novos providers (ex: Telegram, email).
+  - Garantir extensibilidade: novo canal sem alterar logica existente (Open/Closed Principle).
+  - Definir SLOs de webhook processing (latencia, taxa de sucesso).
+  - Interface com squad-inbox para contrato de dados de mensagens.
+
+### Juliana Ferraz -- Product Designer
+
+- **Funcao**: dona da experiencia de configuracao de canais.
+- **Responsabilidades**:
+  - Projetar fluxos de conexao (QR code, credenciais Meta, credenciais Instagram).
+  - Especificar estados de conexao (conectado, desconectado, erro, reconectando).
+  - Definir layout da lista de canais conectados e webhooks.
+
+---
+
+## Time Providers (3 pessoas)
+
+### Diego Araújo -- Senior Backend Dev
+
+- **Funcao**: lider tecnico de providers.
+- **Responsabilidades**:
+  - Manter `evolution-provider.ts` e `evolution-admin.ts` (Evolution API nao-oficial).
+  - Manter `meta-provider.ts` (Meta Cloud API oficial).
+  - Evoluir `instagram-provider.ts` (stub atual -> implementacao completa via Graph API).
+  - Manter `factory.ts` (`createWhatsAppProvider` + `providerLabel`).
+  - Garantir retry e error handling robusto em cada provider.
+- **Criterios de qualidade**:
+  - Envio com retry automatico (backoff exponencial).
+  - Cada provider implementa `IWhatsAppProvider` completo.
+  - Testes unitarios por provider com mocks de API externa.
+
+### Camila Bastos -- Backend Dev
+
+- **Funcao**: dona do processamento de webhooks.
+- **Responsabilidades**:
+  - Manter `WebhooksController` (verificacao Meta GET, POST Meta e Evolution).
+  - Manter `MessageProcessingService` (processamento de mensagens inbound).
+  - Implementar idempotencia de webhooks (deduplicacao por messageId).
+  - Garantir seguranca de webhooks (verificacao de assinatura Meta, Evolution secret).
+- **Criterios de qualidade**:
+  - Zero mensagens perdidas em rafagas de webhook.
+  - Webhook processing p95 <500ms.
+  - Idempotencia: webhook duplicado nao cria mensagem duplicada.
+
+### Rafael Torres -- Fullstack Dev
+
+- **Funcao**: integracao e testes E2E de canais.
+- **Responsabilidades**:
+  - Manter scripts E2E (`whatsapp-golive-check.ts`, `whatsapp-inbound-e2e.ts`, `whatsapp-outbound-e2e.ts`).
+  - Implementar health checks de providers (status de conexao, verificacao periodica).
+  - Manter `WhatsAppConnectionsService` (criar, deletar, refresh QR, reapply webhook).
+- **Criterios de qualidade**:
+  - Scripts E2E executaveis em CI para cada provider.
+  - Health check detecta desconexao em <1min.
+
+---
+
+## Time Conexoes & UI (2 pessoas)
+
+### Fernanda Alves -- Frontend Dev
+
+- **Funcao**: dona da UI de canais em settings.
+- **Responsabilidades**:
+  - Manter `settings-channels.tsx` (lista de canais, dialog de novo canal, QR code, formularios Meta/Instagram).
+  - Exibir status de conexao com feedback visual (badge conectado/desconectado).
+  - Exibir webhook URLs copiáveis.
+  - Integrar quick replies na tela de canais.
+- **Criterios de qualidade**:
+  - QR code atualiza em tempo real durante pairing Evolution.
+  - Formularios Meta/Instagram validam campos obrigatorios antes de submit.
+
+### Paulo Henrique -- Fullstack Dev
+
+- **Funcao**: integracao frontend-backend de conexoes.
+- **Responsabilidades**:
+  - Manter server actions (`channels.ts`, `whatsapp-connections.ts`, `quick-replies.ts`).
+  - Manter `WhatsAppConnectionsController` (pair, create-meta, create-instagram, refresh-qr, status, delete).
+  - Garantir revalidacao correta apos criacao/delecao de canal.
+- **Criterios de qualidade**:
+  - Conexao criada reflete na lista imediatamente.
+  - Delecao de canal limpa dados relacionados (conversas nao sao perdidas).
+
+---
+
+## Time Qualidade (2 pessoas)
+
+### Alexandre Dias -- SRE / Observabilidade
+
+- **Funcao**: monitoramento e confiabilidade de canais em producao.
+- **Responsabilidades**:
+  - Monitorar uptime de webhook endpoints.
+  - Alertar sobre falhas de provider (timeout, rate limit, desconexao).
+  - Dashboards de volume de mensagens por canal.
+  - Definir SLOs: webhook uptime >99.9%, envio success rate >99%.
+
+### Isabela Santos -- QA Engineer
+
+- **Funcao**: qualidade de integracao de canais.
+- **Responsabilidades**:
+  - Testes E2E de fluxo completo (conectar -> enviar -> receber -> desconectar).
+  - Testes de regressao por provider.
+  - Validar cenarios de erro (provider offline, credenciais invalidas, rate limit).
+
+---
+
+## Protocolo operacional
+
+### Fluxo de novo provider
+
+```
+Produto solicita novo canal
+  -> Marcelo define adapter (ADR)
+    -> Diego implementa provider (IWhatsAppProvider)
+      -> Camila implementa webhook handler
+        -> Rafael cria script E2E
+          -> Fernanda adiciona opcao na UI
+            -> Isabela valida fluxo completo
+```
+
+### Definition of Done
+
+- [ ] Provider implementa `IWhatsAppProvider` completo.
+- [ ] Webhook handler com idempotencia.
+- [ ] Script E2E funcional.
+- [ ] UI de conexao testada.
+- [ ] Zero mensagens perdidas em teste de carga.
+
+---
+
+## Canais suportados
+
+| Canal               | Provider                    | Status        | Arquivo                    |
+|---------------------|-----------------------------|---------------|----------------------------|
+| WhatsApp (Evolution)| Evolution API (nao-oficial) | Produção      | `evolution-provider.ts`    |
+| WhatsApp (Oficial)  | Meta Cloud API              | Produção      | `meta-provider.ts`         |
+| Instagram           | Instagram Messenger API     | Stub (WIP)    | `instagram-provider.ts`    |
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                              |
+|-----------------------------|-------------------|------------------------------------------------|
+| Inbox (consumo de mensagens)| squad-inbox       | fornecer providers, processar mensagens inbound|
+| Settings UI (tab Canais)    | squad-canais      | proprio squad                                  |
+| Auth, sessao, tenant        | squad-auth        | consumir guard e decorators                    |
+| Schema global               | squad de dados    | propor migration, review cruzado               |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/(dashboard)/
+      settings/
+        settings-channels.tsx ........... UI de canais (lista, dialog, QR, forms)
+    actions/
+      channels.ts ....................... server actions: criar canal Meta/Instagram
+      whatsapp-connections.ts ........... server actions: pair, refresh, status, delete
+      quick-replies.ts .................. server actions: CRUD quick replies
+
+menve-sales-api/
+  src/
+    whatsapp/
+      provider.interface.ts ............. IWhatsAppProvider (contrato)
+      factory.ts ........................ createWhatsAppProvider() + providerLabel()
+      evolution-provider.ts ............. adapter Evolution API
+      evolution-admin.ts ................ admin ops Evolution
+      meta-provider.ts .................. adapter Meta Cloud API
+      instagram-provider.ts ............. adapter Instagram Messenger (stub)
+      message-processing.service.ts ..... processamento de mensagens inbound
+    whatsapp-connections/
+      whatsapp-connections.controller.ts  endpoints: pair, create-meta, create-instagram, delete
+      whatsapp-connections.service.ts .... logica de negocio
+      whatsapp-connections.module.ts ..... modulo NestJS
+    webhooks/
+      webhooks.controller.ts ............ GET/POST Meta, POST Evolution
+      webhooks.module.ts ................ modulo NestJS
+    quick-replies/
+      quick-replies.controller.ts ....... CRUD REST
+      quick-replies.service.ts .......... logica de negocio
+      quick-replies.module.ts ........... modulo NestJS
+  scripts/
+    whatsapp-golive-check.ts ............ verificacao go-live
+    whatsapp-inbound-e2e.ts ............. teste E2E inbound
+    whatsapp-outbound-e2e.ts ............ teste E2E outbound
+    evolution-webhook-inspect.ts ........ GET webhook/find na Evolution (debug)
+    webhook-messages-upsert-probe.ts .... simula POST messages.upsert na PUBLIC_APP_URL
+    inbox-db-snapshot.ts ................ diagnostico Prisma: conversas/mensagens + URL esperada
+    load-api-env.ts ..................... carrega menve-sales-api/.env nos scripts tsx
+  prisma/
+    schema.prisma ....................... WhatsAppConnection, WhatsAppProvider, QuickReply
+```
+
+## Arquitetura Multicanal (resumo)
+
+```
+[Webhook externo]
+  |
+  |-- POST /webhooks/whatsapp/meta -----> WebhooksController
+  |-- POST /webhooks/whatsapp/evolution/:id -> WebhooksController
+  |                                          |
+  |                                          v
+  |                                    MessageProcessingService
+  |                                          |
+  |                                          v
+  |                                    Prisma: Conversation + Message
+  |
+[Browser - Settings]
+  |
+  |-- settings-channels.tsx
+  |     |-- pairEvolution() ---------> POST /whatsapp-connections/pair
+  |     |-- createMetaChannel() -----> POST /whatsapp-connections/create-meta
+  |     |-- createInstagramChannel()-> POST /whatsapp-connections/create-instagram
+  |     |-- deleteConnection() ------> DELETE /whatsapp-connections/:id
+  |
+[Inbox - Chat]
+  |
+  |-- chat-panel.tsx
+        |-- sendMessage() -----------> POST /conversations/:id/messages
+              |                          |
+              v                          v
+        server action              ConversationsController
+                                         |
+                                         v
+                                   factory.ts -> IWhatsAppProvider
+                                         |-- EvolutionProvider.send()
+                                         |-- MetaProvider.send()
+                                         |-- InstagramProvider.send() (stub)
+```
+
+---
+
+## Runbook: WhatsApp Evolution → webhook → Inbox (dev até produção)
+
+Documento de referência do que foi validado no caminho **Evolution (nuvem) → POST webhook → API Menve → Postgres → Inbox**. Usar para triagem quando “não chega mensagem” ou “reaplicar webhook falha”.
+
+### Fluxo resumido
+
+```
+[Evolution na nuvem, ex.: api.xxx.com]
+  -> POST JSON para {PUBLIC_APP_URL}/webhooks/whatsapp/evolution/{connectionId}
+       -> WebhooksController.evolutionWebhook (público, opcional x-webhook-secret)
+            -> EvolutionWhatsAppProvider.parseWebhook
+            -> MessageProcessingService.processInboundWhatsApp
+                 -> Prisma: Contact, Conversation, Message
+[Next.js Inbox]
+  -> apiServer("/inbox") com x-tenant-id do tenant do usuário
+       -> mesmo DATABASE_URL que a API que recebe o webhook
+```
+
+### Variáveis de ambiente relevantes
+
+| Onde | Variável | Papel |
+|------|-----------|--------|
+| `menve-sales-api/.env` | `DATABASE_URL` | Onde mensagens são gravadas; o script de snapshot e a API devem ser o **mesmo** banco. |
+| `menve-sales-api/.env` | `PUBLIC_APP_URL` | Base **HTTPS pública** usada ao criar/reaplicar webhook (sem `/` final). Em dev com ngrok = URL do túnel. |
+| `menve-sales-api/.env` | `EVOLUTION_BASE_URL`, `EVOLUTION_API_KEY` | Servidor Evolution (instância remota). |
+| `menve-sales-api/.env` | `EVOLUTION_WEBHOOK_SECRET` | Se definido, a Evolution deve enviar header `x-webhook-secret` e o probe/script também. |
+| `menve-sales-api/.env` | `EVOLUTION_WEBHOOK_BASE64` | Opcional `false` para POST menor (reaplicar webhook depois). |
+| `menve-sales-web/.env` | `INTERNAL_API_URL` | Deve apontar para a **mesma** instância Nest que recebe o webhook (ex. `http://localhost:4000`). |
+
+### Desenvolvimento local com ngrok
+
+1. Subir API: `menve-sales-api` → `npm run start:dev` (porta `PORT` ou 4000).
+2. Subir túnel: `ngrok http 4000` (ou a porta da API).
+3. Copiar a URL **HTTPS** do ngrok (Forwarding).
+4. Definir `PUBLIC_APP_URL` nessa URL (sem barra final) e **reiniciar a API**.
+5. Em **Configurações → Canais**, **Reaplicar webhook na Evolution** (grava na Evolution o `url` atual).
+6. Teste de ponta a ponta sem WhatsApp real:  
+   `npx tsx scripts/webhook-messages-upsert-probe.ts <connectionId>`  
+   Depois `npx tsx scripts/inbox-db-snapshot.ts` → `messageCount` deve aumentar se o pipeline local está OK.
+
+**Regra crítica (ngrok free):** cada reinício do ngrok gera **nova** URL. Atualizar `PUBLIC_APP_URL` + reiniciar API + **Reaplicar webhook**. Caso contrário a Evolution continua POSTando na URL antiga → 502/404 e inbox vazio.
+
+### Alinhar `connectionId` na URL do webhook
+
+- Cada `WhatsAppConnection` no Prisma tem um `id` (CUID). A rota do webhook é **fixa** nesse id:  
+  `/webhooks/whatsapp/evolution/{id}`.
+- Se o canal for **recriado**, o `id` muda. A URL salva na Evolution **precisa** usar o id **atual**.
+- Conferência:
+  - **Menve:** `inbox-db-snapshot.ts` → `evolutionWebhookCheck.webhookPathEsperado` ou tela Canais (POST …/evolution/…).
+  - **Evolution:** `npx tsx scripts/evolution-webhook-inspect.ts <instanceName>` → campo `url` **idêntico** ao esperado (mesmo host + mesmo `connectionId`).
+
+### Onde está o problema (triagem rápida)
+
+| Sintoma | Onde olhar |
+|---------|------------|
+| 502 no ngrok “connection refused localhost:4000” | API Nest **não** está rodando ou ngrok aponta para porta errada. |
+| 404 no POST `/webhooks/whatsapp/evolution/...` | `connectionId` na URL ≠ conexão existente no banco (canal recriado e Evolution com URL antiga). |
+| 401 no webhook | `EVOLUTION_WEBHOOK_SECRET` na API sem o mesmo header na Evolution. |
+| ngrok recebe POST, resposta `processed: 0`, `blobs: 0`, evento `messages.upsert` | Corpo `data` não reconhecido pelo parser; ver log da API e o corpo bruto no painel do ngrok (`http://127.0.0.1:4040`). |
+| `blobs >= 1`, `parsed: 0` | Filtros do parser: `fromMe`, grupo (se `WHATSAPP_ALLOW_GROUPS` false), JID não suportado, sem texto extraível. |
+| `processed: 1` mas Inbox vazio | `INTERNAL_API_URL` / tenant: front lê outra API ou outro tenant; conferir slug e `x-tenant-id`. |
+| `messageCount: 0` no snapshot após WhatsApp real | Evolution **não** está chamando o webhook (URL desatualizada, túnel off) ou não emite `messages.upsert`. |
+| Reaplicar webhook erro 400 | `setEvolutionInstanceWebhook` tenta corpo **plano** (OpenAPI v2) e **aninhado** `{ webhook }`; mensagem agrega ambas as tentativas. Instância desconectada na Evolution pode falhar (memória `waInstances`). |
+
+### Logs úteis na API
+
+Cada POST Evolution gera log do tipo:  
+`evolution webhook connectionId=… event=… blobs=… parsed=… processed=… duplicated=…`  
+Útil para ver se chegou evento de mensagem e se persistiu.
+
+### Scripts CLI (`menve-sales-api`, com `.env` da API carregado)
+
+| Script | Uso |
+|--------|-----|
+| `scripts/inbox-db-snapshot.ts` | Contagens de conversas/mensagens por tenant + `webhookPathEsperado` + `instanceName` para conferir Evolution. |
+| `scripts/evolution-webhook-inspect.ts <instanceName>` | GET webhook salvo na Evolution (`url`, `events`, etc.). |
+| `scripts/webhook-messages-upsert-probe.ts <connectionId>` | Simula `messages.upsert` na `PUBLIC_APP_URL` (valida ngrok + API + DB). |
+| `scripts/whatsapp-golive-check.ts` | Checks diversos incl. webhook. |
+| `scripts/whatsapp-inbound-e2e.ts` | E2E inbound com Prisma (cria conexão probe). |
+
+### Ajustes de código já aplicados neste caminho (contexto histórico)
+
+- `evolution-provider.ts`: extração de blobs (`body` vazio não sobrescreve `data`); filtro só por evento `MESSAGES_UPSERT`; unwrap viewOnce/ephemeral/template; remoção de scan profundo `@g.us` que gerava falso positivo; meta no response do webhook.
+- `evolution-admin.ts`: `webhook/set` tenta **flat** depois **nested**; `WEBHOOK_EVENTS` só valores do enum do schema da Evolution; `EVOLUTION_WEBHOOK_BASE64`; mensagens de erro agregadas.
+- `webhooks.controller.ts`: log por requisição; erro em `processInbound` logado; headers de secret.
+- `WhatsappConnectionsService`: log se falhar reaplicar webhook ao conectar; dica em erros de webhook.
+
+### Produção
+
+- Usar `PUBLIC_APP_URL` **estável** (domínio da API exposta), sem depender de ngrok.
+- Mesma regra de **Reaplicar webhook** quando o domínio público da API mudar.
+- Monitorar 4xx/5xx no endpoint de webhook e latência Evolution → Menve.
+
+---

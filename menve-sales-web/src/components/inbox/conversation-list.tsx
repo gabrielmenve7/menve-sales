@@ -1,12 +1,12 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  conversationMatchesStatusFilters,
+  conversationMatchesInboxFilter,
   InboxStatusFilterChips,
   InboxStatusFilterMenu,
-  type InboxStatusFilterId,
+  type InboxFilterId,
 } from "@/components/inbox/filters/inbox-status-filter";
 import { Input } from "@/components/ui/input";
 import type { InboxConversation } from "./inbox-types";
@@ -22,29 +22,19 @@ export function ConversationList({
   onSelect: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [statusFilterIds, setStatusFilterIds] = useState<InboxStatusFilterId[]>(
-    [],
-  );
+  const [activeFilter, setActiveFilter] = useState<InboxFilterId | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return conversations.filter((c) => {
-      const matchesStatus = conversationMatchesStatusFilters(
-        c.status,
-        statusFilterIds,
-      );
-      if (!matchesStatus) return false;
+      if (!conversationMatchesInboxFilter(c, activeFilter)) return false;
       if (!q) return true;
       return (
         c.contact.name.toLowerCase().includes(q) ||
         (c.contact.phone?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [conversations, search, statusFilterIds]);
-
-  const setStatusFilters = useCallback((next: InboxStatusFilterId[]) => {
-    setStatusFilterIds(next);
-  }, []);
+  }, [conversations, search, activeFilter]);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -60,16 +50,16 @@ export function ConversationList({
             />
           </div>
           <InboxStatusFilterMenu
-            selectedIds={statusFilterIds}
-            onSelectedIdsChange={setStatusFilters}
+            activeFilter={activeFilter}
+            onActiveFilterChange={setActiveFilter}
           />
         </div>
         <InboxStatusFilterChips
-          selectedIds={statusFilterIds}
-          onSelectedIdsChange={setStatusFilters}
+          activeFilter={activeFilter}
+          onActiveFilterChange={setActiveFilter}
         />
       </div>
-      <div className="min-h-0 flex-1 divide-y divide-border/15 overflow-y-auto dark:divide-border/25">
+      <div className="inbox-conversation-list-scroll min-h-0 flex-1 divide-y divide-border/15 overflow-y-auto dark:divide-border/25">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
             <span className="flex size-10 items-center justify-center rounded-full bg-muted">

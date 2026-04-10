@@ -2,11 +2,13 @@
 
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useDndMonitor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import type { CustomField, Pipeline, Stage } from "@prisma/client";
@@ -29,37 +31,14 @@ import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import { PipelineDealDetailDialog } from "./pipeline-deal-detail-dialog";
 import { PipelineNewDeal } from "./pipeline-new-deal";
+import {
+  columnSurfaceStyle,
+  stageAccentHex,
+  stageBadgeStyle,
+} from "./pipeline-stage-visual";
 import type { DealRow } from "./pipeline-types";
 
 export type { DealRow } from "./pipeline-types";
-
-const FALLBACK_STAGE_HEX = [
-  "#2563eb",
-  "#7c3aed",
-  "#d97706",
-  "#e11d48",
-  "#059669",
-  "#0284c7",
-];
-
-function stageAccentHex(stage: Stage, index: number) {
-  const c = stage.color?.trim();
-  if (c && /^#[0-9A-Fa-f]{6}$/.test(c)) return c;
-  return FALLBACK_STAGE_HEX[index % FALLBACK_STAGE_HEX.length];
-}
-
-function columnSurfaceStyle(hex: string) {
-  return {
-    backgroundColor: `color-mix(in srgb, var(--background) 98.5%, ${hex} 1.5%)`,
-  } as const;
-}
-
-function stageBadgeStyle(hex: string) {
-  return {
-    backgroundColor: `color-mix(in srgb, var(--card) 78%, ${hex} 22%)`,
-    color: `color-mix(in srgb, ${hex} 72%, var(--foreground) 28%)`,
-  } as const;
-}
 
 function relativeShort(iso: Date | string): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
@@ -72,6 +51,73 @@ function relativeShort(iso: Date | string): string {
   if (hrs >= 1) return `${hrs}h`;
   if (mins >= 1) return `${mins}m`;
   return "agora";
+}
+
+function dealOriginLine(deal: DealRow): string | null {
+  const sourceTag =
+    deal.contact.campaignSource?.name ?? deal.contact.utmSource ?? null;
+  const originParts: string[] = [];
+  const seen = new Set<string>();
+  if (sourceTag?.trim()) {
+    const s = sourceTag.trim();
+    seen.add(s);
+    originParts.push(s);
+  }
+  for (const dt of deal.dealTags ?? []) {
+    const n = dt.tag.name.trim();
+    if (n && !seen.has(n)) {
+      seen.add(n);
+      originParts.push(n);
+    }
+  }
+  for (const ct of deal.contact.contactTags ?? []) {
+    const n = ct.tag.name.trim();
+    if (n && !seen.has(n)) {
+      seen.add(n);
+      originParts.push(n);
+    }
+  }
+  if (originParts.length === 0) return null;
+  const head = originParts.slice(0, 2).join(" ");
+  const extra = originParts.length - 2;
+  return extra > 0 ? `${head} +${extra}` : head;
+}
+
+/** Só visual — usado no DragOverlay (fora da coluna com overflow). */
+function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
+  const originLine = dealOriginLine(deal);
+  return (
+    <div className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),18.25rem)] shrink-0 overflow-hidden rounded-md border border-border/60 bg-card font-sans shadow-lg ring-2 ring-foreground/10">
+      <div className="px-3 py-2.5 font-sans">
+        <div className="flex items-start justify-between gap-2">
+          <p className="min-w-0 flex-1 text-[15px] font-semibold leading-[1.2] tracking-tight text-foreground">
+            {deal.contact.name}
+          </p>
+          <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
+        </div>
+        <p className="mt-0.5 text-[12px] font-normal leading-[1.2] text-muted-foreground">
+          {deal.contact.company?.trim() || "—"}
+        </p>
+        {deal.value != null ? (
+          <p className="mt-2 text-[15px] font-bold leading-[1.2] tabular-nums tracking-tight text-foreground">
+            {Number(deal.value).toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            })}
+          </p>
+        ) : null}
+        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-normal leading-none text-muted-foreground">
+          <span className="min-w-0 truncate">{originLine ?? "—"}</span>
+          <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+            <span className="flex size-6 items-center justify-center text-emerald-600 dark:text-emerald-500">
+              <WhatsAppLogo className="size-3.5" />
+            </span>
+            <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function LeadAssigneeAvatar({
@@ -181,43 +227,11 @@ function DealCard({
     },
   });
 
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: deal.id });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: deal.id,
+  });
 
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
-
-  const sourceTag =
-    deal.contact.campaignSource?.name ?? deal.contact.utmSource ?? null;
-
-  const originParts: string[] = [];
-  const seen = new Set<string>();
-  if (sourceTag?.trim()) {
-    const s = sourceTag.trim();
-    seen.add(s);
-    originParts.push(s);
-  }
-  for (const dt of deal.dealTags ?? []) {
-    const n = dt.tag.name.trim();
-    if (n && !seen.has(n)) {
-      seen.add(n);
-      originParts.push(n);
-    }
-  }
-  for (const ct of deal.contact.contactTags ?? []) {
-    const n = ct.tag.name.trim();
-    if (n && !seen.has(n)) {
-      seen.add(n);
-      originParts.push(n);
-    }
-  }
-  const originLine = (() => {
-    if (originParts.length === 0) return null;
-    const head = originParts.slice(0, 2).join(" ");
-    const extra = originParts.length - 2;
-    return extra > 0 ? `${head} +${extra}` : head;
-  })();
+  const originLine = dealOriginLine(deal);
 
   function onCardKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
@@ -298,7 +312,6 @@ function DealCard({
   return (
     <div
       ref={setNodeRef}
-      style={style}
       data-pipeline-card
       {...listeners}
       {...attributes}
@@ -306,10 +319,10 @@ function DealCard({
       tabIndex={0}
       aria-label={`Lead ${deal.contact.name}. Arraste para mover de etapa ou clique para abrir.`}
       className={cn(
-        "group w-full shrink-0 touch-none overflow-hidden rounded-md border border-border/60 bg-card font-sans shadow-sm outline-none transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "group w-full shrink-0 touch-none overflow-hidden rounded-md border border-border/60 bg-card font-sans shadow-sm outline-none transition-[box-shadow,opacity] hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isDragging
-          ? "cursor-grabbing z-10 shadow-md ring-1 ring-foreground/15"
-          : "cursor-grab active:cursor-grabbing",
+          ? "cursor-grabbing opacity-50 shadow-md ring-1 ring-foreground/15"
+          : "cursor-grab opacity-100 active:cursor-grabbing",
       )}
       onClick={handleCardClick}
       onKeyDown={(e) => {
@@ -566,6 +579,7 @@ export function PipelineBoard({
   const [optimisticStageByDealId, setOptimisticStageByDealId] = useState<
     Record<string, string>
   >({});
+  const [activeDragDeal, setActiveDragDeal] = useState<DealRow | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -647,7 +661,21 @@ export function PipelineBoard({
     setIsPanningBoard(false);
   }, []);
 
-  function onDragEnd(e: DragEndEvent) {
+  const handleDragStart = useCallback(
+    (e: DragStartEvent) => {
+      const id = String(e.active.id);
+      const d = displayedDeals.find((x) => x.id === id);
+      setActiveDragDeal(d ?? null);
+    },
+    [displayedDeals],
+  );
+
+  const handleDragCancel = useCallback(() => {
+    setActiveDragDeal(null);
+  }, []);
+
+  function handleDragEnd(e: DragEndEvent) {
+    setActiveDragDeal(null);
     const dealId = String(e.active.id);
     const overId = e.over?.id ? String(e.over.id) : null;
     if (!overId) return;
@@ -687,7 +715,12 @@ export function PipelineBoard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
         <div
           ref={scrollRef}
           role="region"
@@ -714,6 +747,11 @@ export function PipelineBoard({
             />
           ))}
         </div>
+        <DragOverlay zIndex={120} dropAnimation={null}>
+          {activeDragDeal ? (
+            <DealCardDragOverlayFace deal={activeDragDeal} />
+          ) : null}
+        </DragOverlay>
       </DndContext>
 
       <PipelineDealDetailDialog

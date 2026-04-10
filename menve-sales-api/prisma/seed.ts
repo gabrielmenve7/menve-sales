@@ -342,6 +342,16 @@ async function main() {
   const hasWa = await prisma.whatsAppConnection.findFirst({
     where: { tenantId: tenant.id, name: "Linha Demo Evolution" },
   });
+
+  let demoQrCategory = await prisma.quickReplyCategory.findFirst({
+    where: { tenantId: tenant.id, name: "Geral" },
+  });
+  if (!demoQrCategory) {
+    demoQrCategory = await prisma.quickReplyCategory.create({
+      data: { tenantId: tenant.id, name: "Geral", sortOrder: 0 },
+    });
+  }
+
   for (const [i, { title, body }] of [
     { title: "Saudação", body: "Olá! Tudo bem? Sou da equipe comercial e estou à disposição." },
     { title: "Follow-up", body: "Oi! Passando para alinhar o que combinamos. Quando podemos falar?" },
@@ -353,6 +363,7 @@ async function main() {
       await prisma.quickReply.create({
         data: {
           tenantId: tenant.id,
+          categoryId: demoQrCategory.id,
           title,
           body,
           sortOrder: i,

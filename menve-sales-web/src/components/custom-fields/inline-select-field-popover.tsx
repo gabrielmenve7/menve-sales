@@ -58,7 +58,7 @@ const optionClearSelectedClass =
   "border-border/80 bg-background text-muted-foreground ring-1 ring-border/50 hover:bg-muted/70 dark:border-white/10 dark:bg-[#333333] dark:text-neutral-400 dark:ring-white/15 dark:hover:bg-[#3a3a3a]";
 
 const optionSelectedClass =
-  "border-primary bg-primary text-primary-foreground hover:bg-primary dark:border-blue-600 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-600";
+  "border-primary-solid bg-primary-solid text-primary-solid-fg hover:bg-primary-solid/90";
 
 type InlineSelectFieldRowProps = {
   field: CustomField;
@@ -72,6 +72,8 @@ type InlineSelectFieldRowProps = {
   valueShellClassName: string;
   /** Lista minimalista no modal do deal: placeholder “Adicionar …”, alinhamento à esquerda. */
   variant?: "default" | "minimal";
+  /** Mesma altura de linha que inputs compactos do `CustomFieldsInlineTable`. */
+  compact?: boolean;
   onCommitValue: (next: string) => Promise<void>;
   onReorderOptions?: (orderedLabels: string[]) => Promise<void>;
   onAppendOption?: (label: string) => Promise<void>;
@@ -158,6 +160,7 @@ export function InlineSelectFieldRow({
   onAppendOption,
   onDefinitionError,
   variant = "default",
+  compact = false,
 }: InlineSelectFieldRowProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -270,7 +273,10 @@ export function InlineSelectFieldRow({
                 id={inputId}
                 disabled={disabled || metaBusy}
                 className={cn(
-                  "h-9 w-full min-w-0 cursor-pointer rounded-md border-0 bg-transparent py-1.5 text-sm outline-none",
+                  "w-full min-w-0 cursor-pointer rounded-md border-0 bg-transparent text-sm outline-none",
+                  compact && isMinimal
+                    ? "h-8 py-0.5 leading-tight"
+                    : "h-9 py-1.5",
                   isMinimal ? "px-0 text-left italic" : "px-2 text-right",
                   "text-foreground ring-0 focus-visible:ring-0 disabled:opacity-50",
                 )}

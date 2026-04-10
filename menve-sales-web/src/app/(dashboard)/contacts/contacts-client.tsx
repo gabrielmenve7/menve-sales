@@ -175,7 +175,7 @@ export function ContactsClient({ contacts }: { contacts: Row[] }) {
                     <td className="p-2 font-medium">
                       <Link
                         href={`/contacts/${c.id}`}
-                        className="text-primary hover:underline"
+                        className="text-primary-solid hover:underline"
                       >
                         {c.name}
                       </Link>

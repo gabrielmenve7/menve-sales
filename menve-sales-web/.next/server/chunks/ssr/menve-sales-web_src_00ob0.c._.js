@@ -1,3 +1,0 @@
-module.exports=[4985,a=>{"use strict";var b=a.i(7997),c=a.i(1606);a.s(["Skeleton",0,function({className:a,...d}){return(0,b.jsx)("div",{className:(0,c.cn)("animate-pulse rounded-md bg-muted",a),...d})}])},4646,a=>{"use strict";var b=a.i(7997),c=a.i(4985);a.s(["default",0,function(){return(0,b.jsx)("div",{className:"flex min-h-screen items-center justify-center p-4",children:(0,b.jsxs)("div",{className:"w-full max-w-md space-y-4 rounded-xl border bg-card p-6",children:[(0,b.jsx)(c.Skeleton,{className:"mx-auto h-8 w-40"}),(0,b.jsx)(c.Skeleton,{className:"h-10 w-full"}),(0,b.jsx)(c.Skeleton,{className:"h-10 w-full"}),(0,b.jsx)(c.Skeleton,{className:"h-10 w-full"})]})})}])},84603,a=>{a.n(a.i(4646))}];
-
-//# sourceMappingURL=menve-sales-web_src_00ob0.c._.js.map

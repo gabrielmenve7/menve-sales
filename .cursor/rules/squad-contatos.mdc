@@ -1,0 +1,218 @@
+---
+description: Squad CONTATOS - time de engenharia dedicado a gestao de contatos do Menve Sales
+globs:
+  - menve-sales-web/src/app/(dashboard)/contacts/**
+  - menve-sales-web/src/actions/contacts.ts
+  - menve-sales-web/src/actions/import-csv.ts
+  - menve-sales-web/src/actions/custom-fields.ts
+  - menve-sales-web/src/actions/activities.ts
+  - menve-sales-api/src/contacts/**
+  - menve-sales-api/src/custom-fields/**
+  - menve-sales-api/src/activities/**
+alwaysApply: false
+---
+
+# Squad CONTATOS
+
+## Identidade
+
+- **Squad**: squad-contatos
+- **Dominio**: Contatos (gestao de contatos, detalhe, campos customizados, atividades, importacao/exportacao CSV)
+- **Missao**: construir, evoluir e manter toda a experiencia de contatos do Menve Sales -- listagem, busca, criacao, detalhe com timeline, campos customizados, tags, atividades, importacao e exportacao -- garantindo integridade de dados, usabilidade e escalabilidade.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/contacts/` -- pagina de lista e detalhe de contato
+- `menve-sales-web/src/actions/contacts.ts` -- server actions de CRUD de contatos
+- `menve-sales-web/src/actions/import-csv.ts` -- server action de importacao CSV
+- `menve-sales-web/src/actions/custom-fields.ts` -- server action de campos customizados
+- `menve-sales-web/src/actions/activities.ts` -- server actions de atividades
+- `menve-sales-api/src/contacts/` -- controller, service e module de contatos
+- `menve-sales-api/src/custom-fields/` -- utilitarios de campos customizados
+- `menve-sales-api/src/activities/` -- controller, service e module de atividades
+- Schemas Prisma: `Contact`, `ContactTag`, `CustomField`, `Activity`, `ActivityType`, `CampaignSource`
+
+### Fora de escopo
+
+- Pipeline/deals (apenas exibe deals do contato no detalhe)
+- Tags CRUD global (pertence ao squad-tags; contatos usa via `addTagToContact`/`removeTagFromContact`)
+- Inbox/mensagens (apenas exibe timeline de mensagens no detalhe)
+- Auth, sessao, tenant
+
+---
+
+## Organograma
+
+```
+squad-contatos (8 pessoas)
+|
+|-- LIDERANCA (2)
+|   |-- Gustavo Ramos .............. Squad Lead / Tech Lead
+|   |-- Priscila Nunes ............. Product Designer
+|
+|-- TIME LISTA & IMPORTACAO (3)
+|   |-- Rodrigo Pinto .............. Senior Frontend Dev
+|   |-- Camila Rezende ............. Backend Dev
+|   |-- Leonardo Matos ............. Fullstack Dev
+|
+|-- TIME DETALHE & CUSTOMIZACAO (3)
+|   |-- Vanessa Torres ............. Frontend Dev
+|   |-- Anderson Borges ............ Backend Dev
+|   |-- Monica Bastos .............. QA Engineer
+```
+
+---
+
+## Lideranca (2 pessoas)
+
+### Gustavo Ramos -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura tecnica de contatos.
+- **Responsabilidades**:
+  - Definir arquitetura de listagem (paginacao, busca, filtros) e detalhe (timeline unificada).
+  - Aprovar RFCs e code review final.
+  - Garantir performance com 100k+ contatos.
+  - Interface com squad-pipeline (picker de contatos) e squad-tags.
+
+### Priscila Nunes -- Product Designer
+
+- **Funcao**: dona da experiencia visual de contatos.
+- **Responsabilidades**:
+  - Projetar lista de contatos, formularios de criacao, pagina de detalhe.
+  - Definir layout da timeline (atividades + mensagens + deals).
+  - Especificar fluxo de importacao/exportacao CSV.
+
+---
+
+## Time Lista & Importacao (3 pessoas)
+
+### Rodrigo Pinto -- Senior Frontend Dev
+
+- **Funcao**: lider de frontend da lista de contatos.
+- **Responsabilidades**:
+  - Manter `contacts-client.tsx` (tabela, formulario de criacao, CSV import/export).
+  - Implementar busca e filtros client-side.
+  - Otimizar renderizacao da tabela para muitos contatos.
+- **Criterios de qualidade**:
+  - Tabela renderiza sem jank com 1k+ linhas visíveis.
+  - Import CSV funciona com arquivos de 10k+ linhas.
+
+### Camila Rezende -- Backend Dev
+
+- **Funcao**: dona dos endpoints de listagem e importacao.
+- **Responsabilidades**:
+  - Manter `ContactsService.list` (paginacao, includes de campaignSource e tags).
+  - Implementar `importCsv` e `exportCsv` com parsing robusto.
+  - Otimizar queries de listagem com indices.
+- **Criterios de qualidade**:
+  - Import de 10k contatos em <30s.
+  - Export CSV completo sem timeout.
+
+### Leonardo Matos -- Fullstack Dev
+
+- **Funcao**: integracao ponta a ponta.
+- **Responsabilidades**:
+  - Manter server actions (`contacts.ts`, `import-csv.ts`).
+  - Garantir revalidacao: `/contacts`, `/pipeline`, `/dashboard`.
+  - Implementar validacao Zod alinhada entre frontend e API.
+
+---
+
+## Time Detalhe & Customizacao (3 pessoas)
+
+### Vanessa Torres -- Frontend Dev
+
+- **Funcao**: dona da pagina de detalhe do contato.
+- **Responsabilidades**:
+  - Manter `contact-detail-client.tsx` (timeline, deals, tags, custom fields, atividades).
+  - Implementar CRUD inline de tags no contato.
+  - Implementar edicao de campos customizados.
+- **Criterios de qualidade**:
+  - Timeline unificada com scroll infinito.
+  - Custom fields salvam sem reload da pagina.
+
+### Anderson Borges -- Backend Dev
+
+- **Funcao**: dono do endpoint de detalhe e campos customizados.
+- **Responsabilidades**:
+  - Manter `ContactsService.getDetail` (contato + deals + tags + customFields + activities + messages).
+  - Manter `updateCustomData` com validacao/coercao por tipo de campo.
+  - Manter `custom-fields-load.util.ts` para definicoes de campos.
+  - Implementar endpoints de atividades (`ActivitiesController`).
+- **Criterios de qualidade**:
+  - Detalhe carrega com todas as relacoes em <200ms.
+  - Custom fields validam tipos corretamente (texto, numero, data, select).
+
+### Monica Bastos -- QA Engineer
+
+- **Funcao**: qualidade de contatos.
+- **Responsabilidades**:
+  - Testes E2E de criacao, detalhe, importacao CSV.
+  - Testes de regressao apos mudancas em custom fields.
+  - Validar edge cases (contato duplicado por phone, CSV malformado).
+- **Criterios de qualidade**:
+  - Zero contatos duplicados por importacao.
+  - Custom fields persistem e exibem corretamente apos reload.
+
+---
+
+## Protocolo operacional
+
+### Definition of Done
+
+- [ ] Code review aprovado por Gustavo.
+- [ ] Testes verdes no CI.
+- [ ] Validacao de UX por Priscila.
+- [ ] Import CSV funcional com 10k+ linhas.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                           |
+|-----------------------------|-------------------|---------------------------------------------|
+| Picker de contatos          | squad-pipeline    | fornecer `GET /contacts/for-pipeline`       |
+| Tags CRUD global            | squad-tags        | consumir via `addTagToContact`/`removeTag`  |
+| Timeline de mensagens       | squad-inbox       | consumir `messages` no detalhe              |
+| Dashboard stats             | squad-dashboard   | fornecer dados via `Contact` Prisma         |
+| Auth, sessao, tenant        | squad-auth        | consumir `auth()`, `apiServer()`            |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/(dashboard)/
+      contacts/
+        page.tsx ........................ server component (SSR, GET /contacts)
+        contacts-client.tsx ............. lista, criacao, CSV import/export
+        [id]/
+          page.tsx ...................... server component (SSR, GET /contacts/:id)
+          contact-detail-client.tsx ...... detalhe: timeline, deals, tags, custom fields
+    actions/
+      contacts.ts ....................... create, delete, exportCsv
+      import-csv.ts ..................... importContactsCsv
+      custom-fields.ts .................. updateContactCustomData
+      activities.ts ..................... createActivity, completeActivity
+
+menve-sales-api/
+  src/
+    contacts/
+      contacts.controller.ts ............ CRUD + CSV + tags + custom-data
+      contacts.service.ts ............... logica de negocio
+      contacts.module.ts ................ modulo NestJS
+    custom-fields/
+      custom-fields-load.util.ts ........ definicoes e merge de campos
+    activities/
+      activities.controller.ts .......... CRUD de atividades
+      activities.service.ts ............. logica de negocio
+      activities.module.ts .............. modulo NestJS
+  prisma/
+    schema.prisma ....................... Contact, ContactTag, CustomField, Activity, CampaignSource
+```
+
+---

@@ -55,7 +55,7 @@ export interface IWhatsAppProvider {
     templateName: string,
     language: string,
     components?: unknown[],
-  ): Promise<{ ok: boolean; error?: string }>;
+  ): Promise<{ ok: boolean; externalId?: string; error?: string }>;
 
   getConnectionStatus(): Promise<{ connected: boolean; detail?: string }>;
 

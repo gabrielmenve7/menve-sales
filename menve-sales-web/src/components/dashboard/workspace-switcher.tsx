@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown, Settings2, UserCircle, Users } from "lucide-react";
+import { ChevronDown, Settings2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,9 +35,12 @@ function workspaceInitial(name: string) {
 export function WorkspaceSwitcher({
   tenant,
   className,
+  compactIconOnly = false,
 }: {
   tenant: WorkspaceSwitcherTenant;
   className?: string;
+  /** Só logo do workspace (sidebar recolhida). */
+  compactIconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const label = planLabel(tenant.plan);
@@ -49,14 +52,21 @@ export function WorkspaceSwitcher({
           type="button"
           variant="ghost"
           className={cn(
-            "h-auto w-full justify-start gap-2 rounded-xl border border-border/60 bg-card/80 px-2.5 py-2 text-left shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60",
+            compactIconOnly
+              ? "h-auto w-full flex-col justify-center gap-0 rounded-xl border border-border/60 bg-card/80 px-1.5 py-2.5 shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60"
+              : "h-auto w-full justify-start gap-2.5 rounded-xl border border-border/60 bg-card/80 px-3 py-2.5 text-left shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60",
             className,
           )}
           aria-expanded={open}
           aria-haspopup="dialog"
+          aria-label={compactIconOnly ? `Workspace: ${tenant.name}` : undefined}
+          title={compactIconOnly ? tenant.name : undefined}
         >
           <span
-            className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-foreground text-[13px] font-semibold text-background dark:bg-foreground dark:text-background"
+            className={cn(
+              "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-foreground font-semibold text-background dark:bg-foreground dark:text-background",
+              compactIconOnly ? "size-11 text-[16.8px]" : "size-10 text-[15.6px]",
+            )}
             aria-hidden={!!tenant.image}
           >
             {tenant.image ? (
@@ -71,25 +81,29 @@ export function WorkspaceSwitcher({
               workspaceInitial(tenant.name)
             )}
           </span>
-          <span className="min-w-0 flex-1 text-left">
-            <span className="block truncate text-[13px] font-semibold leading-tight tracking-tight">
-              {tenant.name}
-            </span>
-          </span>
-          <ChevronDown
-            className={cn(
-              "size-4 shrink-0 text-muted-foreground opacity-70 transition-transform",
-              open && "rotate-180",
-            )}
-            strokeWidth={2}
-          />
+          {!compactIconOnly ? (
+            <>
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-[15.6px] font-semibold leading-tight tracking-tight">
+                  {tenant.name}
+                </span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  "size-[19px] shrink-0 text-muted-foreground opacity-70 transition-transform",
+                  open && "rotate-180",
+                )}
+                strokeWidth={2}
+              />
+            </>
+          ) : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
         side="bottom"
         sideOffset={8}
-        className="w-[min(calc(100vw-2rem),288px)] rounded-xl border border-border/80 bg-popover p-0 shadow-xl dark:border-border/60 dark:shadow-black/50"
+        className="w-[min(calc(100vw-2rem),440px)] rounded-xl border border-border/80 bg-popover p-0 shadow-xl dark:border-border/60 dark:shadow-black/50"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <div className="border-b border-border/60 px-4 pb-4 pt-4 dark:border-border/50">
@@ -119,7 +133,7 @@ export function WorkspaceSwitcher({
                 <span className="text-border"> · </span>
                 <Link
                   href="/settings"
-                  className="text-primary hover:underline"
+                  className="text-primary-solid hover:underline"
                   onClick={() => setOpen(false)}
                 >
                   Gerenciar workspace
@@ -131,39 +145,28 @@ export function WorkspaceSwitcher({
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 p-3">
+        <div className="grid grid-cols-2 gap-2 p-3">
           <Link
             href="/settings"
             onClick={() => setOpen(false)}
             className={cn(
-              "flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent bg-muted/70 py-3 text-center text-xs font-medium transition-colors",
+              "flex min-h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-lg border border-transparent bg-muted/70 px-2 py-3 text-center text-xs font-medium leading-snug transition-colors",
               "hover:bg-muted hover:text-foreground dark:bg-muted/40 dark:hover:bg-muted/60",
             )}
           >
-            <Settings2 className="size-[18px] opacity-90" strokeWidth={1.75} />
-            Configurações
-          </Link>
-          <Link
-            href="/settings?tab=perfil"
-            onClick={() => setOpen(false)}
-            className={cn(
-              "flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent bg-muted/70 py-3 text-center text-xs font-medium transition-colors",
-              "hover:bg-muted hover:text-foreground dark:bg-muted/40 dark:hover:bg-muted/60",
-            )}
-          >
-            <UserCircle className="size-[18px] opacity-90" strokeWidth={1.75} />
-            Perfil
+            <Settings2 className="size-[18px] shrink-0 opacity-90" strokeWidth={1.75} />
+            <span className="break-words">Configurações</span>
           </Link>
           <Link
             href="/settings?tab=members"
             onClick={() => setOpen(false)}
             className={cn(
-              "flex flex-col items-center justify-center gap-2 rounded-lg border border-transparent bg-muted/70 py-3 text-center text-xs font-medium transition-colors",
+              "flex min-h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-lg border border-transparent bg-muted/70 px-2 py-3 text-center text-xs font-medium leading-snug transition-colors",
               "hover:bg-muted hover:text-foreground dark:bg-muted/40 dark:hover:bg-muted/60",
             )}
           >
-            <Users className="size-[18px] opacity-90" strokeWidth={1.75} />
-            Pessoas
+            <Users className="size-[18px] shrink-0 opacity-90" strokeWidth={1.75} />
+            <span className="break-words">Pessoas</span>
           </Link>
         </div>
       </PopoverContent>

@@ -1,0 +1,253 @@
+---
+description: Squad AUTH - time de engenharia dedicado a autenticacao, sessao e multi-tenancy do Menve Sales
+globs:
+  - menve-sales-web/src/auth.ts
+  - menve-sales-web/src/app/api/auth/**
+  - menve-sales-web/src/app/(auth)/**
+  - menve-sales-web/src/lib/tenant.ts
+  - menve-sales-web/src/lib/tenant-edge.ts
+  - menve-sales-web/src/lib/tenant-edge.test.ts
+  - menve-sales-web/src/lib/session.ts
+  - menve-sales-web/src/lib/api-server.ts
+  - menve-sales-web/src/types/next-auth.d.ts
+  - menve-sales-web/src/components/providers.tsx
+  - menve-sales-api/src/auth/**
+  - menve-sales-api/src/common/**
+  - menve-sales-api/src/tenants/**
+alwaysApply: false
+---
+
+# Squad AUTH
+
+## Identidade
+
+- **Squad**: squad-auth
+- **Dominio**: Autenticacao, sessao, multi-tenancy e controle de acesso
+- **Missao**: construir, evoluir e manter toda a infraestrutura de autenticacao do Menve Sales -- login, sessao NextAuth, resolucao de tenant, guard de API, RBAC, api-server helper -- garantindo seguranca, performance e experiencia de login fluida.
+
+## Escopo
+
+### Pode alterar
+
+**Frontend (menve-sales-web):**
+- `src/auth.ts` -- configuracao NextAuth (Credentials provider, JWT callbacks)
+- `src/app/api/auth/[...nextauth]/route.ts` -- route handlers NextAuth
+- `src/app/(auth)/login/page.tsx` -- pagina de login
+- `src/app/(auth)/loading.tsx` -- loading da rota auth
+- `src/lib/tenant.ts` -- resolucao de tenant por slug (`getTenantFromRequest`, `requireTenant`)
+- `src/lib/tenant-edge.ts` -- helpers de subdominio/slug para edge
+- `src/lib/tenant-edge.test.ts` -- testes de tenant edge
+- `src/lib/session.ts` -- `requireSession`, `assertCanConfigureTenant`, papel e tenant na sessao
+- `src/lib/api-server.ts` -- cliente server-side autenticado (headers `x-api-key`, `x-user-id`, `x-tenant-id`)
+- `src/types/next-auth.d.ts` -- augmentacao de tipos NextAuth
+- `src/components/providers.tsx` -- SessionProvider React
+
+**Backend (menve-sales-api):**
+- `src/auth/` -- controller, service, module (login, profile, me)
+- `src/common/app-auth.guard.ts` -- guard global (API key + JWT)
+- `src/common/public.decorator.ts` -- `@Public()` decorator
+- `src/common/req-user.decorator.ts` -- `@ReqUser()` decorator
+- `src/common/request-user.ts` -- tipo `RequestUser`
+- `src/common/rbac.ts` -- helpers de controle de acesso por papel
+- `src/tenants/` -- controller e module de tenants (`GET /tenants/by-slug/:slug`)
+
+### Fora de escopo
+
+- UI de telas internas (pertence aos squads de feature)
+- Gestao de membros (pertence ao squad-membros; auth apenas fornece RBAC)
+- Logica de negocio de qualquer feature
+
+---
+
+## Organograma
+
+```
+squad-auth (6 pessoas)
+|
+|-- LIDERANCA (2)
+|   |-- Lucas Andrade .............. Squad Lead / Tech Lead
+|   |-- Mariana Freitas ............ Security Engineer
+|
+|-- TIME CORE (4)
+|   |-- Gabriel Costa .............. Senior Frontend Dev
+|   |-- Thiago Reis ................ Senior Backend Dev
+|   |-- Fernanda Neves ............. Fullstack Dev
+|   |-- Vinicius Lima .............. QA Engineer
+```
+
+---
+
+## Lideranca (2 pessoas)
+
+### Lucas Andrade -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura de autenticacao e multi-tenancy.
+- **Responsabilidades**:
+  - Definir e manter arquitetura de auth (NextAuth + JWT + API key interna).
+  - Projetar modelo de multi-tenancy (tenant por slug/subdominio).
+  - Aprovar RFCs de mudancas em auth, RBAC ou resolucao de tenant.
+  - Garantir que segredos (NEXTAUTH_SECRET, INTERNAL_API_KEY, JWT_SECRET) sao gerenciados com seguranca.
+  - Ser interface com todos os squads para questoes de auth e permissoes.
+
+### Mariana Freitas -- Security Engineer
+
+- **Funcao**: dona da seguranca de autenticacao.
+- **Responsabilidades**:
+  - Revisar implementacoes de auth para vulnerabilidades (CSRF, XSS, token leak).
+  - Definir politicas de senha e expiracao de sessao.
+  - Auditar uso de `@Public()` decorator (endpoints expostos sem auth).
+  - Monitorar tentativas de login falhas e brute force.
+  - Definir e manter politica de rotacao de segredos.
+
+---
+
+## Time Core (4 pessoas)
+
+### Gabriel Costa -- Senior Frontend Dev
+
+- **Funcao**: lider de frontend de auth.
+- **Responsabilidades**:
+  - Manter pagina de login (`(auth)/login/page.tsx`).
+  - Manter `providers.tsx` (SessionProvider, tema).
+  - Garantir que `loadEnvConfig` carrega variaveis corretamente em `auth.ts` e `api-server.ts`.
+  - Implementar middleware de redirecionamento (nao autenticado -> login).
+  - Manter augmentacao de tipos NextAuth (`next-auth.d.ts`).
+- **Criterios de qualidade**:
+  - Login funciona em <2s (incluindo resolucao de tenant).
+  - Zero flash de conteudo nao autenticado.
+  - Sessao persiste corretamente entre navegacoes.
+
+### Thiago Reis -- Senior Backend Dev
+
+- **Funcao**: lider de backend de auth.
+- **Responsabilidades**:
+  - Manter `AuthController` (POST /auth/login, GET /auth/profile, GET /auth/me).
+  - Manter `AppAuthGuard` (guard global: API key interna OU JWT).
+  - Manter decorators (`@Public()`, `@ReqUser()`).
+  - Manter `TenantsController` (GET /tenants/by-slug/:slug -- publico).
+  - Implementar e manter RBAC (`rbac.ts`, `UserRole`).
+  - Garantir que guard valida tenant ownership (nao permite acesso cross-tenant).
+- **Criterios de qualidade**:
+  - Guard rejeita requests sem auth em <5ms.
+  - Zero acesso cross-tenant possivel.
+  - JWT valida em <10ms.
+
+### Fernanda Neves -- Fullstack Dev
+
+- **Funcao**: especialista em tenant e sessao.
+- **Responsabilidades**:
+  - Manter `tenant.ts` (`getTenantFromRequest` via API `GET /tenants/by-slug/:slug`).
+  - Manter `tenant-edge.ts` (resolucao de subdominio/slug para edge runtime).
+  - Manter `session.ts` (`requireSession`, `assertCanConfigureTenant`).
+  - Manter `api-server.ts` (cliente autenticado com headers internos).
+  - Garantir que resolucao de tenant funciona em local (slug) e producao (subdominio).
+- **Criterios de qualidade**:
+  - Resolucao de tenant funciona em localhost e em dominio customizado.
+  - `apiServer` adiciona headers corretos em todas as chamadas.
+  - `requireSession` redireciona para login quando sessao expira.
+
+### Vinicius Lima -- QA Engineer
+
+- **Funcao**: qualidade de auth.
+- **Responsabilidades**:
+  - Testes E2E de fluxo completo (login -> sessao -> acesso -> logout).
+  - Testes de RBAC (ADMIN vs MEMBER vs VIEWER).
+  - Testes de multi-tenancy (usuario nao acessa dados de outro tenant).
+  - Testes de edge cases (sessao expirada, token invalido, brute force).
+- **Criterios de qualidade**:
+  - Zero acesso cross-tenant em testes.
+  - Login funciona em Chrome, Firefox, Safari.
+
+---
+
+## Protocolo operacional
+
+### Fluxo de autenticacao (end-to-end)
+
+```
+[Browser]
+  |-- GET /login
+  |     |-- (auth)/login/page.tsx (formulario)
+  |     |-- signIn("credentials", { email, password })
+  |           |
+  |           v
+  |     NextAuth route handler
+  |           |-- POST /auth/login (NestJS)
+  |           |     |-- AuthService.login(email, password)
+  |           |     |-- retorna { user, token }
+  |           |
+  |           |-- JWT callback: inclui userId, role, tenantId
+  |           |-- Session callback: expoe user.id, user.role, user.tenantId
+  |
+  |-- GET /dashboard (autenticado)
+        |-- auth() -> sessao NextAuth (server-side)
+        |-- getTenantFromRequest() -> resolve tenant por slug/subdominio
+        |-- apiServer("/dashboard/stats")
+              |-- headers: x-api-key, x-user-id, x-tenant-id
+              |-- AppAuthGuard valida:
+              |     1. @Public()? -> permite
+              |     2. x-api-key match? -> busca user no Prisma -> valida tenant
+              |     3. Bearer JWT? -> verifica token -> extrai tenant
+              |-- req.user = { userId, role, tenantId }
+```
+
+### Definition of Done
+
+- [ ] Code review aprovado por Lucas.
+- [ ] Review de seguranca por Mariana em PRs que alteram auth/guard/RBAC.
+- [ ] Testes de RBAC e multi-tenancy verdes.
+- [ ] Zero acesso cross-tenant possivel.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                                |
+|-----------------------------|-------------------|--------------------------------------------------|
+| Todos os squads             | squad-auth        | fornecer `auth()`, `apiServer()`, guard, RBAC    |
+| Membros                     | squad-membros     | fornecer `UserRole` e `assertCanConfigureTenant` |
+| Canais (webhooks publicos)  | squad-canais      | fornecer `@Public()` decorator                   |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    auth.ts ............................. configuracao NextAuth (Credentials, JWT, loadEnvConfig)
+    app/
+      api/auth/[...nextauth]/
+        route.ts ........................ route handlers HTTP do Auth.js
+      (auth)/
+        login/page.tsx .................. pagina de login
+        loading.tsx ..................... loading da rota auth
+    lib/
+      tenant.ts ......................... getTenantFromRequest, requireTenant
+      tenant-edge.ts .................... helpers de subdominio/slug (edge)
+      tenant-edge.test.ts ............... testes de tenant edge
+      session.ts ........................ requireSession, assertCanConfigureTenant
+      api-server.ts ..................... cliente server-side (x-api-key + x-user-id + x-tenant-id)
+    types/
+      next-auth.d.ts .................... augmentacao de tipos NextAuth
+    components/
+      providers.tsx ..................... SessionProvider React
+
+menve-sales-api/
+  src/
+    auth/
+      auth.controller.ts ................ POST /auth/login, GET /auth/profile, GET /auth/me
+      auth.service.ts ................... validacao de credenciais, emissao de token
+      auth.module.ts .................... modulo NestJS
+    common/
+      app-auth.guard.ts ................. guard global (API key + JWT + tenant)
+      public.decorator.ts ............... @Public() metadata
+      req-user.decorator.ts ............. @ReqUser() decorator
+      request-user.ts ................... tipo RequestUser
+      rbac.ts ........................... helpers de controle de acesso por papel
+    tenants/
+      tenants.controller.ts ............. GET /tenants/by-slug/:slug (publico)
+      tenants.module.ts ................. modulo NestJS
+```
+
+---

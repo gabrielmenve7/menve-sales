@@ -1,4 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "prisma generate --schema ../menve-sales-api/prisma/schema.prisma && prisma migrate deploy --schema ../menve-sales-api/prisma/schema.prisma && next build ../menve-sales-web"
-}

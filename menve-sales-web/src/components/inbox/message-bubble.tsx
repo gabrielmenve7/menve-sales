@@ -12,7 +12,7 @@ function OutboundAckIcons({ status }: { status: OutboundAckStatus }) {
     "size-3.5 stroke-[2.5]",
     read
       ? "text-[#6FD4F8]"
-      : "text-primary-foreground/55 dark:text-primary-foreground/50",
+      : "text-primary-solid-fg/55 dark:text-primary-solid-fg/50",
   );
 
   if (!delivered) {
@@ -126,7 +126,7 @@ export function MessageBubble({
             className={cn(
               "px-2.5 py-1.5 text-sm leading-snug",
               isOut
-                ? "bg-primary text-primary-foreground"
+                ? "bg-primary-solid text-primary-solid-fg"
                 : "bg-muted/60 text-foreground dark:bg-muted/35",
             )}
           >
@@ -136,7 +136,7 @@ export function MessageBubble({
         <div
           className={cn(
             "flex items-end justify-end gap-1 px-2 pb-1.5 pt-0.5 text-[11px]",
-            isOut ? "text-primary-foreground/65" : "text-muted-foreground",
+            isOut ? "text-primary-solid-fg/65" : "text-muted-foreground",
           )}
         >
           <span className="select-none tabular-nums">{time}</span>
@@ -152,7 +152,7 @@ export function MessageBubble({
         className={cn(
           "w-max max-w-[min(21rem,82%)] rounded-xl px-2.5 py-2 text-sm shadow-sm",
           isOut
-            ? "ml-auto bg-primary text-primary-foreground"
+            ? "ml-auto bg-primary-solid text-primary-solid-fg"
             : "mr-auto bg-muted/60 text-foreground dark:bg-muted/35",
         )}
       >
@@ -163,7 +163,7 @@ export function MessageBubble({
           rel="noopener noreferrer"
           className={cn(
             "font-medium underline underline-offset-2",
-            isOut ? "text-primary-foreground" : "text-foreground",
+            isOut ? "text-primary-solid-fg" : "text-foreground",
           )}
         >
           Abrir PDF
@@ -174,7 +174,7 @@ export function MessageBubble({
         <div
           className={cn(
             "mt-1 flex items-end justify-end gap-1 text-[11px]",
-            isOut ? "text-primary-foreground/65" : "text-muted-foreground",
+            isOut ? "text-primary-solid-fg/65" : "text-muted-foreground",
           )}
         >
           <span className="select-none tabular-nums">{time}</span>
@@ -192,7 +192,7 @@ export function MessageBubble({
         !continuation && isOut && "rounded-bl-lg rounded-br-lg rounded-tl-lg rounded-tr-sm",
         !continuation && !isOut && "rounded-br-lg rounded-tl-sm rounded-tr-lg rounded-bl-lg",
         isOut
-          ? "ml-auto bg-primary text-primary-foreground"
+          ? "ml-auto bg-primary-solid text-primary-solid-fg"
           : "mr-auto bg-muted/60 text-foreground dark:bg-muted/35 dark:text-foreground",
       )}
     >
@@ -212,7 +212,7 @@ export function MessageBubble({
         <div
           className={cn(
             "flex items-end justify-end gap-1",
-            isOut ? "text-primary-foreground/65" : "text-muted-foreground",
+            isOut ? "text-primary-solid-fg/65" : "text-muted-foreground",
           )}
         >
           <span className="select-none whitespace-nowrap pb-px text-[11px] tabular-nums leading-none">

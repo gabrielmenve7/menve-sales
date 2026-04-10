@@ -1,5 +1,6 @@
 "use client";
 
+import { AccentHydration } from "@/components/theme/accent-hydration";
 import { SessionProvider } from "next-auth/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
@@ -11,10 +12,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme="system"
-      enableSystem
+      defaultTheme="light"
+      enableSystem={false}
+      themes={["light", "dark"]}
       disableTransitionOnChange
     >
+      <AccentHydration />
       <SessionProvider>
         <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       </SessionProvider>

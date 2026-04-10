@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  LayoutTemplate,
   Loader2,
   Mic,
   Paperclip,
@@ -14,7 +15,9 @@ import { addConversationNote } from "@/actions/conversation-notes";
 import {
   sendWhatsAppMediaMessage,
   sendWhatsAppMessage,
+  sendWhatsAppTemplateMessage,
 } from "@/actions/messages";
+import { listMetaTemplates } from "@/actions/whatsapp-meta";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,6 +25,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
@@ -75,6 +86,17 @@ export function ChatPanel({
   const [openQuickReplyCategoryId, setOpenQuickReplyCategoryId] = useState<
     string | null
   >(null);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [metaTemplates, setMetaTemplates] = useState<
+    { name: string; language?: string }[]
+  >([]);
+  const [metaTemplatesLoading, setMetaTemplatesLoading] = useState(false);
+  const [metaTemplatesError, setMetaTemplatesError] = useState<string | null>(
+    null,
+  );
+  const [templateSendBusy, setTemplateSendBusy] = useState(false);
+
+  const conn = conversation.whatsappConnection;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -86,8 +108,36 @@ export function ChatPanel({
     setOpenQuickReplyCategoryId(null);
   }, [conversation.id]);
 
+  useEffect(() => {
+    if (conn?.provider !== "META" || !conn.isActive) {
+      setMetaTemplates([]);
+      setMetaTemplatesError(null);
+      return;
+    }
+    let cancelled = false;
+    setMetaTemplatesLoading(true);
+    setMetaTemplatesError(null);
+    void (async () => {
+      try {
+        const r = await listMetaTemplates(conn.id);
+        if (!cancelled) setMetaTemplates(r.templates);
+      } catch (e) {
+        if (!cancelled) {
+          setMetaTemplates([]);
+          setMetaTemplatesError(
+            e instanceof Error ? e.message : "Não foi possível carregar templates",
+          );
+        }
+      } finally {
+        if (!cancelled) setMetaTemplatesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conn?.id, conn?.provider, conn?.isActive]);
+
   const photo = getContactPhotoUrl(conversation.contact);
-  const conn = conversation.whatsappConnection;
   const phone = conversation.contact.phone;
 
   const showQuickReplies = quickRepliesHaveScripts(quickReplyCategories);
@@ -225,6 +275,30 @@ export function ChatPanel({
       );
     } finally {
       setSendBusy(false);
+    }
+  }
+
+  async function sendSelectedTemplate(t: { name: string; language?: string }) {
+    if (!conn || conn.provider !== "META" || !phone) return;
+    const lang = (t.language ?? "pt_BR").trim();
+    setTemplateSendBusy(true);
+    setSendError(null);
+    try {
+      await sendWhatsAppTemplateMessage({
+        conversationId: conversation.id,
+        connectionId: conn.id,
+        toPhone: phone,
+        templateName: t.name,
+        language: lang,
+      });
+      setTemplateDialogOpen(false);
+      onRefetch();
+    } catch (e) {
+      setSendError(
+        e instanceof Error ? e.message : "Falha ao enviar template",
+      );
+    } finally {
+      setTemplateSendBusy(false);
     }
   }
 
@@ -434,6 +508,57 @@ export function ChatPanel({
                   "border-t border-border/15 dark:border-border/25",
               )}
             >
+              <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+                <DialogContent className="max-h-[min(80vh,28rem)] overflow-y-auto sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Enviar template (Meta)</DialogTitle>
+                    <DialogDescription>
+                      Templates aprovados na sua conta WABA. Use fora da janela de 24h ou
+                      para início de conversa.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {metaTemplatesLoading ? (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="size-8 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : metaTemplatesError ? (
+                    <p className="text-sm text-destructive">{metaTemplatesError}</p>
+                  ) : metaTemplates.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhum template aprovado ou configure o WABA ID em Configurações →
+                      Canais → Editar.
+                    </p>
+                  ) : (
+                    <ul className="max-h-[min(50vh,20rem)] space-y-1 overflow-y-auto pr-1">
+                      {metaTemplates.map((t) => (
+                        <li key={`${t.name}:${t.language ?? ""}`}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-auto w-full justify-start whitespace-normal px-3 py-2 text-left text-sm"
+                            disabled={templateSendBusy}
+                            onClick={() => void sendSelectedTemplate(t)}
+                          >
+                            <span className="font-medium">{t.name}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {t.language ?? "pt_BR"}
+                            </span>
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setTemplateDialogOpen(false)}
+                    >
+                      Fechar
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -442,6 +567,19 @@ export function ChatPanel({
                 tabIndex={-1}
                 onChange={(e) => void onAttachmentChange(e)}
               />
+              {conn?.provider === "META" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 shrink-0"
+                  disabled={!conn.isActive || mediaBusy || sendBusy}
+                  title="Enviar template aprovado"
+                  onClick={() => setTemplateDialogOpen(true)}
+                >
+                  <LayoutTemplate className="size-4" />
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"

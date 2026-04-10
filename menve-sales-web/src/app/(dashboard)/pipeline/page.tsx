@@ -1,6 +1,7 @@
 import type { CustomField } from "@prisma/client";
 import { apiServer } from "@/lib/api-server";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
+import { canConfigureTenant } from "@/lib/session";
 import { PipelineView } from "./pipeline-view";
 
 type PipelineRow = {
@@ -22,9 +23,10 @@ type PipelineDealsPayload = {
 export default async function PipelinePage({
   searchParams,
 }: {
-  searchParams: Promise<{ pipelineId?: string }>;
+  searchParams: Promise<{ pipelineId?: string; tab?: string }>;
 }) {
-  const { pipelineId: queryPipelineId } = await searchParams;
+  const { pipelineId: queryPipelineId, tab: tabParam } = await searchParams;
+  const openAutomationsFromUrl = tabParam === "automations";
 
   const [contacts, pipelines] = await Promise.all([
     apiServer<{ id: string; name: string; phone: string | null }[]>(
@@ -48,7 +50,14 @@ export default async function PipelinePage({
     pipelines.find((p) => p.isDefault) ??
     pipelines[0];
 
-  const [dealsResult, dealCustomFieldDefs, members] = await Promise.all([
+  const [
+    dealsResult,
+    dealCustomFieldDefs,
+    members,
+    campaignSources,
+    tenantTags,
+    canConfigureAutomations,
+  ] = await Promise.all([
     apiServer<PipelineDealsPayload>(`/pipelines/${activePipeline!.id}/deals`),
     apiServer<unknown>("/custom-fields?entity=DEAL")
       .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
@@ -56,6 +65,13 @@ export default async function PipelinePage({
     apiServer<TenantMemberOption[]>("/settings/members").catch(
       () => [] as TenantMemberOption[],
     ),
+    apiServer<{ id: string; name: string }[]>("/contacts/campaign-sources").catch(
+      () => [] as { id: string; name: string }[],
+    ),
+    apiServer<{ id: string; name: string }[]>("/tags").catch(
+      () => [] as { id: string; name: string }[],
+    ),
+    canConfigureTenant(),
   ]);
 
   return (
@@ -68,6 +84,10 @@ export default async function PipelinePage({
         stats={dealsResult.stats}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={members}
+        campaignSources={campaignSources}
+        tenantTags={tenantTags}
+        openAutomationsFromUrl={openAutomationsFromUrl}
+        canConfigureAutomations={canConfigureAutomations}
       />
     </div>
   );

@@ -1,3 +1,0 @@
-module.exports=[57494,a=>{"use strict";var b=a.i(87924),c=a.i(72131),d=a.i(59883);a.s(["default",0,function({error:a,reset:e}){return(0,c.useEffect)(()=>{console.error(a)},[a]),(0,b.jsxs)("div",{className:"flex min-h-[50vh] flex-col items-center justify-center gap-4 p-6",children:[(0,b.jsx)("h2",{className:"text-lg font-semibold",children:"Algo deu errado"}),(0,b.jsx)("p",{className:"max-w-md text-center text-sm text-muted-foreground",children:a.message||"Erro ao carregar esta área do CRM."}),(0,b.jsx)(d.Button,{type:"button",onClick:()=>e(),children:"Tentar novamente"})]})}])}];
-
-//# sourceMappingURL=menve-sales-web_src_app_%28dashboard%29_error_tsx_04fi6ob._.js.map

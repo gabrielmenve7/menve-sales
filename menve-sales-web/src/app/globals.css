@@ -26,6 +26,16 @@
   --ring: #171717;
   --radius: 0.625rem;
   --sidebar: #f7f7f8;
+  /* Barras / pizza no dashboard (fundo de cartão claro → cinzas) */
+  --chart-bar-1: #3f3f46;
+  --chart-bar-2: #52525b;
+  --chart-bar-3: #71717a;
+  --chart-bar-4: #27272a;
+  --chart-bar-5: #525252;
+  --chart-line-stroke: #3f3f46;
+  /* Bolhas “enviadas” no inbox: no dark com accent, .dark[data-accent] sobrescreve para o tom do modo claro */
+  --primary-solid: var(--primary);
+  --primary-solid-fg: var(--primary-foreground);
 }
 
 /* Dark — cartões levemente elevados vs fundo */
@@ -50,6 +60,15 @@
   --input: #2a2a2a;
   --ring: #d4d4d4;
   --sidebar: #0d0d0d;
+  /* Barras / pizza no dashboard (fundo de cartão escuro → brancos/off-white) */
+  --chart-bar-1: #ffffff;
+  --chart-bar-2: #f5f5f5;
+  --chart-bar-3: #e5e5e5;
+  --chart-bar-4: #fafafa;
+  --chart-bar-5: #d4d4d4;
+  --chart-line-stroke: #fafafa;
+  --primary-solid: var(--primary);
+  --primary-solid-fg: var(--primary-foreground);
 }
 
 @theme inline {
@@ -61,6 +80,8 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-solid: var(--primary-solid);
+  --color-primary-solid-fg: var(--primary-solid-fg);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -78,6 +99,161 @@
   --radius-lg: var(--radius);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
+}
+
+/* Cores de destaque (data-accent no <html>). Deve ficar APÓS @theme inline — o Tailwind v4
+   remove estes blocos se ficarem entre .dark e @theme (não entram no CSS compilado). */
+:root[data-accent="purple"] {
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --ring: #7c3aed;
+  --accent: #ede9fe;
+  --accent-foreground: #4c1d95;
+}
+.dark[data-accent="purple"] {
+  --primary: #a78bfa;
+  --primary-foreground: #1e1b4b;
+  --ring: #c4b5fd;
+  --accent: rgba(139, 92, 246, 0.2);
+  --accent-foreground: #f5f3ff;
+  --primary-solid: #6d28d9;
+  --primary-solid-fg: #ffffff;
+}
+
+:root[data-accent="blue"] {
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --ring: #2563eb;
+  --accent: #dbeafe;
+  --accent-foreground: #1e3a8a;
+}
+.dark[data-accent="blue"] {
+  --primary: #60a5fa;
+  --primary-foreground: #0f172a;
+  --ring: #93c5fd;
+  --accent: rgba(37, 99, 235, 0.22);
+  --accent-foreground: #dbeafe;
+  --primary-solid: #1d4ed8;
+  --primary-solid-fg: #ffffff;
+}
+
+:root[data-accent="pink"] {
+  --primary: #be185d;
+  --primary-foreground: #ffffff;
+  --ring: #db2777;
+  --accent: #fce7f3;
+  --accent-foreground: #831843;
+}
+.dark[data-accent="pink"] {
+  --primary: #f472b6;
+  --primary-foreground: #500724;
+  --ring: #f9a8d4;
+  --accent: rgba(219, 39, 119, 0.2);
+  --accent-foreground: #fce7f3;
+  --primary-solid: #be185d;
+  --primary-solid-fg: #ffffff;
+}
+
+:root[data-accent="violet"] {
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --ring: #8b5cf6;
+  --accent: #ede9fe;
+  --accent-foreground: #4c1d95;
+}
+.dark[data-accent="violet"] {
+  --primary: #c4b5fd;
+  --primary-foreground: #1e1b4b;
+  --ring: #a78bfa;
+  --accent: rgba(139, 92, 246, 0.2);
+  --accent-foreground: #ede9fe;
+  --primary-solid: #6d28d9;
+  --primary-solid-fg: #ffffff;
+}
+
+:root[data-accent="indigo"] {
+  --primary: #4338ca;
+  --primary-foreground: #ffffff;
+  --ring: #4f46e5;
+  --accent: #e0e7ff;
+  --accent-foreground: #312e81;
+}
+.dark[data-accent="indigo"] {
+  --primary: #818cf8;
+  --primary-foreground: #1e1b4b;
+  --ring: #a5b4fc;
+  --accent: rgba(79, 70, 229, 0.22);
+  --accent-foreground: #e0e7ff;
+  --primary-solid: #4338ca;
+  --primary-solid-fg: #ffffff;
+}
+
+:root[data-accent="orange"] {
+  --primary: #c2410c;
+  --primary-foreground: #ffffff;
+  --ring: #ea580c;
+  --accent: #ffedd5;
+  --accent-foreground: #7c2d12;
+}
+.dark[data-accent="orange"] {
+  --primary: #fb923c;
+  --primary-foreground: #431407;
+  --ring: #fdba74;
+  --accent: rgba(234, 88, 12, 0.22);
+  --accent-foreground: #ffedd5;
+  --primary-solid: #c2410c;
+  --primary-solid-fg: #ffffff;
+}
+
+:root[data-accent="teal"] {
+  --primary: #0f766e;
+  --primary-foreground: #ffffff;
+  --ring: #0d9488;
+  --accent: #ccfbf1;
+  --accent-foreground: #134e4a;
+}
+.dark[data-accent="teal"] {
+  --primary: #2dd4bf;
+  --primary-foreground: #042f2e;
+  --ring: #5eead4;
+  --accent: rgba(13, 148, 136, 0.22);
+  --accent-foreground: #ccfbf1;
+  --primary-solid: #0f766e;
+  --primary-solid-fg: #ffffff;
+}
+
+:root[data-accent="bronze"] {
+  --primary: #92400e;
+  --primary-foreground: #fffbeb;
+  --ring: #b45309;
+  --accent: #fef3c7;
+  --accent-foreground: #78350f;
+}
+.dark[data-accent="bronze"] {
+  --primary: #fbbf24;
+  --primary-foreground: #422006;
+  --ring: #fcd34d;
+  --accent: rgba(180, 83, 9, 0.25);
+  --accent-foreground: #fef3c7;
+  --primary-solid: #92400e;
+  --primary-solid-fg: #fffbeb;
+}
+
+:root[data-accent="mint"] {
+  --primary: #047857;
+  --primary-foreground: #ffffff;
+  --ring: #059669;
+  --accent: #d1fae5;
+  --accent-foreground: #064e3b;
+}
+.dark[data-accent="mint"] {
+  --primary: #34d399;
+  --primary-foreground: #022c22;
+  --ring: #6ee7b7;
+  --accent: rgba(5, 150, 105, 0.22);
+  --accent-foreground: #d1fae5;
+  --primary-solid: #047857;
+  --primary-solid-fg: #ffffff;
 }
 
 body {
@@ -164,6 +340,41 @@ body {
 
   .dark .pipeline-board-scroll::-webkit-scrollbar-thumb:hover {
     background: rgb(255 255 255 / 0.31);
+  }
+
+  /* Lista de conversas do Inbox — thumb ~80% mais suave que o padrão (~0.26 → ~0.05). */
+  .inbox-conversation-list-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(85 85 85 / 0.05) transparent;
+  }
+
+  .dark .inbox-conversation-list-scroll {
+    scrollbar-color: rgb(255 255 255 / 0.05) transparent;
+  }
+
+  .inbox-conversation-list-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .inbox-conversation-list-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .inbox-conversation-list-scroll::-webkit-scrollbar-thumb {
+    background: rgb(85 85 85 / 0.05);
+    border-radius: 9999px;
+  }
+
+  .inbox-conversation-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(85 85 85 / 0.12);
+  }
+
+  .dark .inbox-conversation-list-scroll::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.05);
+  }
+
+  .dark .inbox-conversation-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.12);
   }
 
   /* Inbox: fundo branco com doodles quase invisíveis (estilo papel de parede de chat). */

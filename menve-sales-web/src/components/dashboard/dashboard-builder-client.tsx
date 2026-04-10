@@ -8,6 +8,7 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import {
   Copy,
+  CopyPlus,
   LayoutGrid,
   MoreHorizontal,
   Pencil,
@@ -41,6 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardWidgetConfigDialog, widgetTypeLabel } from "@/components/dashboard/dashboard-widget-config-dialog";
 import { DashboardWidgetRenderer } from "@/components/dashboard/dashboard-widget-renderer";
+import type { TenantMemberOption } from "@/lib/custom-field-types";
 import type {
   DashboardBoardDto,
   DealCustomFieldDef,
@@ -52,6 +54,7 @@ import type {
   WidgetType,
 } from "@/lib/dashboard-builder-types";
 import {
+  defaultBarWidgetQueryAndChart,
   defaultQuerySpec,
   newWidgetId,
   parseLayoutJson,
@@ -85,11 +88,13 @@ export function DashboardBuilderClient({
   initialPipelines,
   initialTags,
   initialDealCustomFields,
+  initialTenantMembers = [],
 }: {
   initialBoards: DashboardBoardDto[];
   initialPipelines: PipelineListItem[];
   initialTags: TagListItem[];
   initialDealCustomFields: DealCustomFieldDef[];
+  initialTenantMembers?: TenantMemberOption[];
 }) {
   const [boards, setBoards] = useState<BoardVm[]>(() =>
     initialBoards.map(toVm),
@@ -101,6 +106,7 @@ export function DashboardBuilderClient({
   const [pipelines] = useState(initialPipelines);
   const [tags] = useState(initialTags);
   const [dealCustomFields] = useState(initialDealCustomFields);
+  const [tenantMembers] = useState(initialTenantMembers);
   const [dataByWidget, setDataByWidget] = useState<
     Record<string, WidgetDataResult | null>
   >({});
@@ -209,12 +215,20 @@ export function DashboardBuilderClient({
       }
       const id = newWidgetId();
       const grid = nextGrid(activeBoard?.layout.widgets ?? [], type);
-      const w: LayoutWidget = {
-        id,
-        type,
-        querySpec: defaultQuerySpec(pid, type),
-        grid,
-      };
+      const w: LayoutWidget =
+        type === "BAR"
+          ? {
+              id,
+              type,
+              grid,
+              ...defaultBarWidgetQueryAndChart(pid),
+            }
+          : {
+              id,
+              type,
+              querySpec: defaultQuerySpec(pid, type),
+              grid,
+            };
       setLayoutForActive((prev) => ({
         ...prev,
         widgets: [...prev.widgets, w],
@@ -242,6 +256,26 @@ export function DashboardBuilderClient({
       }));
     },
     [setLayoutForActive],
+  );
+
+  const duplicateWidget = useCallback(
+    (source: LayoutWidget) => {
+      if (!activeId) return;
+      if (activeBoard && activeBoard.layout.widgets.length >= MAX_WIDGETS) {
+        return;
+      }
+      const copy = structuredClone(source) as LayoutWidget;
+      copy.id = newWidgetId();
+      copy.grid = {
+        ...source.grid,
+        y: source.grid.y + source.grid.h,
+      };
+      setLayoutForActive((prev) => ({
+        ...prev,
+        widgets: [...prev.widgets, copy],
+      }));
+    },
+    [activeId, activeBoard, setLayoutForActive],
   );
 
   async function handleCreateBoard() {
@@ -443,6 +477,19 @@ export function DashboardBuilderClient({
                               type="button"
                               size="icon"
                               variant="ghost"
+                              className="size-7 bg-background/80 shadow-sm"
+                              onClick={() => duplicateWidget(w)}
+                              disabled={
+                                activeBoard.layout.widgets.length >= MAX_WIDGETS
+                              }
+                              title="Duplicar cartão"
+                            >
+                              <CopyPlus className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
                               className="size-7 bg-background/80 text-destructive shadow-sm hover:text-destructive"
                               onClick={() => removeWidget(w.id)}
                               title="Excluir cartão"
@@ -477,6 +524,7 @@ export function DashboardBuilderClient({
         pipelines={pipelines}
         tags={tags}
         dealCustomFields={dealCustomFields}
+        tenantMembers={tenantMembers}
         onSave={saveWidgetConfig}
       />
 

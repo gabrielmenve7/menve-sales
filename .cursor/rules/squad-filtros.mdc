@@ -1,0 +1,254 @@
+---
+description: Squad FILTROS - time de engenharia dedicado ao sistema de busca e filtros do Menve Sales
+globs:
+  - menve-sales-web/src/components/inbox/filters/**
+  - menve-sales-web/src/components/inbox/conversation-list.tsx
+  - menve-sales-api/src/inbox/**
+alwaysApply: false
+---
+
+# Squad FILTROS
+
+## Identidade
+
+- **Squad**: squad-filtros
+- **Dominio**: Filtros (motor de busca, filtros compostos, ordenacao, saved filters, acoes em lote)
+- **Missao**: construir, evoluir e manter o sistema de busca e filtros do Menve Sales -- busca full-text em conversas e mensagens, filtros compostos por canal, status, tag, data e agente, ordenacao por multiplos criterios, saved filters e acoes em lote -- garantindo velocidade, precisao e experiencia de uso intuitiva.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/components/inbox/filters/` -- componentes de filtro (criar)
+- `menve-sales-web/src/components/inbox/conversation-list.tsx` -- busca existente (evoluir)
+- `menve-sales-api/src/inbox/` -- expandir endpoint com filtros server-side
+- Schemas Prisma: indices de busca, modelos de saved filters (criar)
+
+### Fora de escopo
+
+- Chat panel e mensagens (pertence ao squad-inbox)
+- Providers de canal (pertence ao squad-canais)
+- Tags CRUD (pertence ao squad-tags; filtros consome dados de tag)
+- Alterar o Kanban, deals ou rotas do pipeline (squad-pipeline) -- o squad-filtros **nao** dono desses arquivos; apenas **alinha** novos filtros (ex.: inbox) ao modelo canonico abaixo e, no futuro, pode extrair componentes compartilhados em comum acordo.
+
+---
+
+## Modelo padrao de filtro (canonico do produto)
+
+Este **query builder** (titulo Filtros, grupos nomeados, linhas campo + valor) define o padrao visual e a logica booleana de filtros compostos no Menve Sales. A **implementacao de referencia** ja existe no pipeline (Popover + grupos + linhas).
+
+### Onde esta no codigo
+
+| Papel | Caminho |
+|-------|---------|
+| UI (titulo, grupos, botoes, linha campo + "e" + valor) | `menve-sales-web/src/app/(dashboard)/pipeline/pipeline-view.tsx` -- Popover disparado por `SlidersHorizontal`, `aria-label="Filtros do pipeline"` |
+| Tipos, estado inicial, presets de data, avaliacao (E/OU) | `menve-sales-web/src/app/(dashboard)/pipeline/pipeline-filter-utils.ts` |
+
+### Estrutura de dados
+
+- **Grupo** (`PipelineFilterGroupState`): `{ id, rows: PipelineFilterRowState[] }`.
+- **Linha / regra** (`PipelineFilterRowState`): campo discriminado + estado do valor conforme o campo (`datePreset`, `customFromStr`/`customToStr`, `sourceValue`, `assigneeValue`, etc.).
+- **Logica booleana** (comentario no codigo: `filterDealsByGroups`):
+  - **E (AND)** entre todas as linhas **dentro** do mesmo grupo (cada linha completa precisa satisfazer).
+  - **OU (OR)** entre **grupos** (basta um grupo satisfazer).
+- Linhas incompletas sao ignoradas na filtragem; grupos sem linhas completas nao restringem.
+
+### UX e copy (PT-BR) -- manter consistencia
+
+- Titulo do painel: **Filtros**; icone de informacao com tooltip explicando E dentro do grupo e OU entre grupos (texto atual no `title` do `Info` em `pipeline-view.tsx`).
+- Cabecalho do grupo: **Grupo N**; acao: **Remover grupo**.
+- Cada regra: `<select>` de campo, conector estatico **e**, controle de valor (varia por campo), **Remover filtro** (lixeira).
+- Dentro do grupo: **Adicionar filtro neste grupo**.
+- Rodape: **+ Adicionar filtro** (nova linha no ultimo grupo), **Adicionar filtro agrupado** (novo grupo), e quando houver filtros ativos: **Limpar filtros**.
+- Entre grupos (a partir do segundo): rotulo **ou** (uppercase, discreto).
+
+### Campos atuais no pipeline (extensivel)
+
+Definidos em `PipelineFilterFieldId` e `FIELD_LABELS` em `pipeline-view.tsx`:
+
+| `field` | Label na UI |
+|---------|-------------|
+| `createdAt` | Data de criação |
+| `source` | Origem |
+| `assignee` | Responsável |
+
+Novos modulos de filtro (inbox, relatorios, etc.) devem **repetir o mesmo padrao de fraseado e hierarquia**; operadores adicionais, se existirem, entram entre campo e valor ou como segundo controle, sem quebrar o modelo mental "campo + e + valor".
+
+### Implementacao futura (inbox e API)
+
+- Reutilizar a mesma forma de **grupos/linhas** na serializacao (URL ou saved filters) e na API (`AND`/`OR` aninhados).
+- Evitar segunda linguagem de filtro incompativel com este modelo; preferir extrair tipos/helpers compartilhados para `components/inbox/filters/` ou `lib/` quando houver segundo consumidor.
+
+---
+
+## Organograma
+
+```
+squad-filtros (5 pessoas)
+|
+|-- LIDERANCA (1)
+|   |-- Daniel Machado ............. Squad Lead / Tech Lead
+|
+|-- TIME CORE (4)
+|   |-- Raquel Martins ............. Frontend Dev
+|   |-- Matheus Oliveira ........... Backend Dev
+|   |-- Carla Fernandes ............ Fullstack Dev
+|   |-- Otavio Barros .............. QA Engineer
+```
+
+---
+
+## Lideranca
+
+### Daniel Machado -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura de busca e filtros.
+- **Responsabilidades**:
+  - Projetar engine de filtros compostos (AND/OR, por canal, status, tag, data, agente).
+  - Definir estrategia de busca (Prisma full-text vs external search engine).
+  - Garantir performance: busca em <300ms para 100k+ mensagens.
+  - Interface com squad-inbox para integracao de filtros na conversation-list.
+  - Definir modelo de saved filters e preferencias de usuario.
+
+---
+
+## Time Core (4 pessoas)
+
+### Raquel Martins -- Frontend Dev
+
+- **Funcao**: dona dos componentes de filtro.
+- **Responsabilidades**:
+  - Criar `components/inbox/filters/` (dropdown, date range, multi-select, channel filter).
+  - Evoluir busca em `conversation-list.tsx` (autocomplete, sugestoes, debounce).
+  - Implementar bulk actions (marcar como lido, arquivar, atribuir tag em lote).
+  - Construir UI de saved filters (salvar, carregar, deletar preset).
+- **Criterios de qualidade**:
+  - Filtros aplicam sem reload (client-side + server sync).
+  - Autocomplete com debounce 300ms sem flicker.
+  - Bulk actions com feedback visual e undo.
+
+### Matheus Oliveira -- Backend Dev
+
+- **Funcao**: dono do motor de busca e engine de filtros.
+- **Responsabilidades**:
+  - Expandir `GET /inbox` com query params de filtro (channel, status, tag, dateRange, agent).
+  - Implementar busca full-text em conversas e mensagens (Prisma `search` ou tsvector).
+  - Criar indices otimizados para queries de busca e filtragem.
+  - Implementar ordenacao por multiplos criterios (data, prioridade, nao-lidos).
+  - Prover highlighting de termos na resposta de busca.
+- **Criterios de qualidade**:
+  - Busca full-text com resultado em <300ms para 100k+ mensagens.
+  - Filtros compostos sem degradacao linear de performance.
+  - Indices cobrem as combinacoes de filtro mais comuns.
+
+### Carla Fernandes -- Fullstack Dev
+
+- **Funcao**: persistencia de filtros e preferencias.
+- **Responsabilidades**:
+  - Implementar CRUD de saved filters por usuario.
+  - Implementar preferencias de ordenacao persistidas.
+  - Sincronizar estado de filtro entre URL (query params) e UI.
+  - Implementar export de conversas filtradas (CSV, JSON) -- futuro.
+- **Criterios de qualidade**:
+  - Saved filters restauram estado exato (URL-based state management).
+  - Filtros persistem entre sessoes.
+  - URL compartilhavel reproduz os mesmos filtros.
+
+### Otavio Barros -- QA Engineer
+
+- **Funcao**: qualidade de busca e filtros.
+- **Responsabilidades**:
+  - Testes E2E de fluxo completo (buscar, filtrar, salvar preset, limpar).
+  - Testes de performance de busca com volume realista.
+  - Validar edge cases (busca vazia, filtro sem resultados, caracteres especiais).
+- **Criterios de qualidade**:
+  - Busca funciona com acentos e caracteres especiais.
+  - Zero resultados incorretos com filtros compostos.
+
+---
+
+## Estado atual
+
+A funcionalidade de filtros esta em **v1 basica** no inbox:
+- Busca por texto implementada client-side em `conversation-list.tsx` (filtra por nome do contato).
+- Badges de canal (Evolution, Meta, Instagram) visiveis em `conversation-item.tsx`.
+- Nao ha no inbox filtros compostos, busca server-side ou saved filters.
+
+**Referencia ja pronta**: o pipeline usa o **modelo padrao de filtro** (grupos, E/OU, mesma copy PT-BR) com filtragem client-side em `pipeline-filter-utils.ts` + UI em `pipeline-view.tsx` (ver secao "Modelo padrao de filtro" acima).
+
+### Proximos passos
+
+1. Expandir `GET /inbox` com query params de filtro (channel, status, dateRange).
+2. Implementar busca full-text server-side (Prisma `search`).
+3. Criar componentes de filtro (`filters/channel-filter.tsx`, `filters/status-filter.tsx`).
+4. Implementar saved filters com CRUD e URL state.
+5. Implementar bulk actions (marcar como lido, arquivar).
+6. Implementar ordenacao por data, prioridade, nao-lidos.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                            |
+|-----------------------------|-------------------|----------------------------------------------|
+| Inbox (conversation-list)   | squad-inbox       | evoluir busca existente, integrar filtros     |
+| Tags (dados para filtro)    | squad-tags        | consumir lista de tags para filtro multi-select|
+| Canais (dados de canal)     | squad-canais      | consumir WhatsAppProvider para filtro de canal|
+| Auth e sessao               | squad-auth        | consumir `auth()` para saved filters por user |
+| UI/UX de filtro composto    | squad-pipeline (ref.) | modelo canonico implementado em `pipeline-view.tsx` / `pipeline-filter-utils.ts` |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/(dashboard)/pipeline/
+      pipeline-view.tsx ............... referencia UI: Popover "Filtros", grupos, linhas
+      pipeline-filter-utils.ts ........ referencia: estado, E/OU, presets de data, match
+    components/
+      inbox/
+        conversation-list.tsx ........... busca client-side existente (evoluir)
+        conversation-item.tsx ........... badges de canal (filtro visual)
+        filters/ ........................ (criar) componentes de filtro
+          channel-filter.tsx ............ filtro por canal (Evolution, Meta, Instagram)
+          status-filter.tsx ............. filtro por status (WAITING, IN_PROGRESS, RESOLVED)
+          date-range-filter.tsx ......... filtro por periodo
+          tag-filter.tsx ................ filtro por tags
+          saved-filters.tsx ............. UI de presets salvos
+
+menve-sales-api/
+  src/
+    inbox/
+      inbox.controller.ts ............... GET /inbox (expandir com query params de filtro)
+      inbox.service.ts .................. logica de busca e filtragem (expandir)
+```
+
+## Arquitetura de Filtros (futuro)
+
+```
+[Browser]
+  |
+  |-- conversation-list.tsx
+  |     |-- FilterBar (canal, status, tag, data)
+  |     |-- SearchInput (autocomplete + debounce)
+  |     |-- SavedFilters (presets)
+  |     |
+  |     |-- GET /inbox?channel=META&status=WAITING&tag=vip&q=joao
+  |           |
+  |           v
+  |         NestJS API
+  |           |-- InboxController.list(filters)
+  |           |-- InboxService.search(tenantId, filters)
+  |           |     |-- Prisma: Conversation.findMany({
+  |           |     |     where: { AND: [channel, status, tag, fulltext] },
+  |           |     |     orderBy: [...],
+  |           |     |     take: 50, cursor: ...
+  |           |     |   })
+  |           |
+  |           v
+  |         Response: { conversations, nextCursor, total }
+```
+
+---

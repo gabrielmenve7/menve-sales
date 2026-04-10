@@ -1,0 +1,146 @@
+---
+description: Squad MEMBROS - time de engenharia dedicado a gestao de membros do tenant
+globs:
+  - menve-sales-web/src/app/(dashboard)/settings/settings-members.tsx
+  - menve-sales-api/src/settings/settings.controller.ts
+  - menve-sales-api/src/settings/settings.service.ts
+alwaysApply: false
+---
+
+# Squad MEMBROS
+
+## Identidade
+
+- **Squad**: squad-membros
+- **Dominio**: Membros (gestao de usuarios do tenant -- lista, convite, papeis, permissoes)
+- **Missao**: construir, evoluir e manter a gestao de membros do Menve Sales -- listagem de usuarios, convites, atribuicao de papeis (ADMIN, MEMBER, VIEWER), controle de acesso por papel -- garantindo seguranca, clareza de permissoes e facilidade de onboarding.
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-web/src/app/(dashboard)/settings/settings-members.tsx` -- UI de membros
+- `menve-sales-api/src/settings/settings.controller.ts` -- endpoint `GET /settings/members`
+- `menve-sales-api/src/settings/settings.service.ts` -- metodo `getMembers`
+- Schemas Prisma: `User` (campos de membro), `UserRole`
+- Futuros endpoints de convite e gestao de papeis
+
+### Fora de escopo
+
+- Auth/login (pertence ao squad-auth)
+- Settings gerais do tenant (pertence ao squad de configuracoes)
+- RBAC no guard de API (pertence ao squad-auth)
+
+---
+
+## Organograma
+
+```
+squad-membros (4 pessoas)
+|
+|-- LIDERANCA (1)
+|   |-- Thiago Correia ............. Squad Lead / Tech Lead
+|
+|-- TIME CORE (3)
+|   |-- Marina Silva ............... Frontend Dev
+|   |-- Felipe Lira ................ Backend Dev
+|   |-- Carolina Prado ............. QA Engineer
+```
+
+---
+
+## Lideranca
+
+### Thiago Correia -- Squad Lead / Tech Lead
+
+- **Funcao**: dono da arquitetura de gestao de membros.
+- **Responsabilidades**:
+  - Definir modelo de convite (email invite, link, self-signup).
+  - Projetar sistema de papeis e permissoes granulares.
+  - Code review e pareceres em PRs.
+  - Interface com squad-auth para alinhamento de RBAC.
+
+---
+
+## Time Core (3 pessoas)
+
+### Marina Silva -- Frontend Dev
+
+- **Funcao**: dona da UI de membros.
+- **Responsabilidades**:
+  - Manter `settings-members.tsx` (lista de membros com nome, email, papel).
+  - Implementar dialog de convite (futuro).
+  - Implementar seletor de papel com restricao por papel do usuario logado.
+  - Exibir status do convite (pendente, aceito, expirado).
+- **Criterios de qualidade**:
+  - Lista carrega sem flicker.
+  - Apenas ADMIN pode alterar papeis (validacao visual + server-side).
+
+### Felipe Lira -- Backend Dev
+
+- **Funcao**: dono dos endpoints de membros.
+- **Responsabilidades**:
+  - Manter `GET /settings/members` (lista de usuarios do tenant).
+  - Implementar endpoints futuros: `POST /settings/members/invite`, `PATCH /settings/members/:id/role`, `DELETE /settings/members/:id`.
+  - Garantir que operacoes de membro respeitam RBAC (`assertCanConfigureTenant`).
+  - Implementar fluxo de convite por email (futuro).
+- **Criterios de qualidade**:
+  - Apenas ADMIN pode convidar/remover membros.
+  - Convite expira em 7 dias com reenvio possivel.
+
+### Carolina Prado -- QA Engineer
+
+- **Funcao**: qualidade de gestao de membros.
+- **Responsabilidades**:
+  - Testes E2E de listagem, convite e alteracao de papel.
+  - Validar restricoes de RBAC (membro nao pode alterar papel de admin).
+  - Testes de edge cases (auto-remocao, ultimo admin).
+
+---
+
+## Estado atual
+
+A funcionalidade de membros esta em **v1**:
+- Lista de membros do tenant com nome, email e papel (`UserRole`).
+- Dados vem de `GET /settings/members` via bundle de settings.
+- Nao ha convite, alteracao de papel ou remocao de membro ainda.
+
+### Proximos passos
+
+1. Dialog de convite por email.
+2. Endpoint `POST /settings/members/invite` com envio de email.
+3. Alteracao de papel inline.
+4. Remocao de membro com confirmacao.
+5. Audit log de acoes de membro.
+
+---
+
+## Dependencias com outros squads
+
+| Dependencia                 | Squad responsavel | Tipo de interacao                    |
+|-----------------------------|-------------------|--------------------------------------|
+| Auth e RBAC                 | squad-auth        | consumir `assertCanConfigureTenant`  |
+| Settings UI (tab Membros)   | squad-membros     | proprio squad                        |
+| Email (futuro convite)      | infra             | envio de email transacional          |
+
+---
+
+## Referencias de caminhos
+
+```
+menve-sales-web/
+  src/
+    app/(dashboard)/
+      settings/
+        settings-members.tsx ............ lista de membros do tenant
+
+menve-sales-api/
+  src/
+    settings/
+      settings.controller.ts ............ GET /settings/members
+      settings.service.ts ............... getMembers(tenantId)
+  prisma/
+    schema.prisma ....................... User, UserRole (SUPER_ADMIN, ADMIN, MEMBER)
+```
+
+---

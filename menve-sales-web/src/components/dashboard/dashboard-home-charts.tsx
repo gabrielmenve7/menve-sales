@@ -21,20 +21,30 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CHART, CHART_BAR_SEQUENCE } from "@/lib/chart-colors";
+import { CHART_BAR_SEQUENCE, CHART_LINE_STROKE } from "@/lib/chart-colors";
 
 type Daily = { date: string; count: number };
 type NamedCount = { name: string; count: number };
 type SourceSlice = { name: string; value: number };
 
+type ProspectingBlock = {
+  total: number;
+  won: number;
+  open: number;
+  contactRate: number | null;
+  funnel: { name: string; count: number }[];
+};
+
 export function DashboardHomeCharts({
   dailyDeals,
   dealsByStage,
   contactsBySource,
+  prospecting,
 }: {
   dailyDeals: Daily[];
   dealsByStage: NamedCount[];
   contactsBySource: SourceSlice[];
+  prospecting?: ProspectingBlock | null;
 }) {
   const pieData = contactsBySource.filter((s) => s.value > 0);
   const formatDay = (d: string) => {
@@ -44,6 +54,51 @@ export function DashboardHomeCharts({
 
   return (
     <div className="space-y-6">
+      {prospecting && prospecting.funnel.length > 0 ? (
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium">
+              Funil — deals da Pesquisa (abertos por etapa)
+            </CardTitle>
+            <CardDescription>
+              Pipeline padrão · origem Prospecção Ativa
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={prospecting.funnel} layout="vertical" margin={{ left: 8, right: 8 }}>
+                <CartesianGrid
+                  stroke="var(--muted-foreground)"
+                  strokeOpacity={0.14}
+                  strokeDasharray="3 3"
+                />
+                <XAxis
+                  type="number"
+                  allowDecimals={false}
+                  width={28}
+                  tick={{ fontSize: 10, fill: "var(--foreground)" }}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={100}
+                  tick={{ fontSize: 10, fill: "var(--foreground)" }}
+                />
+                <Tooltip />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                  {prospecting.funnel.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={CHART_BAR_SEQUENCE[i % CHART_BAR_SEQUENCE.length]}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="border-border/60 shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-medium">Novos deals (30 dias)</CardTitle>
@@ -52,14 +107,22 @@ export function DashboardHomeCharts({
         <CardContent className="h-[300px] pt-2">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={dailyDeals} margin={{ left: 0, right: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border/80" />
+              <CartesianGrid
+                stroke="var(--muted-foreground)"
+                strokeOpacity={0.14}
+                strokeDasharray="3 3"
+              />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: "var(--foreground)" }}
                 tickFormatter={formatDay}
                 interval="preserveStartEnd"
               />
-              <YAxis allowDecimals={false} width={32} tick={{ fontSize: 11 }} />
+              <YAxis
+                allowDecimals={false}
+                width={32}
+                tick={{ fontSize: 11, fill: "var(--foreground)" }}
+              />
               <Tooltip
                 labelFormatter={(v) => String(v)}
                 contentStyle={{
@@ -71,7 +134,7 @@ export function DashboardHomeCharts({
               <Line
                 type="monotone"
                 dataKey="count"
-                stroke={CHART.primary}
+                stroke={CHART_LINE_STROKE}
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
@@ -90,9 +153,24 @@ export function DashboardHomeCharts({
           <CardContent className="h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dealsByStage} margin={{ left: 0, right: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border/80" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={56} />
-                <YAxis allowDecimals={false} width={28} />
+                <CartesianGrid
+                  stroke="var(--muted-foreground)"
+                  strokeOpacity={0.14}
+                  strokeDasharray="3 3"
+                />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 10, fill: "var(--foreground)" }}
+                  interval={0}
+                  angle={-20}
+                  textAnchor="end"
+                  height={56}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  width={28}
+                  tick={{ fontSize: 10, fill: "var(--foreground)" }}
+                />
                 <Tooltip />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                   {dealsByStage.map((_, i) => (
