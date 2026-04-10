@@ -6,7 +6,7 @@ Guia operacional para o modelo **Next.js na Vercel** e **NestJS em outro PaaS**,
 
 ## Arquitetura
 
-- **Web:** Vercel, domínio `https://vendas.menvedigital.com.br` (repositório na **raiz** do monorepo — há [`vercel.json`](../vercel.json)).
+- **Web:** Vercel, domínio `https://vendas.menvedigital.com.br` (repositório na **raiz** do monorepo — [`vercel.json`](../vercel.json) com `outputDirectory: menve-sales-web/.next` porque o build do Next roda dentro de `menve-sales-web`).
 - **API:** processo HTTP sempre ligado (Railway, Render, Fly.io, Cloud Run, VPS + Docker). Não use a Vercel para o `main.ts` da API sem adaptação serverless.
 - **Banco:** Neon (ou outro Postgres). Mesmo cluster para API e para o build da Vercel (`prisma migrate deploy`).
 
@@ -41,7 +41,7 @@ Migrações: o repositório roda **`prisma migrate deploy` no build da Vercel** 
 
 ## 3. Vercel (só web)
 
-1. **Import:** projeto Git com **Root Directory** = raiz do monorepo (onde está `vercel.json`).
+1. **Import:** projeto Git com **Root Directory** = **raiz do monorepo** (pasta que contém `vercel.json`). Não defina “Output Directory” manualmente no painel para outro valor — o `vercel.json` já aponta para `menve-sales-web/.next`.
 2. **Domínio:** em *Settings → Domains*, adicione `vendas.menvedigital.com.br` e siga as instruções de DNS.
 3. **Variáveis (Production):**
 
