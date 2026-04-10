@@ -8,6 +8,7 @@ import {
   Query,
   UnauthorizedException,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { JwtService } from "@nestjs/jwt";
 import { AuthService } from "./auth.service";
 import { Public } from "../common/public.decorator";
@@ -24,6 +25,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @Throttle({ default: { limit: 40, ttl: 900_000 } })
   @Post("login")
   async login(@Body() body: { email?: string; password?: string }) {
     const email = body.email?.trim();
@@ -35,12 +37,14 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 15, ttl: 900_000 } })
   @Post("register")
   register(@Body() body: { email?: string; password?: string; name?: string }) {
     return this.auth.register(body);
   }
 
   @Public()
+  @Throttle({ default: { limit: 80, ttl: 60_000 } })
   @Get("invite-preview")
   invitePreview(@Query("token") token: string) {
     return this.workspaces.invitePreview(token ?? "");

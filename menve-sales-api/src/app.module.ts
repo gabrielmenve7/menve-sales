@@ -1,6 +1,10 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
+import { AppAuthGuard } from "./common/app-auth.guard";
+import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { HealthModule } from "./health/health.module";
 import { ContactsModule } from "./contacts/contacts.module";
 import { DealsModule } from "./deals/deals.module";
@@ -23,7 +27,11 @@ import { PipelineAutomationsModule } from "./pipeline-automations/pipeline-autom
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      { name: "default", ttl: 60_000, limit: 300 },
+    ]),
     PrismaModule,
+    WorkspacesModule,
     AuthModule,
     HealthModule,
     ContactsModule,
@@ -44,6 +52,10 @@ import { PipelineAutomationsModule } from "./pipeline-automations/pipeline-autom
     TenantsModule,
     ProspectingModule,
     PipelineAutomationsModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: AppAuthGuard },
   ],
 })
 export class AppModule {}

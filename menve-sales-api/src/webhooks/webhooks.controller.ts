@@ -10,6 +10,7 @@ import {
   Req,
   Res,
 } from "@nestjs/common";
+import { SkipThrottle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { Public } from "../common/public.decorator";
@@ -18,6 +19,7 @@ import { getEvolutionWebhookParseMeta } from "../whatsapp/evolution-provider";
 import { MessageProcessingService } from "../whatsapp/message-processing.service";
 import { verifyMetaHubSignature256 } from "./meta-signature";
 
+@SkipThrottle()
 @Controller("webhooks/whatsapp")
 export class WebhooksController {
   private readonly log = new Logger(WebhooksController.name);
