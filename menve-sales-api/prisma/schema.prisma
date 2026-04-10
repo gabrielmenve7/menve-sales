@@ -1,8 +1,7 @@
 generator client {
   provider = "prisma-client-js"
-  /// Client dentro de menve-sales-api/node_modules para o Nest resolver @prisma/client local.
-  /// Na Vercel (web), use o mesmo schema com `prisma generate` apontando para o client da app ou hoisted.
-  output   = "../node_modules/.prisma/client"
+  /// Relativo a `menve-sales-api/prisma/`: sobe à raiz do monorepo — um único client para API Nest + Next (Vercel).
+  output   = "../../node_modules/.prisma/client"
 }
 
 datasource db {
