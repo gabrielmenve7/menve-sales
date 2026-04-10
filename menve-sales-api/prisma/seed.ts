@@ -217,6 +217,20 @@ async function main() {
     },
   });
 
+  /**
+   * Host `crm.menvedigital.com.br` → slug `crm` (primeiro label do host).
+   */
+  const crmTenant = await prisma.tenant.upsert({
+    where: { slug: "crm" },
+    update: { researchEnabled: true },
+    create: {
+      name: "Menve — CRM",
+      slug: "crm",
+      plan: "pro",
+      researchEnabled: true,
+    },
+  });
+
   await prisma.user.upsert({
     where: { email: "owner@menvedigital.local" },
     update: { tenantId: menveDigital.id, role: UserRole.OWNER },
@@ -238,6 +252,18 @@ async function main() {
       passwordHash: password,
       role: UserRole.OWNER,
       tenantId: vendasTenant.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "owner@crm.menvedigital.local" },
+    update: { tenantId: crmTenant.id, role: UserRole.OWNER },
+    create: {
+      email: "owner@crm.menvedigital.local",
+      name: "Owner CRM (crm.*.menvedigital)",
+      passwordHash: password,
+      role: UserRole.OWNER,
+      tenantId: crmTenant.id,
     },
   });
 
@@ -267,6 +293,7 @@ async function main() {
 
   const { pipeline, stages, source } = await ensureDefaultWorkspace(tenant.id);
   await ensureDefaultWorkspace(vendasTenant.id);
+  await ensureDefaultWorkspace(crmTenant.id);
 
   let contact = await prisma.contact.findFirst({
     where: { tenantId: tenant.id, phone: "+5511999999999" },
@@ -389,7 +416,7 @@ async function main() {
   }
 
   console.log(
-    "Seed OK — admin@menve.com / admin123 | owner@demo.com / admin123 | owner@vendas.menvedigital.local / admin123 (tenant slug vendas)",
+    "Seed OK — admin@menve.com / admin123 | owner@demo.com / admin123 | owner@vendas… / admin123 (vendas) | owner@crm.menvedigital.local / admin123 (crm — host crm.*)",
   );
 }
 

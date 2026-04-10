@@ -16,13 +16,22 @@ export async function getTenantFromRequest() {
     sub ?? h.get("x-tenant-slug"),
     process.env.DEFAULT_TENANT_SLUG,
   );
-  const res = await fetch(
-    `${apiBase()}/tenants/by-slug/${encodeURIComponent(slug)}`,
-    { cache: "no-store" },
-  );
-  if (!res.ok) return null;
-  const tenant = await res.json();
-  return tenant;
+  try {
+    const res = await fetch(
+      `${apiBase()}/tenants/by-slug/${encodeURIComponent(slug)}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    const tenant = await res.json();
+    return tenant;
+  } catch (e) {
+    console.error(
+      "[menve/tenant] Falha ao resolver tenant por slug:",
+      slug,
+      e,
+    );
+    return null;
+  }
 }
 
 export async function requireTenant() {
