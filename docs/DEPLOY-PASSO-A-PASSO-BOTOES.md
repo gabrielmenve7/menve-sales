@@ -76,7 +76,7 @@ Mantenha o **Build Command:** `cd menve-sales-api && npm ci && npm run build` e 
 
 ### Detalhe adicional — Railway após ajuste do monorepo
 
-O [`Dockerfile`](../menve-sales-api/Dockerfile) foi feito para o **contexto de build = raiz do repositório Git** (onde estão o `package.json` principal e a pasta `menve-sales-api/`). O [`railway.toml`](../menve-sales-api/railway.toml) declara `dockerfilePath = "menve-sales-api/Dockerfile"`. Ao subir o processo, o Nest executa o [`AppBootstrapService`](../menve-sales-api/src/prisma/app-bootstrap.service.ts), que garante tenants (`demo`, `vendas`, `crm`, `menve-digital`) e usuários bootstrap no **mesmo** Postgres do `DATABASE_URL` configurado na Railway.
+O [`Dockerfile`](../menve-sales-api/Dockerfile) foi feito para o **contexto de build = raiz do repositório Git** (onde estão o `package.json` principal e a pasta `menve-sales-api/`). O [`railway.toml`](../railway.toml) na **raiz do repo** declara `dockerfilePath = "menve-sales-api/Dockerfile"` (sem esse arquivo na raiz, a Railway tende a usar Nixpacks e pode falhar no `apt`). Ao subir o processo, o Nest executa o [`AppBootstrapService`](../menve-sales-api/src/prisma/app-bootstrap.service.ts), que garante tenants (`demo`, `vendas`, `crm`, `menve-digital`) e usuários bootstrap no **mesmo** Postgres do `DATABASE_URL` configurado na Railway.
 
 ```mermaid
 flowchart LR

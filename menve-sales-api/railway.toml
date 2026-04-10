@@ -1,6 +1,7 @@
 # Menve Sales API — Railway (https://railway.app)
-# Painel: Root Directory = raiz do monorepo (onde está o package.json principal).
-# Dockerfile path = menve-sales-api/Dockerfile
+# A Railway usa o `railway.toml` na RAIZ do Git quando Root Directory está vazio.
+# Configuração ativa: ../railway.toml na raiz do repo (este arquivo é só referência).
+# Painel: Root Directory = raiz do monorepo. Dockerfile path = menve-sales-api/Dockerfile
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "menve-sales-api/Dockerfile"

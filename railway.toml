@@ -1,0 +1,10 @@
+# Railway lê este arquivo quando Root Directory = raiz do monorepo (vazio no painel).
+# Sem ele na raiz, a Railway usa Nixpacks (apt, libatomic1) e pode falhar ou ignorar o Dockerfile.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "menve-sales-api/Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"

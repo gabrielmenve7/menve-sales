@@ -21,7 +21,7 @@ Guia operacional para o modelo **Next.js na Vercel** e **NestJS em outro PaaS**,
 ## 2. API Nest (PaaS)
 
 1. **Contexto de build Docker:** **raiz do monorepo** (onde está o `package.json` principal). O [`Dockerfile`](../menve-sales-api/Dockerfile) copia `menve-sales-api/` e o `node_modules` gerado com Prisma na raiz. No Railway: *Root Directory* = raiz do repo; *Dockerfile path* = `menve-sales-api/Dockerfile`.
-2. **Arquivos de referência:** [`menve-sales-api/railway.toml`](../menve-sales-api/railway.toml), [`menve-sales-api/render.yaml`](../menve-sales-api/render.yaml).
+2. **Arquivos de referência:** [`railway.toml`](../railway.toml) (raiz do repo), [`menve-sales-api/render.yaml`](../menve-sales-api/render.yaml).
 3. **Variáveis mínimas** (alinhar com [`menve-sales-api/.env.example`](../menve-sales-api/.env.example)):
 
 | Variável | Observação |
