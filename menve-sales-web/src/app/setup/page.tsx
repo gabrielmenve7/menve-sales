@@ -36,8 +36,18 @@ export default async function SetupPage() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>
-            Rode o seed no <strong>mesmo Postgres</strong> que a API usa (Railway
-            / Neon), não só o da Vercel se forem diferentes:
+            <strong>1)</strong> Faça um <strong>redeploy da API</strong> (Railway)
+            com a versão atual do código: ao subir, ela cria automaticamente os
+            tenants <strong>demo</strong>, <strong>vendas</strong>,{" "}
+            <strong>crm</strong> e <strong>menve-digital</strong> no{" "}
+            <code className="rounded bg-muted px-1">DATABASE_URL</code> dela, mais
+            pipeline/tags mínimos — desde que{" "}
+            <code className="rounded bg-muted px-1">INTERNAL_API_URL</code> na
+            Vercel aponte para essa API.
+          </p>
+          <p>
+            <strong>2)</strong> Se ainda aparecer esta página, rode manualmente no
+            mesmo Postgres da API:
           </p>
           <pre className="overflow-x-auto rounded-md border bg-muted/50 p-3 text-xs text-foreground">
             {`cd menve-sales-api
@@ -45,15 +55,12 @@ npx prisma migrate deploy
 npm run db:seed`}
           </pre>
           <p>
-            O seed atual cria os tenants <strong>demo</strong>,{" "}
-            <strong>vendas</strong> e <strong>crm</strong> (este último para o
-            host <code className="rounded bg-muted px-1">crm.*.menvedigital</code>
-            ). Depois do seed, faça login com um usuário desse tenant — o console
-            do seed lista os e-mails (ex.: <strong>crm</strong> →{" "}
+            Login <strong>crm</strong>:{" "}
             <code className="rounded bg-muted px-1">
               owner@crm.menvedigital.local
-            </code>
-            ).
+            </code>{" "}
+            / <code className="rounded bg-muted px-1">admin123</code> (criado na
+            primeira subida da API ou pelo seed).
           </p>
           <div className="flex flex-wrap gap-2 pt-2">
             <Button asChild variant="default">

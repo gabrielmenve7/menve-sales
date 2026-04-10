@@ -1,180 +1,17 @@
 import {
   PrismaClient,
-  Prisma,
   UserRole,
   DealStatus,
   WhatsAppProvider,
-  CustomFieldEntity,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
-
-const REMOVED_CUSTOM_FIELD_KEYS = [
-  "cargo",
-  "segmento",
-  "funcionarios",
-  "prioridade",
-  "observacoes",
-  "oportunidade",
-  /** Duplica `campaignSource` do contato (origem no card do deal). */
-  "origem",
-] as const;
-
-function omitCustomDataKeys(
-  raw: unknown,
-  keys: readonly string[],
-): Prisma.InputJsonValue {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return {} as Prisma.InputJsonValue;
-  }
-  const o = { ...(raw as Record<string, unknown>) };
-  for (const k of keys) delete o[k];
-  return o as Prisma.InputJsonValue;
-}
+import {
+  ensureDefaultWorkspace,
+  omitCustomDataKeys,
+  REMOVED_CUSTOM_FIELD_KEYS,
+} from "../src/prisma/workspace-bootstrap";
 
 const prisma = new PrismaClient();
-
-const dealCustomFieldSeeds: Array<{
-  key: string;
-  name: string;
-  fieldType: string;
-  sortOrder: number;
-  options?: string[];
-}> = [
-  { key: "responsavel", name: "Responsável", fieldType: "USER", sortOrder: 12 },
-  {
-    key: "motivo_perda",
-    name: "Motivo de perda",
-    fieldType: "SELECT",
-    sortOrder: 13,
-    options: [
-      "Preço",
-      "Concorrência",
-      "Sem resposta",
-      "Timing",
-      "Não é prioridade",
-      "Outro",
-    ],
-  },
-  {
-    key: "produto",
-    name: "Produto",
-    fieldType: "SELECT",
-    sortOrder: 14,
-    options: ["Plano A", "Plano B", "Plano Enterprise", "Serviço avulso"],
-  },
-  {
-    key: "atividade",
-    name: "Atividade",
-    fieldType: "SELECT",
-    sortOrder: 15,
-    options: [
-      "Ligação",
-      "E-mail",
-      "Reunião",
-      "Follow-up",
-      "Proposta",
-      "WhatsApp",
-    ],
-  },
-];
-
-/** Pipeline padrão, origens, tags e campos custom de deal — reutilizado por tenant (ex.: demo + vendas). */
-async function ensureDefaultWorkspace(tenantId: string) {
-  let pipeline = await prisma.pipeline.findFirst({
-    where: { tenantId, name: "Vendas Inside Sales" },
-    include: { stages: true },
-  });
-
-  if (!pipeline) {
-    pipeline = await prisma.pipeline.create({
-      data: {
-        tenantId,
-        name: "Vendas Inside Sales",
-        isDefault: true,
-        sortOrder: 0,
-        stages: {
-          create: [
-            { name: "Novo lead", sortOrder: 0, probability: 10 },
-            { name: "Qualificação", sortOrder: 1, probability: 25 },
-            { name: "Proposta", sortOrder: 2, probability: 50 },
-            { name: "Negociação", sortOrder: 3, probability: 75 },
-            { name: "Fechado ganho", sortOrder: 4, probability: 100 },
-          ],
-        },
-      },
-      include: { stages: true },
-    });
-  }
-
-  const stages = pipeline.stages.sort((a, b) => a.sortOrder - b.sortOrder);
-
-  let source = await prisma.campaignSource.findFirst({
-    where: { tenantId, code: "meta" },
-  });
-  if (!source) {
-    source = await prisma.campaignSource.create({
-      data: {
-        tenantId,
-        name: "Meta Ads",
-        code: "meta",
-      },
-    });
-  }
-
-  let ps = await prisma.campaignSource.findFirst({
-    where: { tenantId, code: "prospecting" },
-  });
-  if (!ps) {
-    ps = await prisma.campaignSource.create({
-      data: {
-        tenantId,
-        name: "Prospecção Ativa",
-        code: "prospecting",
-      },
-    });
-  }
-
-  for (const name of ["MQL", "SQL", "Quente"]) {
-    await prisma.tag.upsert({
-      where: {
-        tenantId_name: { tenantId, name },
-      },
-      create: { tenantId, name },
-      update: {},
-    });
-  }
-
-  await prisma.customField.deleteMany({
-    where: {
-      tenantId,
-      key: { in: [...REMOVED_CUSTOM_FIELD_KEYS] },
-    },
-  });
-
-  for (const df of dealCustomFieldSeeds) {
-    const exists = await prisma.customField.findFirst({
-      where: { tenantId, key: df.key },
-    });
-    if (!exists) {
-      await prisma.customField.create({
-        data: {
-          tenantId,
-          entity: CustomFieldEntity.DEAL,
-          name: df.name,
-          key: df.key,
-          fieldType: df.fieldType,
-          sortOrder: df.sortOrder,
-          required: false,
-          options: df.options
-            ? (df.options as unknown as Prisma.InputJsonValue)
-            : undefined,
-        },
-      });
-    }
-  }
-
-  return { pipeline, stages, source };
-}
 
 async function main() {
   const password = await bcrypt.hash("admin123", 12);
@@ -291,9 +128,12 @@ async function main() {
     },
   });
 
-  const { pipeline, stages, source } = await ensureDefaultWorkspace(tenant.id);
-  await ensureDefaultWorkspace(vendasTenant.id);
-  await ensureDefaultWorkspace(crmTenant.id);
+  const { pipeline, stages, source } = await ensureDefaultWorkspace(
+    prisma,
+    tenant.id,
+  );
+  await ensureDefaultWorkspace(prisma, vendasTenant.id);
+  await ensureDefaultWorkspace(prisma, crmTenant.id);
 
   let contact = await prisma.contact.findFirst({
     where: { tenantId: tenant.id, phone: "+5511999999999" },
