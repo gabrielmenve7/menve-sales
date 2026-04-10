@@ -68,9 +68,15 @@ async function main() {
     },
   });
 
+  /** `update` inclui `passwordHash` para `db:seed` realinhar senha seed (ex.: admin123) após deploys antigos. */
   await prisma.user.upsert({
     where: { email: "owner@menvedigital.local" },
-    update: { tenantId: menveDigital.id, role: UserRole.OWNER },
+    update: {
+      tenantId: menveDigital.id,
+      role: UserRole.OWNER,
+      name: "Owner Menve Digital",
+      passwordHash: password,
+    },
     create: {
       email: "owner@menvedigital.local",
       name: "Owner Menve Digital",
@@ -82,7 +88,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "owner@vendas.menvedigital.local" },
-    update: { tenantId: vendasTenant.id, role: UserRole.OWNER },
+    update: {
+      tenantId: vendasTenant.id,
+      role: UserRole.OWNER,
+      name: "Owner Vendas (produção)",
+      passwordHash: password,
+    },
     create: {
       email: "owner@vendas.menvedigital.local",
       name: "Owner Vendas (produção)",
@@ -94,7 +105,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "owner@crm.menvedigital.local" },
-    update: { tenantId: crmTenant.id, role: UserRole.OWNER },
+    update: {
+      tenantId: crmTenant.id,
+      role: UserRole.OWNER,
+      name: "Owner CRM (crm.*.menvedigital)",
+      passwordHash: password,
+    },
     create: {
       email: "owner@crm.menvedigital.local",
       name: "Owner CRM (crm.*.menvedigital)",
@@ -106,7 +122,10 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "admin@menve.com" },
-    update: {},
+    update: {
+      name: "Super Admin Menve",
+      passwordHash: password,
+    },
     create: {
       email: "admin@menve.com",
       name: "Super Admin Menve",
@@ -118,7 +137,12 @@ async function main() {
 
   const owner = await prisma.user.upsert({
     where: { email: "owner@demo.com" },
-    update: {},
+    update: {
+      tenantId: tenant.id,
+      role: UserRole.OWNER,
+      name: "Owner Demo",
+      passwordHash: password,
+    },
     create: {
       email: "owner@demo.com",
       name: "Owner Demo",
