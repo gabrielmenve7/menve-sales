@@ -5,6 +5,38 @@ function apiBase() {
   return u ? u.replace(/\/$/, "") : "";
 }
 
+/** Evita cadastro indo para o próprio Next (404 "Cannot POST /auth/register"). */
+function internalApiLooksLikeFrontendSite(base: string): boolean {
+  const appUrl =
+    process.env.NEXTAUTH_URL?.trim() ||
+    process.env.AUTH_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    (process.env.VERCEL_URL?.trim()
+      ? `https://${process.env.VERCEL_URL.trim()}`
+      : "");
+  if (!appUrl) return false;
+  try {
+    return new URL(base).host === new URL(appUrl).host;
+  } catch {
+    return false;
+  }
+}
+
+function friendlyRegisterFailure(status: number, raw: string | undefined) {
+  const t = raw ?? "";
+  if (
+    status === 404 ||
+    t.includes("Cannot POST") ||
+    t.includes("Cannot GET")
+  ) {
+    return (
+      "A API não expõe esta rota nesse endereço. Na Vercel, INTERNAL_API_URL deve ser a URL " +
+      "pública do backend Nest (ex.: Railway), sem barra no final — não use a URL do site Next."
+    );
+  }
+  return t || "Não foi possível cadastrar.";
+}
+
 export type RegisterAccountResult =
   | { ok: true; accessToken: string }
   | { ok: false; message: string };
@@ -22,6 +54,13 @@ export async function registerAccount(input: {
         "INTERNAL_API_URL não está definida no servidor (ex.: variáveis de ambiente na Vercel).",
     };
   }
+  if (internalApiLooksLikeFrontendSite(base)) {
+    return {
+      ok: false,
+      message:
+        "INTERNAL_API_URL aponta para o mesmo domínio do site (Next). Cadastro precisa da URL pública da API Nest (Railway etc.), não da Vercel.",
+    };
+  }
   const r = await fetch(`${base}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -32,19 +71,30 @@ export async function registerAccount(input: {
     }),
     cache: "no-store",
   });
-  const data = (await r.json()) as {
+  let data: {
     accessToken?: string;
     error?: string;
     message?: string | string[];
-  };
+  } = {};
+  const text = await r.text();
+  try {
+    data = JSON.parse(text) as typeof data;
+  } catch {
+    data = {};
+  }
   if (!r.ok) {
-    const msg =
+    const rawMsg =
       typeof data.message === "string"
         ? data.message
         : Array.isArray(data.message)
           ? data.message.join(", ")
-          : (data.error ?? "Não foi possível cadastrar.");
-    return { ok: false, message: msg };
+          : typeof data.error === "string"
+            ? data.error
+            : text.trim().slice(0, 200) || undefined;
+    return {
+      ok: false,
+      message: friendlyRegisterFailure(r.status, rawMsg),
+    };
   }
   if (!data.accessToken) {
     return { ok: false, message: "Resposta inválida da API." };
