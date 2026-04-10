@@ -4,19 +4,15 @@ import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  fetchInvitePreview,
+  registerAccount,
+} from "@/actions/auth-register";
 import { acceptWorkspaceInvite } from "@/actions/workspace";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-/** URL da API acessível no browser (cadastro, preview de convite). */
-function publicApiBase() {
-  const u =
-    process.env.NEXT_PUBLIC_INTERNAL_API_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_URL?.trim();
-  return u ? u.replace(/\/$/, "") : "";
-}
 
 export function LoginPageClient() {
   const router = useRouter();
@@ -43,29 +39,15 @@ export function LoginPageClient() {
 
   useEffect(() => {
     if (!inviteToken) return;
-    const base = publicApiBase();
-    if (!base) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch(
-          `${base}/auth/invite-preview?token=${encodeURIComponent(inviteToken)}`,
-          { cache: "no-store" },
-        );
-        const data = (await r.json()) as {
-          valid?: boolean;
-          workspaceName?: string;
-          email?: string;
-        };
-        if (cancelled || !data.valid) return;
-        setInviteBanner({
-          workspaceName: data.workspaceName ?? "Workspace",
-          email: data.email,
-        });
-        if (data.email) setEmail(data.email);
-      } catch {
-        /* ignore */
-      }
+    void (async () => {
+      const data = await fetchInvitePreview(inviteToken);
+      if (cancelled || !data.ok) return;
+      setInviteBanner({
+        workspaceName: data.workspaceName,
+        email: data.email,
+      });
+      if (data.email) setEmail(data.email);
     })();
     return () => {
       cancelled = true;
@@ -162,43 +144,19 @@ export function LoginPageClient() {
       setLoading(false);
       return;
     }
-    const base = publicApiBase();
-    if (!base) {
-      setError(
-        "Configure NEXT_PUBLIC_INTERNAL_API_URL (URL da API acessível no navegador).",
-      );
-      setLoading(false);
-      return;
-    }
     try {
-      const r = await fetch(`${base}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name: name || undefined }),
+      const result = await registerAccount({
+        email,
+        password,
+        name: name || undefined,
       });
-      const data = (await r.json()) as {
-        accessToken?: string;
-        error?: string;
-        message?: string | string[];
-      };
-      if (!r.ok) {
-        const msg =
-          typeof data.message === "string"
-            ? data.message
-            : Array.isArray(data.message)
-              ? data.message.join(", ")
-              : data.error ?? "Não foi possível cadastrar.";
-        setError(msg);
-        setLoading(false);
-        return;
-      }
-      if (!data.accessToken) {
-        setError("Resposta inválida da API.");
+      if (!result.ok) {
+        setError(result.message);
         setLoading(false);
         return;
       }
       const res = await signIn("credentials", {
-        accessToken: data.accessToken,
+        accessToken: result.accessToken,
         redirect: false,
       });
       setLoading(false);
