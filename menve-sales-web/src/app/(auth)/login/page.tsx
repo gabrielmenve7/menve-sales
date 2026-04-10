@@ -33,7 +33,9 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (res?.error) {
-      setError("Email ou senha inválidos.");
+      setError(
+        "Não foi possível entrar. Confira e-mail e senha (ex.: owner@crm.menvedigital.local / admin123). Se acabou de rodar o seed na sua máquina, a API na Railway precisa usar o mesmo DATABASE_URL desse Neon — senão o login continua 401.",
+      );
       return;
     }
     router.push("/dashboard");
@@ -62,8 +64,9 @@ export default function LoginPage() {
               </Label>
               <Input
                 id="email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                inputMode="email"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -98,7 +101,8 @@ export default function LoginPage() {
             </Button>
           </form>
           <p className="mt-5 text-[11px] leading-relaxed text-muted-foreground">
-            Demo: owner@demo.com / admin123 · admin@menve.com / admin123
+            Exemplos: owner@demo.com / admin123 · owner@crm.menvedigital.local /
+            admin123 (tenant crm) · admin@menve.com / admin123 (super admin)
           </p>
         </CardContent>
       </Card>
