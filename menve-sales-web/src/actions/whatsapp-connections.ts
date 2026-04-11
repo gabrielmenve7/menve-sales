@@ -42,13 +42,16 @@ export async function pollEvolutionStatus(connectionId: string) {
   >(`/whatsapp-connections/${connectionId}/status`);
 }
 
-/** Reaplica webhook na Evolution (URL única, sem sufixo /messages-upsert). */
+/**
+ * Reaplica webhook na Evolution (URL única, sem sufixo /messages-upsert).
+ * Preferir `POST /api/whatsapp/connections/[id]/reapply-webhook` na UI — `revalidatePath`
+ * após action disparava digest em produção.
+ */
 export async function reapplyEvolutionWebhook(connectionId: string) {
   await assertCanConfigureTenant();
   await apiServer(`/whatsapp-connections/${connectionId}/reapply-webhook`, {
     method: "POST",
   });
-  revalidatePath("/inbox");
   return { ok: true as const };
 }
 

@@ -16,7 +16,6 @@ import {
 import {
   deleteWhatsAppConnection,
   pollEvolutionStatus,
-  reapplyEvolutionWebhook,
 } from "@/actions/whatsapp-connections";
 import {
   createQuickReply,
@@ -428,8 +427,21 @@ export function SettingsChannels({
   async function onReapplyEvolutionWebhook(connectionId: string) {
     setReapplyWebhookId(connectionId);
     try {
-      await reapplyEvolutionWebhook(connectionId);
-      router.refresh();
+      const res = await fetch(
+        `/api/whatsapp/connections/${encodeURIComponent(connectionId)}/reapply-webhook`,
+        { method: "POST", credentials: "same-origin" },
+      );
+      let data: unknown;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Resposta inválida (HTTP ${res.status}).`);
+      }
+      const o = data as { error?: string; ok?: boolean };
+      if (!res.ok) {
+        throw new Error(o.error?.trim() || `Falha ao reaplicar webhook (HTTP ${res.status}).`);
+      }
+      reloadSettingsChannelsPage();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Falha ao reaplicar webhook");
     } finally {
