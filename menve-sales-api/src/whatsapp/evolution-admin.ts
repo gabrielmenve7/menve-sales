@@ -328,6 +328,10 @@ export async function resolveQrDataUrl(
   return null;
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
 /** Tenta obter QR após create ou refresh (connect). */
 export async function getPairingQrDataUrl(args: {
   baseUrl: string;
@@ -339,10 +343,17 @@ export async function getPairingQrDataUrl(args: {
     const fromCreate = await resolveQrDataUrl(args.createResponse);
     if (fromCreate) return fromCreate;
   }
-  const connectJson = await fetchEvolutionConnect({
-    baseUrl: args.baseUrl,
-    apiKey: args.apiKey,
-    instanceName: args.instanceName,
-  });
-  return resolveQrDataUrl(connectJson);
+  /** Evolution v2 às vezes responde `{ count: 0 }` até o socket estabilizar; retries curtos evitam “Sem QR”. */
+  const maxAttempts = 12;
+  for (let i = 0; i < maxAttempts; i++) {
+    const connectJson = await fetchEvolutionConnect({
+      baseUrl: args.baseUrl,
+      apiKey: args.apiKey,
+      instanceName: args.instanceName,
+    });
+    const qr = await resolveQrDataUrl(connectJson);
+    if (qr) return qr;
+    if (i < maxAttempts - 1) await sleep(750);
+  }
+  return null;
 }

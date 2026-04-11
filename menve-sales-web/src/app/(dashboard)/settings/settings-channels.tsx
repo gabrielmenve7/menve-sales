@@ -17,8 +17,6 @@ import {
   deleteWhatsAppConnection,
   pollEvolutionStatus,
   reapplyEvolutionWebhook,
-  refreshEvolutionQr,
-  startEvolutionPairing,
 } from "@/actions/whatsapp-connections";
 import {
   createQuickReply,
@@ -78,6 +76,52 @@ const QR_COUNTDOWN = 60;
 /** Navegação completa evita `router.refresh()` (refetch RSC) que em produção gerava digest + modal sem QR. */
 function reloadSettingsChannelsPage() {
   window.location.assign("/settings?tab=channels");
+}
+
+type EvolutionPairOk = { ok: true; connectionId: string; qrDataUrl: string };
+
+async function evolutionPairHttp(): Promise<EvolutionPairOk> {
+  const res = await fetch("/api/whatsapp/pair", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`Resposta inválida (HTTP ${res.status}).`);
+  }
+  const o = data as { error?: string; connectionId?: string; qrDataUrl?: string; ok?: boolean };
+  if (!res.ok) {
+    throw new Error(o.error?.trim() || `Falha ao iniciar pareamento (HTTP ${res.status}).`);
+  }
+  if (!o.qrDataUrl?.trim() || !o.connectionId) {
+    throw new Error(o.error?.trim() || "A API não retornou o QR Code.");
+  }
+  return { ok: true, connectionId: o.connectionId, qrDataUrl: o.qrDataUrl };
+}
+
+async function evolutionRefreshQrHttp(connectionId: string): Promise<{ ok: true; qrDataUrl: string }> {
+  const res = await fetch(
+    `/api/whatsapp/connections/${encodeURIComponent(connectionId)}/refresh-qr`,
+    { method: "POST", credentials: "same-origin" },
+  );
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`Resposta inválida (HTTP ${res.status}).`);
+  }
+  const o = data as { error?: string; qrDataUrl?: string; ok?: boolean };
+  if (!res.ok) {
+    throw new Error(o.error?.trim() || `Falha ao recarregar QR (HTTP ${res.status}).`);
+  }
+  if (!o.qrDataUrl?.trim()) {
+    throw new Error(o.error?.trim() || "Sem QR na resposta.");
+  }
+  return { ok: true, qrDataUrl: o.qrDataUrl };
 }
 
 export function SettingsChannels({
@@ -159,7 +203,7 @@ export function SettingsChannels({
     setLoading(true);
     setPairingError(null);
     try {
-      const r = await startEvolutionPairing();
+      const r = await evolutionPairHttp();
       if (!r.qrDataUrl?.trim()) {
         throw new Error("A API não retornou o QR Code. Verifique Evolution e PUBLIC_APP_URL.");
       }
@@ -305,7 +349,7 @@ export function SettingsChannels({
     setRefreshQrLoading(true);
     setPairingError(null);
     try {
-      const r = await refreshEvolutionQr(pairingConnId);
+      const r = await evolutionRefreshQrHttp(pairingConnId);
       setQrDataUrl(r.qrDataUrl);
       setSecondsLeft(QR_COUNTDOWN);
     } catch (e) {

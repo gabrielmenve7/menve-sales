@@ -4,7 +4,11 @@ import { apiServer } from "@/lib/api-server";
 import { assertCanConfigureTenant } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 
-/** Cria conexão no Menve, instância na Evolution com webhook e devolve QR. */
+/**
+ * Cria conexão no Menve, instância na Evolution com webhook e devolve QR.
+ * Preferir `POST /api/whatsapp/pair` na UI: o QR em data URL é grande e Server Actions
+ * passam pelo Flight (risco de digest/falha em produção).
+ */
 export async function startEvolutionPairing(input?: { name?: string }) {
   await assertCanConfigureTenant();
   const r = await apiServer<{
@@ -21,6 +25,7 @@ export async function startEvolutionPairing(input?: { name?: string }) {
   return r;
 }
 
+/** Preferir `POST /api/whatsapp/connections/[id]/refresh-qr` na UI (payload grande). */
 export async function refreshEvolutionQr(connectionId: string) {
   await assertCanConfigureTenant();
   return apiServer<{ ok: true; qrDataUrl: string }>(
