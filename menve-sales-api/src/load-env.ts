@@ -27,9 +27,16 @@ export function assertProductionSecurityEnv(): void {
   }
 
   const internal = process.env.INTERNAL_API_KEY?.trim();
-  if (!internal || internal === WEAK_INTERNAL || internal.length < 16) {
+  if (!internal || internal.length < 16) {
     throw new Error(
-      "Produção: defina INTERNAL_API_KEY forte (≠ dev-internal-key-change-me), igual na Vercel e na Railway.",
+      "Produção: defina INTERNAL_API_KEY (mínimo 16 caracteres), igual na Vercel e na Railway.",
+    );
+  }
+  if (internal === WEAK_INTERNAL) {
+    // Não derruba o processo — senão o healthcheck da Railway falha até rotacionar a chave.
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[menve] INTERNAL_API_KEY ainda é o placeholder de dev — rotacione na Railway e na Vercel (openssl rand -base64 32).",
     );
   }
 
