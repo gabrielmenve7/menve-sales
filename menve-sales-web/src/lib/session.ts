@@ -19,12 +19,6 @@ export async function requireSession() {
 
 type ResolveRoleMode = "redirect" | "throw";
 
-/** Alinhado à API (`USE_WORKSPACE_MEMBERSHIP`): papel depende do workspace ativo. */
-function workspaceMembershipServer(): boolean {
-  const v = process.env.USE_WORKSPACE_MEMBERSHIP?.trim().toLowerCase();
-  return v === "true" || v === "1";
-}
-
 async function resolveRoleAndTenantId(
   session: {
     user: {
@@ -43,9 +37,11 @@ async function resolveRoleAndTenantId(
   const tid =
     (tenantHint?.trim() || session.user.tenantId?.trim() || undefined) ??
     undefined;
-  /** Com membership, o JWT pode ter papel de outro workspace; /auth/profile + x-tenant-id corrige. */
-  const shouldFetchProfile =
-    roleUnset || (workspaceMembershipServer() && Boolean(tid));
+  /**
+   * Refetch do perfil quando falta role na JWT ou quando há tenant (API pode aplicar membership + legado).
+   * Não depende só de USE_WORKSPACE_MEMBERSHIP na Vercel — a API já resolve o papel.
+   */
+  const shouldFetchProfile = roleUnset || Boolean(tid);
 
   if (shouldFetchProfile) {
     const key = internalKey();

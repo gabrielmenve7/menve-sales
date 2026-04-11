@@ -275,6 +275,10 @@ export class AuthService {
     if (!user) throw new UnauthorizedException();
 
     const flag = useWorkspaceMembership();
+    if (flag && user.role !== UserRole.SUPER_ADMIN) {
+      await this.workspaceAccess.ensureLegacyPrimaryTenantMembership(userId);
+    }
+
     const workspaces = flag
       ? (await this.workspaceAccess.listForUser(userId)).map((m) => ({
           id: m.tenant.id,
@@ -301,6 +305,11 @@ export class AuthService {
         tenantId = preferred.tenantId;
         workspaceRole = preferred.role;
         displayRole = workspaceRoleToUserRole(preferred.role);
+      } else if (user.tenantId) {
+        /** Sem membership ainda (só legado User): mantém tenant e papel global. */
+        tenantId = user.tenantId;
+        workspaceRole = null;
+        displayRole = user.role;
       } else {
         tenantId = null;
       }

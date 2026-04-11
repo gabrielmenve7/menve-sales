@@ -27,5 +27,7 @@ export function userRoleToWorkspaceRole(r: UserRole): WorkspaceRole {
       return WorkspaceRole.SELLER;
     case UserRole.SUPER_ADMIN:
       return WorkspaceRole.OWNER;
+    default:
+      return WorkspaceRole.SELLER;
   }
 }
