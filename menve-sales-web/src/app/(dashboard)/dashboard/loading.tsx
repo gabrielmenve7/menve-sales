@@ -1,10 +1,6 @@
 import { DashboardPageSkeleton } from "@/components/dashboard/dashboard-page-skeleton";
 
-/**
- * Conteúdo do slot da página dentro de `DashboardShell` (evita sidebar duplicada).
- * Rotas com `loading.tsx` próprio substituem só o miolo durante a navegação.
- */
-export default function DashboardLoading() {
+export default function DashboardHomeLoading() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <DashboardPageSkeleton className="min-h-[min(520px,72dvh)] flex-1" />

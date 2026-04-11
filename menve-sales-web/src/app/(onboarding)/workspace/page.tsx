@@ -4,7 +4,9 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createFirstWorkspace } from "@/actions/workspace";
+import { WorkspaceOnboardingSkeleton } from "@/components/onboarding/workspace-onboarding-skeleton";
 import { Button } from "@/components/ui/button";
+import { FormBusyOverlay } from "@/components/ui/form-busy-overlay";
 import {
   Card,
   CardContent,
@@ -17,7 +19,7 @@ import { Label } from "@/components/ui/label";
 
 export default function OnboardingWorkspacePage() {
   const router = useRouter();
-  const { update } = useSession();
+  const { update, status } = useSession();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +48,10 @@ export default function OnboardingWorkspacePage() {
     }
   }
 
+  if (status === "loading") {
+    return <WorkspaceOnboardingSkeleton />;
+  }
+
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-6 pt-8">
       <Card className="border-border/60 shadow-sm">
@@ -57,6 +63,7 @@ export default function OnboardingWorkspacePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="relative">
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ws-name">Nome do workspace</Label>
@@ -91,6 +98,8 @@ export default function OnboardingWorkspacePage() {
               {loading ? "Criando…" : "Continuar"}
             </Button>
           </form>
+          <FormBusyOverlay show={loading} label="Criando workspace…" />
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -9,8 +9,13 @@ import {
   registerAccount,
 } from "@/actions/auth-register";
 import { acceptWorkspaceInvite } from "@/actions/workspace";
+import {
+  AuthInviteBannerSkeleton,
+  AuthPageSkeleton,
+} from "@/components/auth/auth-page-skeleton";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { Button } from "@/components/ui/button";
+import { FormBusyOverlay } from "@/components/ui/form-busy-overlay";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -35,14 +40,23 @@ export function LoginPageClient() {
     workspaceName: string;
     email?: string;
   } | null>(null);
+  const [invitePreviewLoading, setInvitePreviewLoading] = useState(
+    Boolean(inviteToken),
+  );
   const inviteHandled = useRef(false);
 
   useEffect(() => {
-    if (!inviteToken) return;
+    if (!inviteToken) {
+      setInvitePreviewLoading(false);
+      return;
+    }
     let cancelled = false;
+    setInvitePreviewLoading(true);
     void (async () => {
       const data = await fetchInvitePreview(inviteToken);
-      if (cancelled || !data.ok) return;
+      if (cancelled) return;
+      setInvitePreviewLoading(false);
+      if (!data.ok) return;
       setInviteBanner({
         workspaceName: data.workspaceName,
         email: data.email,
@@ -176,9 +190,15 @@ export function LoginPageClient() {
     }
   }
 
+  if (status === "loading") {
+    return <AuthPageSkeleton denseForm={mode === "login"} />;
+  }
+
   return (
     <AuthSplitLayout>
-      {inviteBanner ? (
+      {invitePreviewLoading ? (
+        <AuthInviteBannerSkeleton />
+      ) : inviteBanner ? (
         <div
           className="mb-6 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm dark:border-primary/30 dark:bg-primary/10"
           role="status"
@@ -219,46 +239,50 @@ export function LoginPageClient() {
       </div>
 
       {mode === "login" ? (
-        <form onSubmit={onSubmitLogin} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-[13px]">
-              E-mail
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              readOnly={Boolean(inviteBanner?.email)}
-              className="h-10"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-[13px]">
-              Senha
-            </Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="h-10"
-            />
-          </div>
-          {error ? (
-            <p className="text-[13px] text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <Button type="submit" className="h-10 w-full text-[13px]" disabled={loading}>
-            {loading ? "Entrando…" : "Entrar"}
-          </Button>
-        </form>
+        <div className="relative">
+          <form onSubmit={onSubmitLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-[13px]">
+                E-mail
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                readOnly={Boolean(inviteBanner?.email)}
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-[13px]">
+                Senha
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="h-10"
+              />
+            </div>
+            {error ? (
+              <p className="text-[13px] text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <Button type="submit" className="h-10 w-full text-[13px]" disabled={loading}>
+              {loading ? "Entrando…" : "Entrar"}
+            </Button>
+          </form>
+          <FormBusyOverlay show={loading} label="Entrando…" />
+        </div>
       ) : (
+        <div className="relative">
         <form onSubmit={onSubmitRegister} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name" className="text-[13px]">
@@ -325,6 +349,8 @@ export function LoginPageClient() {
             {loading ? "Criando conta…" : "Criar conta"}
           </Button>
         </form>
+        <FormBusyOverlay show={loading} label="Criando conta…" />
+        </div>
       )}
 
       <p className="mt-6 text-center text-[12px] text-muted-foreground">
