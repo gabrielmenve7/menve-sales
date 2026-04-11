@@ -1,6 +1,9 @@
 import { apiServer } from "@/lib/api-server";
 import { assertCanConfigureTenant } from "@/lib/session";
 
+/** Pareamento pode levar ~10s+ (retries Evolution); padrão 10s da Vercel corta o QR. */
+export const maxDuration = 60;
+
 function jsonError(message: string, status: number) {
   return Response.json({ error: message }, { status });
 }

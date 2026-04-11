@@ -142,6 +142,8 @@ export function SettingsChannels({
 
   // Evolution pairing
   const [pairingOpen, setPairingOpen] = useState(false);
+  /** Modal abre já com spinner: pareamento pode levar vários segundos (Evolution + API). */
+  const [pairingStarting, setPairingStarting] = useState(false);
   const [pairingConnId, setPairingConnId] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
@@ -201,7 +203,11 @@ export function SettingsChannels({
 
   async function startEvolutionFlow() {
     setLoading(true);
+    setPairingStarting(true);
     setPairingError(null);
+    setQrDataUrl(null);
+    setPairingConnId(null);
+    setPairingOpen(true);
     try {
       const r = await evolutionPairHttp();
       if (!r.qrDataUrl?.trim()) {
@@ -209,7 +215,6 @@ export function SettingsChannels({
       }
       setPairingConnId(r.connectionId);
       setQrDataUrl(r.qrDataUrl);
-      setPairingOpen(true);
       setSecondsLeft(QR_COUNTDOWN);
       startPairingPoll(r.connectionId);
       startCountdown();
@@ -225,8 +230,8 @@ export function SettingsChannels({
             ? "Erro de renderização ao falar com a API. Na Vercel, defina INTERNAL_API_URL (URL pública da API Railway) e INTERNAL_API_KEY (igual à API). Depois salve e tente de novo."
             : raw;
       setPairingError(msg);
-      setPairingOpen(true);
     } finally {
+      setPairingStarting(false);
       setLoading(false);
     }
   }
@@ -824,6 +829,7 @@ export function SettingsChannels({
         onOpenChange={(o) => {
           setPairingOpen(o);
           if (!o) {
+            setPairingStarting(false);
             setPairingConnId(null);
             setQrDataUrl(null);
             setPairingError(null);
@@ -841,18 +847,29 @@ export function SettingsChannels({
           </DialogHeader>
           {pairingError && <p className="text-sm text-destructive">{pairingError}</p>}
           <div className="flex flex-col items-center gap-3">
-            {qrDataUrl ? (
+            {pairingStarting ? (
+              <div className="flex h-56 w-56 flex-col items-center justify-center gap-2 rounded-md border bg-muted px-4 text-center">
+                <Loader2 className="size-10 animate-spin text-muted-foreground" aria-hidden />
+                <p className="text-xs text-muted-foreground">Gerando QR com a Evolution… pode levar até um minuto.</p>
+              </div>
+            ) : qrDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={qrDataUrl} alt="QR Code" className="h-56 w-56 rounded-md border bg-white p-2" />
             ) : (
-              <div className="flex h-56 w-56 items-center justify-center rounded-md border bg-muted text-sm text-muted-foreground">Sem QR</div>
+              <div className="flex h-56 w-56 items-center justify-center rounded-md border bg-muted text-sm text-muted-foreground">
+                {pairingError ? "—" : "Sem QR"}
+              </div>
             )}
             <p className="text-sm text-muted-foreground">
               Tempo estimado: <span className="font-medium tabular-nums text-foreground">{secondsLeft}s</span>
             </p>
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
-            <Button variant="outline" disabled={refreshQrLoading || !pairingConnId} onClick={() => void onRefreshQr()}>
+            <Button
+              variant="outline"
+              disabled={pairingStarting || refreshQrLoading || !pairingConnId}
+              onClick={() => void onRefreshQr()}
+            >
               {refreshQrLoading ? <><Loader2 className="mr-2 size-4 animate-spin" />Gerando…</> : "Recarregar QR"}
             </Button>
             <Button variant="secondary" onClick={() => setPairingOpen(false)}>Fechar</Button>

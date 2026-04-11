@@ -245,6 +245,30 @@ export async function fetchEvolutionConnectionState(args: {
   };
 }
 
+/**
+ * Evolution v2 costuma aninhar QR em `instance` (create/connect).
+ * Sem isso, `code`/`qrcode` no nível errado faz `resolveQrDataUrl` retornar null.
+ */
+function evolutionPayloadRoot(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return payload;
+  }
+  const p = payload as Record<string, unknown>;
+  const inst = p.instance;
+  if (inst && typeof inst === "object" && !Array.isArray(inst)) {
+    const i = inst as Record<string, unknown>;
+    return {
+      ...p,
+      qrcode: p.qrcode ?? i.qrcode,
+      code: p.code ?? i.code,
+      base64: p.base64 ?? i.base64,
+      pairingCode: p.pairingCode ?? i.pairingCode,
+      count: p.count ?? i.count,
+    };
+  }
+  return payload;
+}
+
 function isLikelyImageBase64(s: string) {
   const t = s.trim();
   if (t.startsWith("data:image")) return true;
@@ -295,12 +319,13 @@ export function extractBase64ImageFromUnknown(payload: unknown): string | null {
 export async function resolveQrDataUrl(
   payload: unknown,
 ): Promise<string | null> {
-  const b64 = extractBase64ImageFromUnknown(payload);
+  const root = evolutionPayloadRoot(payload);
+  const b64 = extractBase64ImageFromUnknown(root);
   if (b64) {
     return `data:image/png;base64,${b64}`;
   }
 
-  const p = payload as Record<string, unknown>;
+  const p = root as Record<string, unknown>;
   const qr = p.qrcode as Record<string, unknown> | undefined;
   const nestedCode =
     qr && typeof qr.code === "string" ? qr.code : null;
@@ -344,7 +369,7 @@ export async function getPairingQrDataUrl(args: {
     if (fromCreate) return fromCreate;
   }
   /** Evolution v2 às vezes responde `{ count: 0 }` até o socket estabilizar; retries curtos evitam “Sem QR”. */
-  const maxAttempts = 12;
+  const maxAttempts = 15;
   for (let i = 0; i < maxAttempts; i++) {
     const connectJson = await fetchEvolutionConnect({
       baseUrl: args.baseUrl,

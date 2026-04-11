@@ -1,6 +1,8 @@
 import { apiServer } from "@/lib/api-server";
 import { assertCanConfigureTenant } from "@/lib/session";
 
+export const maxDuration = 60;
+
 function jsonError(message: string, status: number) {
   return Response.json({ error: message }, { status });
 }
