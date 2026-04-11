@@ -1,5 +1,5 @@
 import { apiServer } from "@/lib/api-server";
-import { assertCanConfigureTenant } from "@/lib/session";
+import { assertCanConfigureTenantApiRoute } from "@/lib/session";
 
 /** Pareamento pode levar ~10s+ (retries Evolution); padrão 10s da Vercel corta o QR. */
 export const maxDuration = 60;
@@ -14,7 +14,7 @@ function jsonError(message: string, status: number) {
  */
 export async function POST(req: Request) {
   try {
-    await assertCanConfigureTenant();
+    await assertCanConfigureTenantApiRoute();
     let name: string | undefined;
     try {
       const b = (await req.json()) as { name?: string };

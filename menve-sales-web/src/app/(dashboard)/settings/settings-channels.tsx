@@ -223,12 +223,20 @@ export function SettingsChannels({
       // A lista é atualizada ao fechar o modal ou quando o pareamento conectar.
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
+      const looksLikeConcrete =
+        raw.includes("INTERNAL_API") ||
+        raw.includes("auth/profile") ||
+        raw.includes("MENVE_TENANT") ||
+        /\bAPI \d{3}\b/.test(raw) ||
+        /\bHTTP \d{3}\b/.test(raw);
       const msg =
         raw.includes("INTERNAL_API") || raw.includes("INTERNAL_API_KEY")
           ? raw
-          : raw.includes("digest") || raw.includes("Server Components")
-            ? "Erro de renderização ao falar com a API. Na Vercel, defina INTERNAL_API_URL (URL pública da API Railway) e INTERNAL_API_KEY (igual à API). Depois salve e tente de novo."
-            : raw;
+          : looksLikeConcrete
+            ? raw
+            : raw.includes("digest") || raw.includes("Server Components")
+              ? "Erro ao falar com a API (sessão ou variáveis). Na Vercel: INTERNAL_API_URL (URL pública da API Railway), INTERNAL_API_KEY (igual à Railway), AUTH_SECRET. Depois redeploy. Se o aviso persistir, abra o DevTools → Network no POST /api/whatsapp/pair e leia o JSON de erro."
+              : raw;
       setPairingError(msg);
     } finally {
       setPairingStarting(false);

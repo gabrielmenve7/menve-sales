@@ -25,22 +25,22 @@ export function assertProductionSecurityEnv(): void {
 
   const strict = process.env.ENFORCE_PRODUCTION_SECRETS === "1";
 
-  const fail = (msg: string) => {
+  const warnOrThrow = (msg: string) => {
     if (strict) throw new Error(msg);
     // eslint-disable-next-line no-console
-    console.error("[menve]", msg);
+    console.warn("[menve]", msg);
   };
 
   const jwt = process.env.JWT_SECRET?.trim();
   if (!jwt || jwt === WEAK_JWT || jwt.length < 24) {
-    fail(
+    warnOrThrow(
       "Produção: defina JWT_SECRET forte (≥24 caracteres). Ex.: openssl rand -base64 48. Exigir falha no deploy: ENFORCE_PRODUCTION_SECRETS=1",
     );
   }
 
   const internal = process.env.INTERNAL_API_KEY?.trim();
   if (!internal || internal.length < 16) {
-    fail(
+    warnOrThrow(
       "Produção: defina INTERNAL_API_KEY (≥16 caracteres), igual na Vercel. Exigir falha no deploy: ENFORCE_PRODUCTION_SECRETS=1",
     );
   } else if (internal === WEAK_INTERNAL) {

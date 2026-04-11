@@ -1,5 +1,5 @@
 import { apiServer } from "@/lib/api-server";
-import { assertCanConfigureTenant } from "@/lib/session";
+import { assertCanConfigureTenantApiRoute } from "@/lib/session";
 
 export const maxDuration = 60;
 
@@ -13,7 +13,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> },
 ) {
   try {
-    await assertCanConfigureTenant();
+    await assertCanConfigureTenantApiRoute();
     const { id } = await ctx.params;
     if (!id?.trim()) {
       return jsonError("connectionId inválido", 400);

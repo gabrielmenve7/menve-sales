@@ -17,20 +17,32 @@ export async function requireSession() {
   return session;
 }
 
-async function resolveRoleAndTenantId(session: {
-  user: {
-    id: string;
-    role: UserRole | null | undefined;
-    tenantId: string | null | undefined;
-  };
-}) {
+type ResolveRoleMode = "redirect" | "throw";
+
+async function resolveRoleAndTenantId(
+  session: {
+    user: {
+      id: string;
+      role: UserRole | null | undefined;
+      tenantId: string | null | undefined;
+    };
+  },
+  mode: ResolveRoleMode = "redirect",
+) {
   let role = session.user.role;
   let tenantId = session.user.tenantId;
   const roleUnset =
     role == null || (typeof role === "string" && role.trim() === "");
   if (roleUnset) {
     const key = internalKey();
-    if (!key) redirect("/login");
+    if (!key) {
+      if (mode === "throw") {
+        throw new Error(
+          "INTERNAL_API_KEY não definido no servidor Next (Vercel). Defina a mesma chave da API Railway.",
+        );
+      }
+      redirect("/login");
+    }
     const r = await fetch(`${apiBase()}/auth/profile`, {
       headers: {
         "x-api-key": key,
@@ -38,7 +50,15 @@ async function resolveRoleAndTenantId(session: {
       },
       cache: "no-store",
     });
-    if (!r.ok) redirect("/login");
+    if (!r.ok) {
+      if (mode === "throw") {
+        const snippet = await r.text().catch(() => "");
+        throw new Error(
+          `Não foi possível carregar o perfil (HTTP ${r.status}). Confira INTERNAL_API_URL e INTERNAL_API_KEY na Vercel. ${snippet.slice(0, 200)}`,
+        );
+      }
+      redirect("/login");
+    }
     const u = (await r.json()) as { role: UserRole; tenantId: string | null };
     role = u.role;
     tenantId = u.tenantId;
@@ -80,7 +100,24 @@ export async function canAccessAdmin() {
 
 export async function assertCanConfigureTenant() {
   const session = await requireSession();
-  const { role } = await resolveRoleAndTenantId(session);
+  const { role } = await resolveRoleAndTenantId(session, "redirect");
+  const ok =
+    role === "SUPER_ADMIN" ||
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "MANAGER";
+  if (!ok) {
+    throw new Error("Sem permissão para alterar configurações do CRM");
+  }
+}
+
+/**
+ * Mesma regra de `assertCanConfigureTenant`, mas para Route Handlers (`app/api/...`):
+ * nunca chama `redirect()` (que não pode ir dentro de try/catch e vira erro genérico / “digest” no cliente).
+ */
+export async function assertCanConfigureTenantApiRoute() {
+  const session = await requireSession();
+  const { role } = await resolveRoleAndTenantId(session, "throw");
   const ok =
     role === "SUPER_ADMIN" ||
     role === "OWNER" ||
