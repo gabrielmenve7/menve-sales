@@ -34,19 +34,22 @@ export class AppBootstrapService implements OnApplicationBootstrap {
       this.log.warn("SKIP_CANONICAL_BOOTSTRAP=1 — tenants/workspace bootstrap ignorado");
       return;
     }
-    try {
-      await this.ensureTenants();
-      await this.ensureBootstrapUsers();
-      await this.ensureWorkspaces();
-      this.log.log(
-        "Tenants canônicos e workspaces verificados (demo, vendas, crm, menve-digital).",
-      );
-    } catch (e) {
+    // Em background: upserts no DB não podem atrasar `app.listen()` (healthcheck Railway).
+    void this.runCanonicalBootstrap().catch((e) => {
       this.log.error(
-        "Falha no bootstrap canônico — o app sobe mesmo assim; rode migrate/seed se necessário.",
+        "Falha no bootstrap canônico (background) — migrate/seed se necessário.",
         e instanceof Error ? e.stack : e,
       );
-    }
+    });
+  }
+
+  private async runCanonicalBootstrap() {
+    await this.ensureTenants();
+    await this.ensureBootstrapUsers();
+    await this.ensureWorkspaces();
+    this.log.log(
+      "Tenants canônicos e workspaces verificados (demo, vendas, crm, menve-digital).",
+    );
   }
 
   private async ensureTenants() {
