@@ -3,7 +3,7 @@
 import type { WhatsAppConnection } from "@prisma/client";
 import { Copy, Loader2, Pencil, Plus, Radio, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { createMetaChannel, createInstagramChannel } from "@/actions/channels";
 import {
   fetchMetaEmbeddedSignupInfo,
@@ -75,6 +75,11 @@ function providerIcon(provider: string) {
 
 const QR_COUNTDOWN = 60;
 
+/** Navegação completa evita `router.refresh()` (refetch RSC) que em produção gerava digest + modal sem QR. */
+function reloadSettingsChannelsPage() {
+  window.location.assign("/settings?tab=channels");
+}
+
 export function SettingsChannels({
   connections,
   quickReplyCategories,
@@ -85,7 +90,6 @@ export function SettingsChannels({
   webhookBaseUrl: string;
 }) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   // New channel dialog
@@ -171,9 +175,11 @@ export function SettingsChannels({
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
       const msg =
-        raw.includes("Server Components render") || raw.includes("digest")
-          ? "Conflito ao atualizar a página em segundo plano. Faça deploy com a última correção (sem revalidar /settings no pareamento) e confira no serviço do Next: INTERNAL_API_URL e INTERNAL_API_KEY apontando para a API Railway."
-          : raw;
+        raw.includes("INTERNAL_API") || raw.includes("INTERNAL_API_KEY")
+          ? raw
+          : raw.includes("digest") || raw.includes("Server Components")
+            ? "Erro de renderização ao falar com a API. Na Vercel, defina INTERNAL_API_URL (URL pública da API Railway) e INTERNAL_API_KEY (igual à API). Depois salve e tente de novo."
+            : raw;
       setPairingError(msg);
       setPairingOpen(true);
     } finally {
@@ -288,11 +294,6 @@ export function SettingsChannels({
         if (r.ok && "connected" in r && r.connected) {
           clearInterval(id);
           setPairingOpen(false);
-          setPairingConnId(null);
-          setQrDataUrl(null);
-          setTimeout(() => {
-            startTransition(() => router.refresh());
-          }, 0);
         }
       } catch { /* ignore */ }
     }, 3000);
@@ -782,9 +783,7 @@ export function SettingsChannels({
             setPairingConnId(null);
             setQrDataUrl(null);
             setPairingError(null);
-            setTimeout(() => {
-              startTransition(() => router.refresh());
-            }, 0);
+            reloadSettingsChannelsPage();
           }
         }}
       >

@@ -58,7 +58,17 @@ export async function apiServer<T>(
   }
   const key = apiKey();
   if (!key) {
-    throw new Error("INTERNAL_API_KEY is not set");
+    const v = process.env.VERCEL === "1";
+    throw new Error(
+      v
+        ? "INTERNAL_API_KEY não definido na Vercel. Use o mesmo valor do serviço da API (Railway)."
+        : "INTERNAL_API_KEY is not set",
+    );
+  }
+  if (process.env.VERCEL === "1" && !process.env.INTERNAL_API_URL?.trim()) {
+    throw new Error(
+      "INTERNAL_API_URL não definido na Vercel. Defina a URL pública da API Nest (ex.: https://seu-app.up.railway.app), sem barra no final.",
+    );
   }
   const { json, body, headers: h, skipTenantHeader, ...rest } = init;
   const payload =
@@ -112,7 +122,18 @@ export async function apiServerText(
   const session = await auth();
   if (!session?.user?.id) throw new Error("Não autenticado");
   const key = apiKey();
-  if (!key) throw new Error("INTERNAL_API_KEY is not set");
+  if (!key) {
+    throw new Error(
+      process.env.VERCEL === "1"
+        ? "INTERNAL_API_KEY não definido na Vercel (igual à API Railway)."
+        : "INTERNAL_API_KEY is not set",
+    );
+  }
+  if (process.env.VERCEL === "1" && !process.env.INTERNAL_API_URL?.trim()) {
+    throw new Error(
+      "INTERNAL_API_URL não definido na Vercel (URL pública da API Nest).",
+    );
+  }
   const { skipTenantHeader, headers: h, ...rest } = init;
 
   let tenantHeader: string | undefined;

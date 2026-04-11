@@ -15,10 +15,9 @@ export async function startEvolutionPairing(input?: { name?: string }) {
     method: "POST",
     json: input?.name ? { name: input.name } : {},
   });
-  revalidatePath("/inbox");
-  // Não revalidar /settings aqui: invalidar essa rota força refetch do Server Component
-  // enquanto o modal do QR está aberto e em produção costuma gerar digest + "Sem QR".
-  // A lista em Configurações atualiza ao fechar o modal (router.refresh) ou em outras ações.
+  // Não usar revalidatePath aqui: em App Router, revalidar /inbox (ou /settings) pode
+  // disparar refetch de layout/página e competir com o modal do QR → digest "Server Components".
+  // A UI atualiza com navegação completa após fechar o modal (location.assign).
   return r;
 }
 
