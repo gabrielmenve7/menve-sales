@@ -259,7 +259,7 @@ export class AuthService {
     return this.toLoginResponse(user, tid);
   }
 
-  async getMe(userId: string) {
+  async getMe(userId: string, activeTenantIdHint?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -292,7 +292,9 @@ export class AuthService {
 
     if (flag && user.role !== UserRole.SUPER_ADMIN) {
       const memberships = await this.workspaceAccess.listForUser(userId);
+      const hint = activeTenantIdHint?.trim();
       const preferred =
+        (hint ? memberships.find((x) => x.tenantId === hint) : undefined) ??
         memberships.find((x) => x.tenantId === user.lastActiveTenantId) ??
         memberships[0];
       if (preferred) {

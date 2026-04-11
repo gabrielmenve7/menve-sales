@@ -65,12 +65,14 @@ export class AuthController {
   profile(
     @Headers("x-api-key") apiKey: string | undefined,
     @Headers("x-user-id") userId: string | undefined,
+    @Headers("x-tenant-id") activeTenantId: string | undefined,
   ) {
     const expected = process.env.INTERNAL_API_KEY?.trim();
     if (!expected || apiKey !== expected || !userId) {
       throw new UnauthorizedException();
     }
-    return this.auth.getMe(userId);
+    const tid = activeTenantId?.trim();
+    return this.auth.getMe(userId, tid ? tid : undefined);
   }
 
   /** JWT only (NextAuth refresh); no x-tenant-id required. */

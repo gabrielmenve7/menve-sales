@@ -19,6 +19,12 @@ export async function requireSession() {
 
 type ResolveRoleMode = "redirect" | "throw";
 
+/** Alinhado à API (`USE_WORKSPACE_MEMBERSHIP`): papel depende do workspace ativo. */
+function workspaceMembershipServer(): boolean {
+  const v = process.env.USE_WORKSPACE_MEMBERSHIP?.trim().toLowerCase();
+  return v === "true" || v === "1";
+}
+
 async function resolveRoleAndTenantId(
   session: {
     user: {
@@ -28,12 +34,20 @@ async function resolveRoleAndTenantId(
     };
   },
   mode: ResolveRoleMode = "redirect",
+  tenantHint?: string | null,
 ) {
   let role = session.user.role;
   let tenantId = session.user.tenantId;
   const roleUnset =
     role == null || (typeof role === "string" && role.trim() === "");
-  if (roleUnset) {
+  const tid =
+    (tenantHint?.trim() || session.user.tenantId?.trim() || undefined) ??
+    undefined;
+  /** Com membership, o JWT pode ter papel de outro workspace; /auth/profile + x-tenant-id corrige. */
+  const shouldFetchProfile =
+    roleUnset || (workspaceMembershipServer() && Boolean(tid));
+
+  if (shouldFetchProfile) {
     const key = internalKey();
     if (!key) {
       if (mode === "throw") {
@@ -43,11 +57,13 @@ async function resolveRoleAndTenantId(
       }
       redirect("/login");
     }
+    const headers: Record<string, string> = {
+      "x-api-key": key,
+      "x-user-id": session.user.id,
+    };
+    if (tid) headers["x-tenant-id"] = tid;
     const r = await fetch(`${apiBase()}/auth/profile`, {
-      headers: {
-        "x-api-key": key,
-        "x-user-id": session.user.id,
-      },
+      headers,
       cache: "no-store",
     });
     if (!r.ok) {
@@ -72,7 +88,11 @@ export async function getActiveTenantId() {
   const tenant = await getTenantFromRequest();
   if (!tenant) redirect("/setup");
 
-  const { role, tenantId: userTenantId } = await resolveRoleAndTenantId(session);
+  const { role, tenantId: userTenantId } = await resolveRoleAndTenantId(
+    session,
+    "redirect",
+    tenant.id,
+  );
 
   if (role === "SUPER_ADMIN") {
     return tenant.id;
@@ -88,26 +108,53 @@ export async function getActiveTenantId() {
 export async function canAccessAdmin() {
   const session = await auth();
   if (!session?.user?.id) return false;
-  const { role } = await resolveRoleAndTenantId({
-    user: {
-      id: session.user.id,
-      role: session.user.role,
-      tenantId: session.user.tenantId,
+  let t: Awaited<ReturnType<typeof getTenantFromRequest>> = null;
+  try {
+    t = await getTenantFromRequest();
+  } catch {
+    /* */
+  }
+  const hint = session.user.tenantId?.trim() || t?.id || null;
+  const { role } = await resolveRoleAndTenantId(
+    {
+      user: {
+        id: session.user.id,
+        role: session.user.role,
+        tenantId: session.user.tenantId,
+      },
     },
-  });
+    "redirect",
+    hint,
+  );
   return role === "SUPER_ADMIN";
+}
+
+async function activeTenantHintForSession(session: {
+  user: { tenantId?: string | null };
+}) {
+  let t: Awaited<ReturnType<typeof getTenantFromRequest>> = null;
+  try {
+    t = await getTenantFromRequest();
+  } catch {
+    /* host sem tenant */
+  }
+  return session.user.tenantId?.trim() || t?.id || null;
 }
 
 export async function assertCanConfigureTenant() {
   const session = await requireSession();
-  const { role } = await resolveRoleAndTenantId(session, "redirect");
+  const hint = await activeTenantHintForSession(session);
+  const { role } = await resolveRoleAndTenantId(session, "redirect", hint);
   const ok =
     role === "SUPER_ADMIN" ||
     role === "OWNER" ||
     role === "ADMIN" ||
     role === "MANAGER";
   if (!ok) {
-    throw new Error("Sem permissão para alterar configurações do CRM");
+    throw new Error(
+      `Sem permissão para alterar configurações do CRM (papel neste workspace: ${String(role)}). ` +
+        "Só OWNER, ADMIN, MANAGER ou SUPER_ADMIN. Peça upgrade do papel ou use um usuário administrador.",
+    );
   }
 }
 
@@ -117,27 +164,36 @@ export async function assertCanConfigureTenant() {
  */
 export async function assertCanConfigureTenantApiRoute() {
   const session = await requireSession();
-  const { role } = await resolveRoleAndTenantId(session, "throw");
+  const hint = await activeTenantHintForSession(session);
+  const { role } = await resolveRoleAndTenantId(session, "throw", hint);
   const ok =
     role === "SUPER_ADMIN" ||
     role === "OWNER" ||
     role === "ADMIN" ||
     role === "MANAGER";
   if (!ok) {
-    throw new Error("Sem permissão para alterar configurações do CRM");
+    throw new Error(
+      `Sem permissão para alterar configurações do CRM (papel neste workspace: ${String(role)}). ` +
+        "Só OWNER, ADMIN, MANAGER ou SUPER_ADMIN.",
+    );
   }
 }
 
 export async function canConfigureTenant() {
   const session = await auth();
   if (!session?.user?.id) return false;
-  const { role } = await resolveRoleAndTenantId({
-    user: {
-      id: session.user.id,
-      role: session.user.role,
-      tenantId: session.user.tenantId,
+  const hint = await activeTenantHintForSession(session);
+  const { role } = await resolveRoleAndTenantId(
+    {
+      user: {
+        id: session.user.id,
+        role: session.user.role,
+        tenantId: session.user.tenantId,
+      },
     },
-  });
+    "redirect",
+    hint,
+  );
   return (
     role === "SUPER_ADMIN" ||
     role === "OWNER" ||
@@ -149,13 +205,18 @@ export async function canConfigureTenant() {
 export async function canManageWorkspaceFeatures() {
   const session = await auth();
   if (!session?.user?.id) return false;
-  const { role } = await resolveRoleAndTenantId({
-    user: {
-      id: session.user.id,
-      role: session.user.role,
-      tenantId: session.user.tenantId,
+  const hint = await activeTenantHintForSession(session);
+  const { role } = await resolveRoleAndTenantId(
+    {
+      user: {
+        id: session.user.id,
+        role: session.user.role,
+        tenantId: session.user.tenantId,
+      },
     },
-  });
+    "redirect",
+    hint,
+  );
   return (
     role === "SUPER_ADMIN" ||
     role === "OWNER" ||
@@ -165,7 +226,8 @@ export async function canManageWorkspaceFeatures() {
 
 export async function assertCanManageWorkspaceFeatures() {
   const session = await requireSession();
-  const { role } = await resolveRoleAndTenantId(session);
+  const hint = await activeTenantHintForSession(session);
+  const { role } = await resolveRoleAndTenantId(session, "redirect", hint);
   const ok =
     role === "SUPER_ADMIN" ||
     role === "OWNER" ||
