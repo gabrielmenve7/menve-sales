@@ -3,7 +3,7 @@
 import type { WhatsAppConnection } from "@prisma/client";
 import { Copy, Loader2, Pencil, Plus, Radio, RefreshCw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createMetaChannel, createInstagramChannel } from "@/actions/channels";
 import {
   fetchMetaEmbeddedSignupInfo,
@@ -85,6 +85,7 @@ export function SettingsChannels({
   webhookBaseUrl: string;
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   // New channel dialog
@@ -155,15 +156,25 @@ export function SettingsChannels({
     setPairingError(null);
     try {
       const r = await startEvolutionPairing();
+      if (!r.qrDataUrl?.trim()) {
+        throw new Error("A API não retornou o QR Code. Verifique Evolution e PUBLIC_APP_URL.");
+      }
       setPairingConnId(r.connectionId);
       setQrDataUrl(r.qrDataUrl);
       setPairingOpen(true);
       setSecondsLeft(QR_COUNTDOWN);
       startPairingPoll(r.connectionId);
       startCountdown();
-      router.refresh();
+      // Não chamar router.refresh() aqui: em produção o refetch do Server Component
+      // (/settings) pode falhar ou competir com o estado do modal e gerar digest + "Sem QR".
+      // A lista é atualizada ao fechar o modal ou quando o pareamento conectar.
     } catch (e) {
-      setPairingError(e instanceof Error ? e.message : "Falha ao iniciar pareamento");
+      const raw = e instanceof Error ? e.message : String(e);
+      const msg =
+        raw.includes("Server Components render") || raw.includes("digest")
+          ? "Conflito ao atualizar a página em segundo plano. Faça deploy com a última correção (sem revalidar /settings no pareamento) e confira no serviço do Next: INTERNAL_API_URL e INTERNAL_API_KEY apontando para a API Railway."
+          : raw;
+      setPairingError(msg);
       setPairingOpen(true);
     } finally {
       setLoading(false);
@@ -279,7 +290,9 @@ export function SettingsChannels({
           setPairingOpen(false);
           setPairingConnId(null);
           setQrDataUrl(null);
-          router.refresh();
+          setTimeout(() => {
+            startTransition(() => router.refresh());
+          }, 0);
         }
       } catch { /* ignore */ }
     }, 3000);
@@ -761,7 +774,20 @@ export function SettingsChannels({
       </Dialog>
 
       {/* Evolution QR pairing dialog */}
-      <Dialog open={pairingOpen} onOpenChange={(o) => { setPairingOpen(o); if (!o) { setPairingConnId(null); setQrDataUrl(null); setPairingError(null); } }}>
+      <Dialog
+        open={pairingOpen}
+        onOpenChange={(o) => {
+          setPairingOpen(o);
+          if (!o) {
+            setPairingConnId(null);
+            setQrDataUrl(null);
+            setPairingError(null);
+            setTimeout(() => {
+              startTransition(() => router.refresh());
+            }, 0);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Conectar WhatsApp</DialogTitle>
