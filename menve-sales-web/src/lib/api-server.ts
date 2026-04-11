@@ -80,7 +80,13 @@ export async function apiServer<T>(
       tenantHeader = session.user.tenantId;
     } else {
       const tenant = await getTenantFromRequest();
-      if (!tenant) throw new Error("tenant");
+      if (!tenant) {
+        throw new Error(
+          "MENVE_TENANT: não foi possível resolver o tenant desta requisição. " +
+            "Na Vercel: defina DATABASE_URL (recomendado) ou garanta DEFAULT_TENANT_SLUG / host cujo primeiro subdomínio seja o slug do tenant (ex. vendas.seudominio.com). " +
+            "Confirme também workspace ativo na sessão após login.",
+        );
+      }
       tenantHeader = tenant.id;
     }
   }
@@ -142,7 +148,12 @@ export async function apiServerText(
       tenantHeader = session.user.tenantId;
     } else {
       const tenant = await getTenantFromRequest();
-      if (!tenant) throw new Error("tenant");
+      if (!tenant) {
+        throw new Error(
+          "MENVE_TENANT: não foi possível resolver o tenant desta requisição. " +
+            "Na Vercel: defina DATABASE_URL ou DEFAULT_TENANT_SLUG / slug no host. Confirme workspace na sessão.",
+        );
+      }
       tenantHeader = tenant.id;
     }
   }

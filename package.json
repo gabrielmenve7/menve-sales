@@ -25,7 +25,8 @@
     "test": "vitest --config ./menve-sales-web/vitest.config.ts",
     "test:e2e": "playwright test --config ./menve-sales-web/playwright.config.ts",
     "smoke:prod": "tsx ./menve-sales-api/scripts/smoke-production-check.ts",
-    "deploy:vercel": "npx --yes vercel@latest deploy --prod --yes"
+    "deploy:vercel": "npx --yes vercel@latest deploy --prod --yes",
+    "diagnose:api-bridge": "tsx ./menve-sales-api/scripts/diagnose-internal-bridge.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

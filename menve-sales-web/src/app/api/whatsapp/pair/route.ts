@@ -33,6 +33,9 @@ export async function POST(req: Request) {
     if (msg === "Não autenticado" || msg.includes("Sem permissão")) {
       return jsonError(msg, 403);
     }
+    if (msg.startsWith("MENVE_TENANT:")) {
+      return jsonError(msg.slice("MENVE_TENANT:".length).trim(), 422);
+    }
     const m = /^API (\d+):\s*([\s\S]*)$/.exec(msg);
     if (m) {
       const code = Number(m[1]);
