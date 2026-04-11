@@ -24,7 +24,8 @@
     "whatsapp:outbound-e2e": "tsx ./menve-sales-api/scripts/whatsapp-outbound-e2e.ts",
     "test": "vitest --config ./menve-sales-web/vitest.config.ts",
     "test:e2e": "playwright test --config ./menve-sales-web/playwright.config.ts",
-    "smoke:prod": "tsx ./menve-sales-api/scripts/smoke-production-check.ts"
+    "smoke:prod": "tsx ./menve-sales-api/scripts/smoke-production-check.ts",
+    "deploy:vercel": "npx --yes vercel@latest deploy --prod --yes"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

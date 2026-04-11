@@ -1,0 +1,8 @@
+# Reduz upload no `vercel deploy` (CLI) — não afeta builds via Git na Vercel.
+.cursor
+**/.next
+menve-sales-api/dist
+menve-sales-api/node_modules
+playwright-report
+test-results
+**/*.tsbuildinfo
