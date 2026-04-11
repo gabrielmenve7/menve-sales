@@ -58,14 +58,14 @@ export async function apiServer<T>(
   }
   const key = apiKey();
   if (!key) {
-    const v = process.env.VERCEL === "1";
+    const v = Boolean(process.env.VERCEL);
     throw new Error(
       v
         ? "INTERNAL_API_KEY não definido na Vercel. Use o mesmo valor do serviço da API (Railway)."
         : "INTERNAL_API_KEY is not set",
     );
   }
-  if (process.env.VERCEL === "1" && !process.env.INTERNAL_API_URL?.trim()) {
+  if (process.env.VERCEL && !process.env.INTERNAL_API_URL?.trim()) {
     throw new Error(
       "INTERNAL_API_URL não definido na Vercel. Defina a URL pública da API Nest (ex.: https://seu-app.up.railway.app), sem barra no final.",
     );
@@ -124,12 +124,12 @@ export async function apiServerText(
   const key = apiKey();
   if (!key) {
     throw new Error(
-      process.env.VERCEL === "1"
+      process.env.VERCEL
         ? "INTERNAL_API_KEY não definido na Vercel (igual à API Railway)."
         : "INTERNAL_API_KEY is not set",
     );
   }
-  if (process.env.VERCEL === "1" && !process.env.INTERNAL_API_URL?.trim()) {
+  if (process.env.VERCEL && !process.env.INTERNAL_API_URL?.trim()) {
     throw new Error(
       "INTERNAL_API_URL não definido na Vercel (URL pública da API Nest).",
     );

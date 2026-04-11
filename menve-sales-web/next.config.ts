@@ -8,6 +8,12 @@ loadEnvConfig(appRoot);
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client"],
+  /** Resposta do pareamento Evolution inclui data URL do QR; o padrão 1MB pode truncar/falhar no Flight. */
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "8mb",
+    },
+  },
   turbopack: {
     root: path.join(__dirname, ".."),
   },
