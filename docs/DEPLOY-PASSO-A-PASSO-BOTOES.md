@@ -72,7 +72,7 @@ Mantenha o **Build Command:** `cd menve-sales-api && npm ci && npm run build` e 
 **Opção 3 — sem `ci` (só se ainda falhar):** Build Command temporário: `cd menve-sales-api && npm install && npm run build` (menos reproduzível que `npm ci`, use só para destravar).
 8. **Domínio customizado da API:** **Settings** → **Networking** → **Custom Domain** → digite `api.vendas.menvedigital.com.br` → **Add**. A Railway mostra um **CNAME** alvo (ex.: `xxxx.railway.app` ou similar). **Anote** esse alvo — você vai colar no DNS na Parte D.
 
-9. No navegador, teste `https://<domínio-gerado-pela-railway>/health` até retornar JSON com `"ok":true`. Depois que o DNS da Parte D propagar, teste `https://api.vendas.menvedigital.com.br/health`.
+9. O healthcheck da Railway usa `GET /health/live` (sempre 200 se o processo subiu). Para validar Postgres, teste `https://<domínio-gerado-pela-railway>/health` até JSON com `"ok":true` e `"db":"up"`. Se o deploy falhar em **Healthcheck** com segredos fracos, os **logs** do container mostram o erro de `JWT_SECRET` / `INTERNAL_API_KEY` (produção exige chaves fortes).
 
 ### Detalhe adicional — Railway após ajuste do monorepo
 

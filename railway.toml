@@ -9,6 +9,7 @@ dockerfilePath = "menve-sales-api/Dockerfile"
 # "Start Command" com `cd ... &&`, a Railway tenta executar `cd` como binário → erro.
 # Este valor fixa o start via config-as-code (substitui overrides inválidos ao merge).
 startCommand = "node dist/main.js"
-healthcheckPath = "/health"
-healthcheckTimeout = 30
+# /health pode retornar 503 se o Neon estiver lento; /health/live não depende do DB.
+healthcheckPath = "/health/live"
+healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"

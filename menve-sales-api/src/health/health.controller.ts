@@ -11,6 +11,16 @@ import { Public } from "../common/public.decorator";
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Liveness para load balancer / Railway (sempre 200 se o processo subiu).
+   * Use `GET /health` para readiness com ping no Postgres.
+   */
+  @Public()
+  @Get("live")
+  live() {
+    return { ok: true, ts: new Date().toISOString() };
+  }
+
   @Public()
   @Get()
   async get() {
