@@ -25,6 +25,7 @@ import {
   Mail,
   Maximize2,
   MessageSquare,
+  Pencil,
   PanelRight,
   Phone,
   Send,
@@ -37,7 +38,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { patchContact } from "@/actions/contacts";
 import { updateCustomField, updateDealCustomData } from "@/actions/custom-fields";
 import {
@@ -391,6 +392,10 @@ export function PipelineDealDetailDialog({
   const [tagBusy, setTagBusy] = useState(false);
   const [dealCardLayout, setDealCardLayout] =
     useState<DealDetailLayoutMode>("central");
+  const renameLeadInputRef = useRef<HTMLInputElement>(null);
+  const [renamingLead, setRenamingLead] = useState(false);
+  const [renameLeadNameDraft, setRenameLeadNameDraft] = useState("");
+  const [renameLeadBusy, setRenameLeadBusy] = useState(false);
 
   const isEmbedded = variant === "embedded";
   const effectiveOpen = isEmbedded || open;
@@ -420,6 +425,8 @@ export function PipelineDealDetailDialog({
       setNoteBody("");
       setTagAddOpen(false);
       setNewTagName("");
+      setRenamingLead(false);
+      setRenameLeadBusy(false);
       return;
     }
     void reload();
@@ -455,6 +462,23 @@ export function PipelineDealDetailDialog({
   }, [reload, afterRemoteChange]);
 
   const d = remote?.deal ?? initial;
+
+  useEffect(() => {
+    if (!d) return;
+    if (!renamingLead) setRenameLeadNameDraft(d.contact.name);
+  }, [d?.id, d?.contact.name, renamingLead]);
+
+  useEffect(() => {
+    if (!renamingLead) return;
+    requestAnimationFrame(() => {
+      renameLeadInputRef.current?.focus();
+      renameLeadInputRef.current?.select();
+    });
+  }, [renamingLead]);
+
+  useEffect(() => {
+    setRenamingLead(false);
+  }, [initial?.id]);
 
   const activities = useMemo((): DealActivityRow[] => {
     const raw = remote?.activities;
@@ -633,6 +657,49 @@ export function PipelineDealDetailDialog({
     } finally {
       setContactFieldBusy(false);
     }
+  }
+
+  async function onRenameLeadSave() {
+    if (!d) return;
+    const t = renameLeadNameDraft.trim();
+    if (t.length < 1) return;
+    if (t === d.contact.name.trim()) {
+      setRenamingLead(false);
+      return;
+    }
+    setRenameLeadBusy(true);
+    try {
+      await patchContact({ contactId: d.contactId, name: t });
+      setRenamingLead(false);
+      await reload();
+      afterRemoteChange();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setRenameLeadBusy(false);
+    }
+  }
+
+  function onRenameLeadBlur() {
+    if (renameLeadBusy) return;
+    if (!d) return;
+    const t = renameLeadNameDraft.trim();
+    if (t.length < 1) {
+      setRenameLeadNameDraft(d.contact.name);
+      setRenamingLead(false);
+      return;
+    }
+    if (t === d.contact.name.trim()) {
+      setRenamingLead(false);
+      return;
+    }
+    void onRenameLeadSave();
+  }
+
+  function beginRenameLead() {
+    if (!d) return;
+    setRenameLeadNameDraft(d.contact.name);
+    setRenamingLead(true);
   }
 
   async function commitDealValue() {
@@ -1327,24 +1394,69 @@ export function PipelineDealDetailDialog({
           )}
         >
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-2">
-              <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
-                {d.contact.name}
-              </h2>
+            <div className="min-w-0 flex-1 space-y-2">
+              {renamingLead ? (
+                <>
+                  <span className="sr-only">Editar nome do lead</span>
+                  <Input
+                    ref={renameLeadInputRef}
+                    disabled={renameLeadBusy}
+                    placeholder="Nome do lead"
+                    className="h-auto border-0 bg-transparent px-0 py-1 text-xl font-semibold tracking-tight shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 sm:text-2xl"
+                    aria-label="Nome do lead"
+                    value={renameLeadNameDraft}
+                    onChange={(e) => setRenameLeadNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void onRenameLeadSave();
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setRenameLeadNameDraft(d.contact.name);
+                        setRenamingLead(false);
+                      }
+                    }}
+                    onBlur={() => onRenameLeadBlur()}
+                  />
+                </>
+              ) : (
+                <h2
+                  className="text-xl font-semibold tracking-tight sm:text-2xl"
+                  onDoubleClick={() => beginRenameLead()}
+                >
+                  {d.contact.name}
+                </h2>
+              )}
               {badgesRow}
             </div>
-            {onRequestClose ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 shrink-0 rounded-md"
-                onClick={onRequestClose}
-              >
-                <X className="size-4" />
-                <span className="sr-only">Fechar painel</span>
-              </Button>
-            ) : null}
+            <div className="flex shrink-0 items-center gap-1">
+              {!renamingLead ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 rounded-md"
+                  aria-label="Renomear lead"
+                  title="Renomear lead (duplo clique no nome)"
+                  onClick={() => beginRenameLead()}
+                >
+                  <Pencil className="size-4" />
+                </Button>
+              ) : null}
+              {onRequestClose ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 rounded-md"
+                  onClick={onRequestClose}
+                >
+                  <X className="size-4" />
+                  <span className="sr-only">Fechar painel</span>
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
         {panelScroll}
@@ -1370,13 +1482,60 @@ export function PipelineDealDetailDialog({
         >
           <DialogHeader className="space-y-3 border-b border-border/60 px-6 pb-4 pt-6 text-left">
             <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 space-y-2">
-                <DialogTitle className="text-2xl font-semibold tracking-tight">
-                  {d.contact.name}
-                </DialogTitle>
+              <div className="min-w-0 flex-1 space-y-2">
+                {renamingLead ? (
+                  <>
+                    <DialogTitle className="sr-only">
+                      Editar nome do lead
+                    </DialogTitle>
+                    <Input
+                      ref={renameLeadInputRef}
+                      disabled={renameLeadBusy}
+                      placeholder="Nome do lead"
+                      className="h-auto border-0 bg-transparent px-0 py-1 text-2xl font-semibold tracking-tight shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                      aria-label="Nome do lead"
+                      value={renameLeadNameDraft}
+                      onChange={(e) => setRenameLeadNameDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void onRenameLeadSave();
+                        }
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setRenameLeadNameDraft(d.contact.name);
+                          setRenamingLead(false);
+                        }
+                      }}
+                      onBlur={() => onRenameLeadBlur()}
+                    />
+                  </>
+                ) : (
+                  <DialogTitle asChild>
+                    <span
+                      className="block cursor-default text-2xl font-semibold tracking-tight"
+                      onDoubleClick={() => beginRenameLead()}
+                    >
+                      {d.contact.name}
+                    </span>
+                  </DialogTitle>
+                )}
                 {badgesRow}
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {!renamingLead ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 rounded-md"
+                    aria-label="Renomear lead"
+                    title="Renomear lead (duplo clique no nome)"
+                    onClick={() => beginRenameLead()}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                ) : null}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -1441,6 +1600,17 @@ export function PipelineDealDetailDialog({
                         )}
                         aria-hidden
                       />
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="my-1" />
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        beginRenameLead();
+                      }}
+                    >
+                      <Pencil className="size-4 shrink-0 opacity-70" />
+                      <span className="flex-1">Renomear lead</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
