@@ -49,16 +49,13 @@ export class ConversationsService {
       .safeParse(body);
 
     if (textMsg.success) {
-      const conv = await this.prisma.conversation.findFirst({
-        where: { id: conversationId, tenantId },
-      });
-      if (!conv) throw new BadRequestException("Conversa não encontrada");
       await this.messages.sendOutboundText({
         tenantId,
         connectionId: textMsg.data.connectionId,
         userId,
         toPhone: textMsg.data.toPhone,
         text: textMsg.data.text,
+        conversationId,
       });
       return;
     }
@@ -74,10 +71,6 @@ export class ConversationsService {
       .safeParse(body);
 
     if (templateMsg.success) {
-      const conv = await this.prisma.conversation.findFirst({
-        where: { id: conversationId, tenantId },
-      });
-      if (!conv) throw new BadRequestException("Conversa não encontrada");
       await this.messages.sendOutboundTemplate({
         tenantId,
         connectionId: templateMsg.data.connectionId,
@@ -86,6 +79,7 @@ export class ConversationsService {
         templateName: templateMsg.data.templateName,
         language: templateMsg.data.language,
         components: templateMsg.data.components,
+        conversationId,
       });
       return;
     }
@@ -114,11 +108,6 @@ export class ConversationsService {
       );
     }
 
-    const conv = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, tenantId },
-    });
-    if (!conv) throw new BadRequestException("Conversa não encontrada");
-
     const raw = mediaMsg.data.mediaDataUrl.replace(/\s/g, "");
     const m = /^data:([^;]+);base64,(.+)$/i.exec(raw);
     if (!m) throw new BadRequestException("mediaDataUrl inválido");
@@ -139,6 +128,7 @@ export class ConversationsService {
       mimeType,
       fileName: mediaMsg.data.fileName,
       caption: mediaMsg.data.caption,
+      conversationId,
     });
   }
 }

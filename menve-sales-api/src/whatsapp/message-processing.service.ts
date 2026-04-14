@@ -62,10 +62,24 @@ export class MessageProcessingService {
     }
 
     const phone = normalizePhone(args.inbound.from);
+    const outboundFromDevice = args.inbound.fromMe === true;
+    const remoteJid = args.inbound.debug?.remoteJid ?? "";
+    const isGroupChat = remoteJid.endsWith("@g.us");
+
     let resolvedProfileName = args.inbound.profileName?.trim();
+    if (outboundFromDevice || isGroupChat) {
+      // fromMe: pushName/notify no payload costuma ser o número conectado (nós), não o cliente —
+      // gravar isso renomeava outros leads para o mesmo nome (ex.: "Gabriel Nathan").
+      // Grupo: pushName costuma ser do participante, não do título do grupo.
+      resolvedProfileName = undefined;
+    }
+
     const provider = createWhatsAppProvider(conn);
     let profilePhotoUrl: string | null =
       args.inbound.profilePhotoUrl?.trim() || null;
+    if (outboundFromDevice) {
+      profilePhotoUrl = null;
+    }
     if (provider.getContactProfile) {
       const profile = await provider
         .getContactProfile(args.inbound.from)
@@ -132,8 +146,6 @@ export class MessageProcessingService {
         whatsappConnectionId: conn.id,
       },
     });
-
-    const outboundFromDevice = args.inbound.fromMe === true;
 
     if (!conversation) {
       conversation = await this.prisma.conversation.create({
@@ -292,42 +304,79 @@ export class MessageProcessingService {
     externalId?: string;
     mediaUrl?: string | null;
     mediaType?: string | null;
+    /** Inbox (e outros UIs com `conversationId`): evita upsert + 2ª busca de conversa. */
+    conversationId?: string;
   }): Promise<{ ok: true } | { ok: true; duplicated: true }> {
     const phone = normalizePhone(args.toPhone);
-    const contact = await this.prisma.contact.upsert({
-      where: { tenantId_phone: { tenantId: args.tenantId, phone } },
-      create: {
-        tenantId: args.tenantId,
-        name: phone,
-        phone,
-      },
-      update: {},
-    });
 
-    let conversation = await this.prisma.conversation.findFirst({
-      where: {
-        tenantId: args.tenantId,
-        contactId: contact.id,
-        whatsappConnectionId: args.conn.id,
-      },
-    });
+    let conversation: { id: string };
+    let contactId: string;
 
-    if (!conversation) {
-      conversation = await this.prisma.conversation.create({
-        data: {
+    if (args.conversationId) {
+      const row = await this.prisma.conversation.findFirst({
+        where: {
+          id: args.conversationId,
+          tenantId: args.tenantId,
+          whatsappConnectionId: args.conn.id,
+        },
+        include: {
+          contact: { select: { id: true, phone: true } },
+        },
+      });
+      if (!row) {
+        throw new Error("Conversa não encontrada");
+      }
+      if (!row.contact.phone?.trim()) {
+        throw new Error("Contato sem telefone");
+      }
+      const rowPhone = normalizePhone(row.contact.phone);
+      if (rowPhone !== phone) {
+        throw new Error("Telefone não confere com o contato da conversa");
+      }
+      await this.prisma.conversation.update({
+        where: { id: row.id },
+        data: { lastMessageAt: new Date(), assignedUserId: args.userId },
+      });
+      conversation = { id: row.id };
+      contactId = row.contactId;
+    } else {
+      const contact = await this.prisma.contact.upsert({
+        where: { tenantId_phone: { tenantId: args.tenantId, phone } },
+        create: {
+          tenantId: args.tenantId,
+          name: phone,
+          phone,
+        },
+        update: {},
+      });
+
+      let conv = await this.prisma.conversation.findFirst({
+        where: {
           tenantId: args.tenantId,
           contactId: contact.id,
           whatsappConnectionId: args.conn.id,
-          status: ConversationStatus.IN_PROGRESS,
-          assignedUserId: args.userId,
-          lastMessageAt: new Date(),
         },
       });
-    } else {
-      await this.prisma.conversation.update({
-        where: { id: conversation.id },
-        data: { lastMessageAt: new Date(), assignedUserId: args.userId },
-      });
+
+      if (!conv) {
+        conv = await this.prisma.conversation.create({
+          data: {
+            tenantId: args.tenantId,
+            contactId: contact.id,
+            whatsappConnectionId: args.conn.id,
+            status: ConversationStatus.IN_PROGRESS,
+            assignedUserId: args.userId,
+            lastMessageAt: new Date(),
+          },
+        });
+      } else {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data: { lastMessageAt: new Date(), assignedUserId: args.userId },
+        });
+      }
+      conversation = { id: conv.id };
+      contactId = contact.id;
     }
 
     if (args.externalId) {
@@ -354,7 +403,7 @@ export class MessageProcessingService {
         tenantId: args.tenantId,
         whatsappConnectionId: args.conn.id,
         conversationId: conversation.id,
-        contactId: contact.id,
+        contactId,
         userId: args.userId,
         direction: MessageDirection.OUTBOUND,
         body: args.body,
@@ -374,6 +423,7 @@ export class MessageProcessingService {
     userId: string;
     toPhone: string;
     text: string;
+    conversationId?: string;
   }) {
     const conn = await this.prisma.whatsAppConnection.findFirst({
       where: {
@@ -395,6 +445,7 @@ export class MessageProcessingService {
       conn,
       body: args.text,
       externalId: sent.externalId,
+      conversationId: args.conversationId,
     });
   }
 
@@ -408,6 +459,7 @@ export class MessageProcessingService {
     mimeType: string;
     fileName?: string;
     caption?: string;
+    conversationId?: string;
   }) {
     const conn = await this.prisma.whatsAppConnection.findFirst({
       where: {
@@ -452,6 +504,7 @@ export class MessageProcessingService {
       externalId: sent.externalId,
       mediaUrl: dataUrl,
       mediaType: args.mimeType,
+      conversationId: args.conversationId,
     });
   }
 
@@ -463,6 +516,7 @@ export class MessageProcessingService {
     templateName: string;
     language: string;
     components?: unknown[];
+    conversationId?: string;
   }) {
     const conn = await this.prisma.whatsAppConnection.findFirst({
       where: {
@@ -494,6 +548,7 @@ export class MessageProcessingService {
       conn,
       body,
       externalId: sent.externalId,
+      conversationId: args.conversationId,
     });
   }
 }
