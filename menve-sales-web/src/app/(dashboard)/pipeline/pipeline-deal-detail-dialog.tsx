@@ -393,6 +393,10 @@ export function PipelineDealDetailDialog({
   const [dealCardLayout, setDealCardLayout] =
     useState<DealDetailLayoutMode>("central");
   const renameLeadInputRef = useRef<HTMLInputElement>(null);
+  /** Evita aplicar `getDealDetail` atrasado quando o utilizador troca de conversa/deal no Inbox. */
+  const latestDealIdRef = useRef(initial?.id);
+  latestDealIdRef.current = initial?.id;
+
   const [renamingLead, setRenamingLead] = useState(false);
   const [renameLeadNameDraft, setRenameLeadNameDraft] = useState("");
   const [renameLeadBusy, setRenameLeadBusy] = useState(false);
@@ -406,12 +410,16 @@ export function PipelineDealDetailDialog({
 
   const reload = useCallback(async () => {
     if (!initial?.id) return;
+    const targetId = initial.id;
     setLoading(true);
     setLoadErr(null);
+    setRemote(null);
     try {
-      const raw = await getDealDetail(initial.id);
+      const raw = await getDealDetail(targetId);
+      if (latestDealIdRef.current !== targetId) return;
       setRemote(raw as DealDetailPayload);
     } catch (e) {
+      if (latestDealIdRef.current !== targetId) return;
       setLoadErr(e instanceof Error ? e.message : "Falha ao carregar");
     } finally {
       setLoading(false);
@@ -461,7 +469,12 @@ export function PipelineDealDetailDialog({
     afterRemoteChange();
   }, [reload, afterRemoteChange]);
 
-  const d = remote?.deal ?? initial;
+  const detailForActiveDeal = useMemo((): DealDetailPayload | null => {
+    if (!initial?.id || !remote?.deal) return null;
+    return remote.deal.id === initial.id ? remote : null;
+  }, [initial?.id, remote]);
+
+  const d = detailForActiveDeal?.deal ?? initial ?? null;
 
   useEffect(() => {
     if (!d) return;
@@ -481,7 +494,7 @@ export function PipelineDealDetailDialog({
   }, [initial?.id]);
 
   const activities = useMemo((): DealActivityRow[] => {
-    const raw = remote?.activities;
+    const raw = detailForActiveDeal?.activities;
     if (!Array.isArray(raw)) return [];
     return raw.filter((a): a is DealActivityRow => {
       if (!a || typeof a !== "object") return false;
@@ -495,7 +508,7 @@ export function PipelineDealDetailDialog({
         u !== null
       );
     });
-  }, [remote?.activities]);
+  }, [detailForActiveDeal?.activities]);
 
   const activityTimeline = useMemo(() => {
     const now = new Date();
@@ -520,10 +533,10 @@ export function PipelineDealDetailDialog({
   }, [activities]);
 
   const catalogTags = useMemo((): Tag[] => {
-    const raw = remote?.allTags;
+    const raw = detailForActiveDeal?.allTags;
     if (!Array.isArray(raw)) return [];
     return raw as Tag[];
-  }, [remote?.allTags]);
+  }, [detailForActiveDeal?.allTags]);
 
   const visibleDealCustomFields = useMemo(
     () =>
@@ -535,10 +548,10 @@ export function PipelineDealDetailDialog({
   );
 
   const campaignSources = useMemo((): CampaignSource[] => {
-    const raw = remote?.campaignSources;
+    const raw = detailForActiveDeal?.campaignSources;
     if (!Array.isArray(raw)) return [];
     return raw as CampaignSource[];
-  }, [remote?.campaignSources]);
+  }, [detailForActiveDeal?.campaignSources]);
 
   const contactJobTitle =
     d?.contact && "jobTitle" in d.contact
@@ -566,10 +579,10 @@ export function PipelineDealDetailDialog({
   }, [d?.id, d?.contact.email, d?.contact.phone, d?.contact.company, d?.value, contactJobTitle]);
 
   const stageList = useMemo(() => {
-    const fromApi = remote?.deal?.pipeline?.stages;
+    const fromApi = detailForActiveDeal?.deal?.pipeline?.stages;
     if (fromApi?.length) return fromApi;
     return [...stages].sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [remote?.deal?.pipeline?.stages, stages]);
+  }, [detailForActiveDeal?.deal?.pipeline?.stages, stages]);
 
   async function onStagePick(stageId: string) {
     if (!d || d.status !== "OPEN" || stageId === d.stageId) return;
@@ -866,7 +879,7 @@ export function PipelineDealDetailDialog({
             {loadErr ? (
               <p className="text-sm text-destructive">{loadErr}</p>
             ) : null}
-            {loading && !remote ? (
+            {loading && !detailForActiveDeal && !initial ? (
               <p className="text-sm text-muted-foreground">Carregando…</p>
             ) : null}
 
