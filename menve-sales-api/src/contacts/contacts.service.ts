@@ -6,7 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { CustomFieldEntity, Prisma } from "@prisma/client";
 import { PipelineAutomationEngineService } from "../pipeline-automations/pipeline-automation-engine.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { coerceCustomFieldValue } from "../custom-fields/custom-field-coerce";
@@ -347,15 +347,23 @@ export class ContactsService {
     contactId: string,
     values: Record<string, unknown>,
   ) {
+    const valueKeys = Object.keys(values);
+    if (valueKeys.length === 0) return;
+
     const contact = await this.prisma.contact.findFirst({
       where: { id: contactId, tenantId },
+      select: { id: true, customData: true },
     });
     if (!contact) throw new BadRequestException("Contato inválido");
 
-    const fields = await findContactCustomFieldDefinitions(
-      this.prisma,
-      tenantId,
-    );
+    const fields = await this.prisma.customField.findMany({
+      where: {
+        tenantId,
+        entity: CustomFieldEntity.CONTACT,
+        OR: [{ key: { in: valueKeys } }, { required: true }],
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
     const prev = (contact.customData as Record<string, unknown> | null) ?? {};
     const merged: Record<string, unknown> = { ...prev };
 

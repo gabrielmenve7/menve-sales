@@ -138,9 +138,7 @@ export async function updateContactCustomData(
     method: "PATCH",
     json: { values },
   });
-  revalidatePath("/pipeline", "page");
-  revalidatePath("/inbox", "page");
-  revalidatePath(`/contacts/${contactId}`, "page");
+  /** Sem revalidatePath: o painel do lead já refaz `getDealDetail` / estado local — evita custo do Next a cada campo. */
 }
 
 const updateDealDataSchema = z.object({
@@ -156,6 +154,4 @@ export async function updateDealCustomData(
     method: "PATCH",
     json: { values },
   });
-  revalidatePath("/pipeline", "page");
-  revalidatePath("/inbox", "page");
 }

@@ -6,7 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import { ActivityType, type Prisma } from "@prisma/client";
+import { ActivityType, CustomFieldEntity, type Prisma } from "@prisma/client";
 import { z } from "zod";
 import { coerceCustomFieldValue } from "../custom-fields/custom-field-coerce";
 import {
@@ -142,10 +142,20 @@ export class DealsService {
     });
     if (!deal) throw new BadRequestException("Deal não encontrado");
 
-    const fields = await findDealCustomFieldDefinitions(
-      this.prisma,
-      tenantId,
-    );
+    const valueKeys = Object.keys(values);
+    if (valueKeys.length === 0) {
+      return { ok: true as const };
+    }
+
+    /** Só definições dos campos enviados + obrigatórios (evita carregar dezenas de CF a cada blur). */
+    const fields = await this.prisma.customField.findMany({
+      where: {
+        tenantId,
+        entity: CustomFieldEntity.DEAL,
+        OR: [{ key: { in: valueKeys } }, { required: true }],
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
     const prev = (deal.customData as Record<string, unknown> | null) ?? {};
     const merged: Record<string, unknown> = { ...prev };
     const changedLabels: string[] = [];
