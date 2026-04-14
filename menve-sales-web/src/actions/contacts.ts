@@ -44,6 +44,13 @@ export async function exportContactsCsv(): Promise<string> {
   return apiServerText("/contacts/export/csv");
 }
 
+/** Lista mínima de contatos para o combo “Novo lead” no pipeline (carregar sob demanda). */
+export async function listContactsForPipeline(): Promise<
+  { id: string; name: string; phone: string | null }[]
+> {
+  return apiServer("/contacts/for-pipeline");
+}
+
 const patchContactSchema = z.object({
   contactId: z.string().min(1),
   name: z.string().min(1).max(200).optional(),

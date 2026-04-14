@@ -28,11 +28,28 @@ export default async function PipelinePage({
   const { pipelineId: queryPipelineId, tab: tabParam } = await searchParams;
   const openAutomationsFromUrl = tabParam === "automations";
 
-  const [contacts, pipelines] = await Promise.all([
-    apiServer<{ id: string; name: string; phone: string | null }[]>(
-      "/contacts/for-pipeline",
-    ),
+  const [
+    pipelines,
+    dealCustomFieldDefs,
+    members,
+    campaignSources,
+    tenantTags,
+    canConfigureAutomations,
+  ] = await Promise.all([
     apiServer<PipelineRow[]>("/pipelines"),
+    apiServer<unknown>("/custom-fields?entity=DEAL")
+      .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
+      .catch(() => [] as CustomField[]),
+    apiServer<TenantMemberOption[]>("/settings/members").catch(
+      () => [] as TenantMemberOption[],
+    ),
+    apiServer<{ id: string; name: string }[]>("/contacts/campaign-sources").catch(
+      () => [] as { id: string; name: string }[],
+    ),
+    apiServer<{ id: string; name: string }[]>("/tags").catch(
+      () => [] as { id: string; name: string }[],
+    ),
+    canConfigureTenant(),
   ]);
 
   if (pipelines.length === 0) {
@@ -50,29 +67,9 @@ export default async function PipelinePage({
     pipelines.find((p) => p.isDefault) ??
     pipelines[0];
 
-  const [
-    dealsResult,
-    dealCustomFieldDefs,
-    members,
-    campaignSources,
-    tenantTags,
-    canConfigureAutomations,
-  ] = await Promise.all([
-    apiServer<PipelineDealsPayload>(`/pipelines/${activePipeline!.id}/deals`),
-    apiServer<unknown>("/custom-fields?entity=DEAL")
-      .then((raw) => (Array.isArray(raw) ? (raw as CustomField[]) : []))
-      .catch(() => [] as CustomField[]),
-    apiServer<TenantMemberOption[]>("/settings/members").catch(
-      () => [] as TenantMemberOption[],
-    ),
-    apiServer<{ id: string; name: string }[]>("/contacts/campaign-sources").catch(
-      () => [] as { id: string; name: string }[],
-    ),
-    apiServer<{ id: string; name: string }[]>("/tags").catch(
-      () => [] as { id: string; name: string }[],
-    ),
-    canConfigureTenant(),
-  ]);
+  const dealsResult = await apiServer<PipelineDealsPayload>(
+    `/pipelines/${activePipeline!.id}/deals`,
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
@@ -80,7 +77,6 @@ export default async function PipelinePage({
         pipelines={pipelines as never}
         activePipeline={activePipeline as never}
         deals={dealsResult.deals as never}
-        contacts={contacts}
         stats={dealsResult.stats}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={members}

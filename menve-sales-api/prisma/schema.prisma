@@ -383,6 +383,7 @@ model Deal {
   pipelineAutomationAndProgress PipelineAutomationAndProgress[]
 
   @@index([tenantId, stageId])
+  @@index([tenantId, pipelineId, status])
 }
 
 model PipelineAutomationRule {

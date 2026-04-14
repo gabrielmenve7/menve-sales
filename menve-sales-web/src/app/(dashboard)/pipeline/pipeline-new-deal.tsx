@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { listContactsForPipeline } from "@/actions/contacts";
 import { createDeal } from "@/actions/deals";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,19 +22,38 @@ type ContactOpt = { id: string; name: string; phone: string | null };
 
 export function PipelineNewDeal({
   pipeline,
-  contacts,
   defaultStageId,
   variant = "toolbar",
 }: {
   pipeline: Pipeline & { stages: Stage[] };
-  contacts: ContactOpt[];
   defaultStageId?: string;
   variant?: "toolbar" | "column";
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contacts, setContacts] = useState<ContactOpt[]>([]);
 
   const stageId = defaultStageId ?? pipeline.stages[0]?.id;
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setContactsLoading(true);
+    void (async () => {
+      try {
+        const rows = await listContactsForPipeline();
+        if (!cancelled) setContacts(rows);
+      } catch {
+        if (!cancelled) setContacts([]);
+      } finally {
+        if (!cancelled) setContactsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   if (!stageId) return null;
 
@@ -98,11 +118,12 @@ export function PipelineNewDeal({
                 id="contactId"
                 name="contactId"
                 required
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                disabled={contactsLoading}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-60"
                 defaultValue=""
               >
                 <option value="" disabled>
-                  Selecione…
+                  {contactsLoading ? "Carregando contatos…" : "Selecione…"}
                 </option>
                 {contacts.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -132,12 +153,17 @@ export function PipelineNewDeal({
             </div>
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            {contacts.length === 0 ? (
+            {!contactsLoading && contacts.length === 0 ? (
               <p className="w-full text-sm text-muted-foreground">
                 Cadastre um contato antes de criar deals.
               </p>
             ) : null}
-            <Button type="submit" disabled={loading || contacts.length === 0}>
+            <Button
+              type="submit"
+              disabled={
+                loading || contactsLoading || contacts.length === 0
+              }
+            >
               {loading ? "Criando…" : "Criar deal"}
             </Button>
           </DialogFooter>

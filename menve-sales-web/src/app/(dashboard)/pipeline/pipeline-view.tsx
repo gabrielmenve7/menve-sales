@@ -101,7 +101,6 @@ function PipelineViewBody({
   pipelines,
   activePipeline,
   deals,
-  contacts,
   stats,
   dealCustomFieldDefs,
   tenantMembers,
@@ -113,7 +112,6 @@ function PipelineViewBody({
   pipelines: Pipeline[];
   activePipeline: Pipeline & { stages: Stage[] };
   deals: DealRow[];
-  contacts: { id: string; name: string; phone: string | null }[];
   stats: {
     openCount: number;
     openSum: number;
@@ -772,7 +770,6 @@ function PipelineViewBody({
         <PipelineBoard
           pipeline={activePipeline}
           deals={filteredDeals}
-          contacts={contacts}
           dealCustomFieldDefs={dealCustomFieldDefs}
           tenantMembers={tenantMembers}
         />
@@ -870,7 +867,6 @@ function PipelineViewBody({
             <PipelineListView
               pipeline={activePipeline}
               deals={filteredDeals}
-              contacts={contacts}
               dealCustomFieldDefs={dealCustomFieldDefs}
               tenantMembers={tenantMembers}
               tenantTags={tenantTags}

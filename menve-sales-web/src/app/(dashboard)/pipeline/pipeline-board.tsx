@@ -486,14 +486,12 @@ function StageColumn({
   deals,
   stageIndex,
   pipeline,
-  contacts,
   onOpenDetail,
 }: {
   stage: Stage;
   deals: DealRow[];
   stageIndex: number;
   pipeline: Pipeline & { stages: Stage[] };
-  contacts: { id: string; name: string; phone: string | null }[];
   onOpenDetail: (d: DealRow) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -553,7 +551,6 @@ function StageColumn({
         <div className="shrink-0 pt-2">
           <PipelineNewDeal
             pipeline={pipeline}
-            contacts={contacts}
             defaultStageId={stage.id}
             variant="column"
           />
@@ -566,13 +563,11 @@ function StageColumn({
 export function PipelineBoard({
   pipeline,
   deals,
-  contacts,
   dealCustomFieldDefs,
   tenantMembers = [],
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   deals: DealRow[];
-  contacts: { id: string; name: string; phone: string | null }[];
   dealCustomFieldDefs: CustomField[];
   tenantMembers?: TenantMemberOption[];
 }) {
@@ -776,7 +771,6 @@ export function PipelineBoard({
               stage={stage}
               stageIndex={idx}
               pipeline={pipeline}
-              contacts={contacts}
               deals={byStage.get(stage.id) ?? []}
               onOpenDetail={openDetail}
             />

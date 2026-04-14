@@ -314,7 +314,6 @@ function ListStageTbody({
   stageIndex,
   stageDeals,
   pipeline,
-  contacts,
   collapsed,
   onToggleCollapsed,
   selectedIds,
@@ -328,7 +327,6 @@ function ListStageTbody({
   stageIndex: number;
   stageDeals: DealRow[];
   pipeline: Pipeline & { stages: Stage[] };
-  contacts: { id: string; name: string; phone: string | null }[];
   collapsed: boolean;
   onToggleCollapsed: () => void;
   selectedIds: Set<string>;
@@ -466,7 +464,6 @@ function ListStageTbody({
             <td colSpan={COL_COUNT} className="p-1.5 pt-1.5">
               <PipelineNewDeal
                 pipeline={pipeline}
-                contacts={contacts}
                 defaultStageId={stage.id}
                 variant="column"
               />
@@ -481,7 +478,6 @@ function ListStageTbody({
 export function PipelineListView({
   pipeline,
   deals,
-  contacts,
   dealCustomFieldDefs,
   tenantMembers = [],
   tenantTags = [],
@@ -490,7 +486,6 @@ export function PipelineListView({
 }: {
   pipeline: Pipeline & { stages: Stage[] };
   deals: DealRow[];
-  contacts: { id: string; name: string; phone: string | null }[];
   dealCustomFieldDefs: CustomField[];
   tenantMembers?: TenantMemberOption[];
   tenantTags?: { id: string; name: string }[];
@@ -697,7 +692,6 @@ export function PipelineListView({
                   stageIndex={stageIndexInPipeline.get(stage.id) ?? 0}
                   stageDeals={byStage.get(stage.id) ?? []}
                   pipeline={pipeline}
-                  contacts={contacts}
                   collapsed={collapsedStageIds.has(stage.id)}
                   onToggleCollapsed={() => toggleStage(stage.id)}
                   selectedIds={selectedIds}

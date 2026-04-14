@@ -42,28 +42,77 @@ export class PipelinesService {
   }
 
   async getPipelineDeals(tenantId: string, pipelineId: string) {
-    await this.assertPipelineInTenant(pipelineId, tenantId);
-    const [deals, openSum, wonCount, lostCount] = await Promise.all([
+    const pipeline = await this.prisma.pipeline.findFirst({
+      where: { id: pipelineId, tenantId },
+      select: { id: true },
+    });
+    if (!pipeline) throw new BadRequestException("Funil inválido");
+
+    const [deals, wonCount, lostCount] = await Promise.all([
       this.prisma.deal.findMany({
         where: { tenantId, pipelineId, status: "OPEN" },
-        include: {
+        select: {
+          id: true,
+          tenantId: true,
+          contactId: true,
+          pipelineId: true,
+          stageId: true,
+          title: true,
+          value: true,
+          probability: true,
+          expectedClose: true,
+          status: true,
+          lostReason: true,
+          assignedToId: true,
+          customData: true,
+          createdAt: true,
+          updatedAt: true,
           contact: {
-            include: {
-              campaignSource: true,
-              contactTags: { include: { tag: true } },
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              email: true,
+              company: true,
+              jobTitle: true,
+              utmSource: true,
+              utmMedium: true,
+              utmCampaign: true,
+              campaignSourceId: true,
+              campaignSource: {
+                select: { id: true, name: true, code: true },
+              },
+              contactTags: {
+                select: {
+                  tag: {
+                    select: { id: true, name: true, color: true },
+                  },
+                },
+              },
             },
           },
-          stage: true,
-          dealTags: { include: { tag: true } },
+          stage: {
+            select: {
+              id: true,
+              pipelineId: true,
+              name: true,
+              sortOrder: true,
+              probability: true,
+              color: true,
+            },
+          },
+          dealTags: {
+            select: {
+              dealId: true,
+              tagId: true,
+              tag: { select: { id: true, name: true, color: true } },
+            },
+          },
           assignedTo: {
             select: { id: true, name: true, email: true, image: true },
           },
         },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      }),
-      this.prisma.deal.aggregate({
-        where: { tenantId, pipelineId, status: "OPEN" },
-        _sum: { value: true },
       }),
       this.prisma.deal.count({
         where: { tenantId, pipelineId, status: "WON" },
@@ -72,11 +121,17 @@ export class PipelinesService {
         where: { tenantId, pipelineId, status: "LOST" },
       }),
     ]);
+
+    let openSum = 0;
+    for (const d of deals) {
+      if (d.value != null) openSum += Number(d.value);
+    }
+
     return {
       deals,
       stats: {
         openCount: deals.length,
-        openSum: Number(openSum._sum.value ?? 0),
+        openSum,
         wonCount,
         lostCount,
       },
