@@ -230,6 +230,10 @@ function DealCard({
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: deal.id,
   });
+  const listenerMap = (listeners ?? {}) as {
+    onPointerDown?: React.PointerEventHandler<HTMLDivElement>;
+  } & Record<string, unknown>;
+  const { onPointerDown: dndPointerDown, ...listenersRest } = listenerMap;
 
   const originLine = dealOriginLine(deal);
 
@@ -313,8 +317,12 @@ function DealCard({
     <div
       ref={setNodeRef}
       data-pipeline-card
-      {...listeners}
+      {...listenersRest}
       {...attributes}
+      onPointerDown={(e) => {
+        dndPointerDown?.(e);
+        e.stopPropagation();
+      }}
       role="button"
       tabIndex={0}
       aria-label={`Lead ${deal.contact.name}. Arraste para mover de etapa ou clique para abrir.`}
@@ -571,7 +579,10 @@ export function PipelineBoard({
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const panningRef = useRef(false);
+  const panPointerIdRef = useRef<number | null>(null);
   const panStartRef = useRef({ x: 0, scrollLeft: 0 });
+  /** Evita pan horizontal do board competir com o arraste do @dnd-kit. */
+  const pipelineDndDraggingRef = useRef(false);
   const [isPanningBoard, setIsPanningBoard] = useState(false);
 
   const [detailDeal, setDetailDeal] = useState<DealRow | null>(null);
@@ -622,6 +633,7 @@ export function PipelineBoard({
   const onBoardPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return;
+      if (pipelineDndDraggingRef.current) return;
       const target = e.target as HTMLElement;
       if (target.closest("[data-pipeline-card]")) return;
       if (
@@ -633,6 +645,7 @@ export function PipelineBoard({
       const el = scrollRef.current;
       if (!el) return;
       panningRef.current = true;
+      panPointerIdRef.current = e.pointerId;
       setIsPanningBoard(true);
       panStartRef.current = { x: e.clientX, scrollLeft: el.scrollLeft };
       el.setPointerCapture(e.pointerId);
@@ -642,6 +655,7 @@ export function PipelineBoard({
 
   const onBoardPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (pipelineDndDraggingRef.current) return;
       if (!panningRef.current || !scrollRef.current) return;
       e.preventDefault();
       const dx = e.clientX - panStartRef.current.x;
@@ -652,17 +666,35 @@ export function PipelineBoard({
 
   const endBoardPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!scrollRef.current || !panningRef.current) return;
-    try {
-      scrollRef.current.releasePointerCapture(e.pointerId);
-    } catch {
-      /* já liberado */
+    const pid = e.pointerId ?? panPointerIdRef.current ?? undefined;
+    if (pid != null) {
+      try {
+        scrollRef.current.releasePointerCapture(pid);
+      } catch {
+        /* já liberado */
+      }
     }
+    panPointerIdRef.current = null;
     panningRef.current = false;
     setIsPanningBoard(false);
   }, []);
 
   const handleDragStart = useCallback(
     (e: DragStartEvent) => {
+      pipelineDndDraggingRef.current = true;
+      if (panningRef.current && scrollRef.current) {
+        const pid = panPointerIdRef.current;
+        if (pid != null) {
+          try {
+            scrollRef.current.releasePointerCapture(pid);
+          } catch {
+            /* já liberado */
+          }
+        }
+        panPointerIdRef.current = null;
+        panningRef.current = false;
+        setIsPanningBoard(false);
+      }
       const id = String(e.active.id);
       const d = displayedDeals.find((x) => x.id === id);
       setActiveDragDeal(d ?? null);
@@ -671,10 +703,12 @@ export function PipelineBoard({
   );
 
   const handleDragCancel = useCallback(() => {
+    pipelineDndDraggingRef.current = false;
     setActiveDragDeal(null);
   }, []);
 
   function handleDragEnd(e: DragEndEvent) {
+    pipelineDndDraggingRef.current = false;
     setActiveDragDeal(null);
     const dealId = String(e.active.id);
     const overId = e.over?.id ? String(e.over.id) : null;
@@ -727,7 +761,8 @@ export function PipelineBoard({
           aria-label="Etapas do funil: arraste nesta área para rolar horizontalmente ou use a barra de rolagem."
           className={cn(
             "pipeline-board-scroll flex min-h-0 flex-1 gap-4 overflow-x-auto overscroll-x-contain pt-1",
-            "cursor-grab touch-pan-x",
+            /* touch-pan-x faz o browser disputar o gesto horizontal com o card; pan continua via pointer events */
+            "cursor-grab touch-pan-y",
             isPanningBoard && "cursor-grabbing select-none",
           )}
           onPointerDown={onBoardPointerDown}
