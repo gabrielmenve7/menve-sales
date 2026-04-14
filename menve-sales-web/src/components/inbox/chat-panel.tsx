@@ -10,6 +10,7 @@ import {
   Paperclip,
   Send,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { addConversationNote } from "@/actions/conversation-notes";
 import {
@@ -37,7 +38,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 import { quickRepliesHaveScripts } from "@/lib/quick-reply-types";
-import type { InboxConversation } from "./inbox-types";
+import type { InboxConversation, InboxMessage } from "./inbox-types";
 import { getContactPhotoUrl, initials } from "./inbox-utils";
 import { MessageBubble } from "./message-bubble";
 
@@ -48,6 +49,37 @@ function readFileAsDataUrl(file: Blob): Promise<string> {
     r.onerror = () => reject(new Error("Leitura do arquivo falhou"));
     r.readAsDataURL(file);
   });
+}
+
+/** Mesma chave que `InboxClient` (`useQuery({ queryKey: ["inbox"] })`). */
+const INBOX_QUERY_KEY = ["inbox"] as const;
+
+type InboxQueryData = { conversations: InboxConversation[] };
+
+function buildOptimisticOutboundMessage(
+  conversation: InboxConversation,
+  body: string,
+): InboxMessage {
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? `pending:${crypto.randomUUID()}`
+      : `pending:${Date.now()}`;
+  const isMeta = conversation.whatsappConnection.provider === "META";
+  return {
+    id,
+    tenantId: conversation.tenantId,
+    whatsappConnectionId: conversation.whatsappConnectionId,
+    conversationId: conversation.id,
+    contactId: conversation.contactId,
+    userId: null,
+    direction: "OUTBOUND",
+    body,
+    mediaUrl: null,
+    mediaType: null,
+    externalId: null,
+    ackStatus: isMeta ? "DELIVERED" : "SENT",
+    createdAt: new Date(),
+  } as InboxMessage;
 }
 
 function attachmentKind(file: File): "image" | "document" | null {
@@ -70,6 +102,7 @@ export function ChatPanel({
   quickReplyCategories: QuickReplyCategoryDTO[];
   onRefetch: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [noteText, setNoteText] = useState("");
   const [noteLoading, setNoteLoading] = useState(false);
@@ -81,8 +114,9 @@ export function ChatPanel({
   const [isRecording, setIsRecording] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
-  const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  /** Evita duplo envio no mesmo instante (Enter duplo) antes do cache atualizar. */
+  const lastTextSendAtRef = useRef(0);
   const [openQuickReplyCategoryId, setOpenQuickReplyCategoryId] = useState<
     string | null
   >(null);
@@ -257,9 +291,29 @@ export function ChatPanel({
     e.preventDefault();
     const trimmed = text.trim();
     if (!trimmed || !conn || !phone) return;
+    const now = Date.now();
+    if (now - lastTextSendAtRef.current < 450) return;
+    lastTextSendAtRef.current = now;
+
     setSendError(null);
     setText("");
-    setSendBusy(true);
+
+    const optimistic = buildOptimisticOutboundMessage(conversation, trimmed);
+    queryClient.setQueryData<InboxQueryData>(INBOX_QUERY_KEY, (old) => {
+      if (!old?.conversations?.length) return old;
+      return {
+        conversations: old.conversations.map((c) =>
+          c.id === conversation.id
+            ? {
+                ...c,
+                messages: [...c.messages, optimistic],
+                lastMessageAt: new Date(),
+              }
+            : c,
+        ),
+      };
+    });
+
     try {
       await sendWhatsAppMessage({
         conversationId: conversation.id,
@@ -267,14 +321,26 @@ export function ChatPanel({
         toPhone: phone,
         text: trimmed,
       });
-      onRefetch();
+      void onRefetch();
     } catch (err) {
+      const pendingId = optimistic.id;
+      queryClient.setQueryData<InboxQueryData>(INBOX_QUERY_KEY, (old) => {
+        if (!old?.conversations?.length) return old;
+        return {
+          conversations: old.conversations.map((c) =>
+            c.id === conversation.id
+              ? {
+                  ...c,
+                  messages: c.messages.filter((m) => m.id !== pendingId),
+                }
+              : c,
+          ),
+        };
+      });
       setText(trimmed);
       setSendError(
         err instanceof Error ? err.message : "Não foi possível enviar a mensagem.",
       );
-    } finally {
-      setSendBusy(false);
     }
   }
 
@@ -573,7 +639,7 @@ export function ChatPanel({
                   variant="ghost"
                   size="icon"
                   className="size-9 shrink-0"
-                  disabled={!conn.isActive || mediaBusy || sendBusy}
+                  disabled={!conn.isActive || mediaBusy}
                   title="Enviar template aprovado"
                   onClick={() => setTemplateDialogOpen(true)}
                 >
@@ -585,7 +651,7 @@ export function ChatPanel({
                 variant="ghost"
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || mediaBusy || sendBusy}
+                disabled={!conn?.isActive || mediaBusy}
                 title="Anexar imagem ou PDF"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -596,7 +662,7 @@ export function ChatPanel({
                 variant={isRecording ? "destructive" : "ghost"}
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || mediaBusy || sendBusy}
+                disabled={!conn?.isActive || mediaBusy}
                 title={
                   isRecording ? "Parar e enviar áudio" : "Gravar áudio"
                 }
@@ -620,23 +686,16 @@ export function ChatPanel({
                     ? "Digite uma mensagem…"
                     : "Conecte o canal para enviar"
                 }
-                disabled={!conn?.isActive || mediaBusy || sendBusy}
+                disabled={!conn?.isActive || mediaBusy}
                 className="h-9 min-w-0 flex-1 text-sm"
               />
               <Button
                 type="submit"
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={
-                  !conn?.isActive || !text.trim() || mediaBusy || sendBusy
-                }
-                aria-busy={sendBusy}
+                disabled={!conn?.isActive || !text.trim() || mediaBusy}
               >
-                {sendBusy ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Send className="size-4" />
-                )}
+                <Send className="size-4" />
               </Button>
             </form>
           </div>
