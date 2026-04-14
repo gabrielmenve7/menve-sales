@@ -78,8 +78,8 @@ export async function patchContact(
     method: "PATCH",
     json: payload,
   });
-  revalidatePath("/contacts");
-  revalidatePath(`/contacts/${contactId}`);
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
+  /** Só páginas afetadas — evita invalidar lista/layout inteiro a cada campo (era muito lento). */
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
+  revalidatePath(`/contacts/${contactId}`, "page");
 }

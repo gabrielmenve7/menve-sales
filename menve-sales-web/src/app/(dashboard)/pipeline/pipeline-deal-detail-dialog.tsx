@@ -371,10 +371,20 @@ export function PipelineDealDetailDialog({
   onInvalidate?: () => void;
 }) {
   const router = useRouter();
-  const afterRemoteChange = useCallback(() => {
-    router.refresh();
-    onInvalidate?.();
-  }, [router, onInvalidate]);
+  const isEmbedded = variant === "embedded";
+  const boardRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  /** Atualiza só o cartão do funil em segundo plano (evita refetch RSC a cada campo). */
+  const scheduleBoardRefresh = useCallback(() => {
+    if (isEmbedded) return;
+    if (boardRefreshTimerRef.current) clearTimeout(boardRefreshTimerRef.current);
+    boardRefreshTimerRef.current = setTimeout(() => {
+      boardRefreshTimerRef.current = null;
+      router.refresh();
+    }, 450);
+  }, [isEmbedded, router]);
   const [remote, setRemote] = useState<DealDetailPayload | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -401,30 +411,51 @@ export function PipelineDealDetailDialog({
   const [renameLeadNameDraft, setRenameLeadNameDraft] = useState("");
   const [renameLeadBusy, setRenameLeadBusy] = useState(false);
 
-  const isEmbedded = variant === "embedded";
   const effectiveOpen = isEmbedded || open;
+
+  useEffect(
+    () => () => {
+      if (boardRefreshTimerRef.current) clearTimeout(boardRefreshTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (isEmbedded) setDealCardLayout("lateral");
   }, [isEmbedded]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
     if (!initial?.id) return;
     const targetId = initial.id;
-    setLoading(true);
-    setLoadErr(null);
-    setRemote(null);
+    const silent = opts?.silent === true;
+    if (!silent) {
+      setLoading(true);
+      setLoadErr(null);
+      setRemote(null);
+    }
     try {
       const raw = await getDealDetail(targetId);
       if (latestDealIdRef.current !== targetId) return;
       setRemote(raw as DealDetailPayload);
+      if (!silent) setLoadErr(null);
     } catch (e) {
       if (latestDealIdRef.current !== targetId) return;
-      setLoadErr(e instanceof Error ? e.message : "Falha ao carregar");
+      if (silent) {
+        console.error("[deal-detail] reload silencioso falhou:", e);
+      } else {
+        setLoadErr(e instanceof Error ? e.message : "Falha ao carregar");
+        setRemote(null);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [initial?.id]);
+
+  const afterRemoteChange = useCallback(async () => {
+    await reload({ silent: true });
+    onInvalidate?.();
+    scheduleBoardRefresh();
+  }, [reload, onInvalidate, scheduleBoardRefresh]);
 
   useEffect(() => {
     if (!effectiveOpen || !initial?.id) {
@@ -443,10 +474,9 @@ export function PipelineDealDetailDialog({
   const onReorderSelectOptions = useCallback(
     async (fieldId: string, options: string[]) => {
       await updateCustomField({ id: fieldId, options });
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     },
-    [reload, afterRemoteChange],
+    [afterRemoteChange],
   );
 
   const onAppendSelectOption = useCallback(
@@ -458,16 +488,14 @@ export function PipelineDealDetailDialog({
       const t = label.trim();
       if (!t) return;
       await updateCustomField({ id: fieldId, options: [...cur, t] });
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     },
-    [dealCustomFieldDefs, reload, afterRemoteChange],
+    [dealCustomFieldDefs, afterRemoteChange],
   );
 
   const onCustomFieldCreated = useCallback(() => {
-    void reload();
-    afterRemoteChange();
-  }, [reload, afterRemoteChange]);
+    void afterRemoteChange();
+  }, [afterRemoteChange]);
 
   const detailForActiveDeal = useMemo((): DealDetailPayload | null => {
     if (!initial?.id || !remote?.deal) return null;
@@ -589,8 +617,7 @@ export function PipelineDealDetailDialog({
     setHeaderBusy(true);
     try {
       await moveDealStage(d.id, stageId);
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -602,8 +629,7 @@ export function PipelineDealDetailDialog({
     setHeaderBusy(true);
     try {
       await patchDeal(d.id, { assignedToId: userId });
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -623,8 +649,7 @@ export function PipelineDealDetailDialog({
         description: text.length > 500 ? text.slice(500) : undefined,
       });
       setNoteBody("");
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } finally {
       setNoteSaving(false);
     }
@@ -665,8 +690,7 @@ export function PipelineDealDetailDialog({
     setContactFieldBusy(true);
     try {
       await patchContact({ contactId: d.contactId, ...patch });
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } finally {
       setContactFieldBusy(false);
     }
@@ -684,8 +708,7 @@ export function PipelineDealDetailDialog({
     try {
       await patchContact({ contactId: d.contactId, name: t });
       setRenamingLead(false);
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
@@ -724,8 +747,7 @@ export function PipelineDealDetailDialog({
       setHeaderBusy(true);
       try {
         await patchDeal(d.id, { value: null });
-        await reload();
-        afterRemoteChange();
+        await afterRemoteChange();
       } finally {
         setHeaderBusy(false);
       }
@@ -747,8 +769,7 @@ export function PipelineDealDetailDialog({
     setHeaderBusy(true);
     try {
       await patchDeal(d.id, { value: n });
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -760,8 +781,7 @@ export function PipelineDealDetailDialog({
     try {
       await addTagToContact(d.contactId, tagId);
       setTagAddOpen(false);
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } finally {
       setTagBusy(false);
     }
@@ -781,8 +801,7 @@ export function PipelineDealDetailDialog({
       if (t) await addTagToContact(d.contactId, t.id);
       setNewTagName("");
       setTagAddOpen(false);
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } finally {
       setTagBusy(false);
     }
@@ -793,8 +812,7 @@ export function PipelineDealDetailDialog({
     setTagBusy(true);
     try {
       await removeTagFromContact(d.contactId, tagId);
-      await reload();
-      afterRemoteChange();
+      await afterRemoteChange();
     } finally {
       setTagBusy(false);
     }
@@ -1287,8 +1305,7 @@ export function PipelineDealDetailDialog({
                       dealId: d.id,
                       values: { [key]: value },
                     });
-                    await reload();
-                    afterRemoteChange();
+                    await afterRemoteChange();
                   }}
                   onReorderSelectOptions={onReorderSelectOptions}
                   onAppendSelectOption={onAppendSelectOption}

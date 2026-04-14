@@ -138,9 +138,9 @@ export async function updateContactCustomData(
     method: "PATCH",
     json: { values },
   });
-  revalidatePath("/contacts");
-  revalidatePath(`/contacts/${contactId}`);
-  revalidatePath("/pipeline");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
+  revalidatePath(`/contacts/${contactId}`, "page");
 }
 
 const updateDealDataSchema = z.object({
@@ -156,6 +156,6 @@ export async function updateDealCustomData(
     method: "PATCH",
     json: { values },
   });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }

@@ -74,16 +74,14 @@ export async function deleteTag(tagId: string) {
 
 export async function addTagToContact(contactId: string, tagId: string) {
   await apiServer(`/contacts/${contactId}/tags/${tagId}`, { method: "POST" });
-  revalidatePath("/contacts");
-  revalidatePath(`/contacts/${contactId}`);
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
+  revalidatePath(`/contacts/${contactId}`, "page");
 }
 
 export async function removeTagFromContact(contactId: string, tagId: string) {
   await apiServer(`/contacts/${contactId}/tags/${tagId}`, { method: "DELETE" });
-  revalidatePath("/contacts");
-  revalidatePath(`/contacts/${contactId}`);
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
+  revalidatePath(`/contacts/${contactId}`, "page");
 }

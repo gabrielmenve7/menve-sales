@@ -127,6 +127,28 @@ export function InboxClient({
     refetchInterval: 5000,
   });
 
+  const leadRefetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const debouncedLeadRefetch = useCallback(() => {
+    if (leadRefetchDebounceRef.current) {
+      clearTimeout(leadRefetchDebounceRef.current);
+    }
+    leadRefetchDebounceRef.current = setTimeout(() => {
+      leadRefetchDebounceRef.current = null;
+      void refetch();
+    }, 500);
+  }, [refetch]);
+
+  useEffect(
+    () => () => {
+      if (leadRefetchDebounceRef.current) {
+        clearTimeout(leadRefetchDebounceRef.current);
+      }
+    },
+    [],
+  );
+
   const conversations = data?.conversations ?? initialConversations;
 
   const deepLinkSpecRef = useRef<string | null>(null);
@@ -251,7 +273,7 @@ export function InboxClient({
             deals={selected.contact.deals ?? []}
             dealCustomFieldDefs={dealCustomFieldDefs}
             tenantMembers={tenantMembers}
-            onLeadChanged={() => void refetch()}
+            onLeadChanged={debouncedLeadRefetch}
             onOpenContactInInbox={openContactInInbox}
           />
         ) : (

@@ -10,9 +10,8 @@ export async function moveDealStage(dealId: string, stageId: string) {
     method: "PATCH",
     json: { stageId },
   });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }
 
 export async function patchDeal(
@@ -27,23 +26,20 @@ export async function patchDeal(
     method: "PATCH",
     json: patch,
   });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }
 
 export async function deleteDeal(dealId: string) {
   await apiServer(`/deals/${dealId}`, { method: "DELETE" });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }
 
 export async function archiveDeal(dealId: string) {
   await apiServer(`/deals/${dealId}/archive`, { method: "PATCH" });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }
 
 const dealSchema = z.object({
@@ -60,16 +56,14 @@ export async function createDeal(input: z.infer<typeof dealSchema>) {
     method: "POST",
     json: data,
   });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }
 
 export async function markDealWon(dealId: string) {
   await apiServer(`/deals/${dealId}/won`, { method: "PATCH" });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }
 
 const lostSchema = z.object({
@@ -83,9 +77,8 @@ export async function markDealLost(dealId: string, lostReason: string) {
     method: "PATCH",
     json: { lostReason: parsed.lostReason.trim() },
   });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }
 
 export async function getDealDetail(dealId: string) {
@@ -112,7 +105,6 @@ export async function createDealActivity(input: z.infer<typeof activitySchema>) 
       description: data.description,
     },
   });
-  revalidatePath("/pipeline");
-  revalidatePath("/inbox");
-  revalidatePath("/contacts", "layout");
+  revalidatePath("/pipeline", "page");
+  revalidatePath("/inbox", "page");
 }
