@@ -69,7 +69,7 @@ export class InboxService {
   }
 
   async getInbox(tenantId: string) {
-    const [whatsAppConnections, quickReplyCategories, conversations] =
+    const [whatsAppConnections, quickReplyCategories, conversationsRaw] =
       await Promise.all([
         this.prisma.whatsAppConnection.findMany({
           where: { tenantId },
@@ -110,7 +110,8 @@ export class InboxService {
               },
             },
             whatsappConnection: true,
-            messages: { orderBy: { createdAt: "asc" }, take: 50 },
+            /* Últimas N mensagens: asc+take pegava as N mais antigas (bug). desc+take e reverse → cronológico no chat. */
+            messages: { orderBy: { createdAt: "desc" }, take: 50 },
             internalNotes: {
               orderBy: { createdAt: "desc" },
               take: 30,
@@ -119,6 +120,12 @@ export class InboxService {
           },
         }),
       ]);
+
+    const conversations = conversationsRaw.map((c) => ({
+      ...c,
+      messages: [...c.messages].reverse(),
+    }));
+
     return { whatsAppConnections, quickReplyCategories, conversations };
   }
 }
