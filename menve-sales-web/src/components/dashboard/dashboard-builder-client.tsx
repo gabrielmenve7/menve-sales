@@ -89,12 +89,19 @@ export function DashboardBuilderClient({
   initialTags,
   initialDealCustomFields,
   initialTenantMembers = [],
+  initialWidgetBundle = null,
 }: {
   initialBoards: DashboardBoardDto[];
   initialPipelines: PipelineListItem[];
   initialTags: TagListItem[];
   initialDealCustomFields: DealCustomFieldDef[];
   initialTenantMembers?: TenantMemberOption[];
+  /** Dados do primeiro painel já buscados no SSR (evita 2º round-trip no mount). */
+  initialWidgetBundle?: {
+    boardId: string;
+    specsKey: string;
+    rows: WidgetDataResult[];
+  } | null;
 }) {
   const [boards, setBoards] = useState<BoardVm[]>(() =>
     initialBoards.map(toVm),
@@ -161,6 +168,23 @@ export function DashboardBuilderClient({
       setLoadingData(false);
       return;
     }
+
+    if (
+      initialWidgetBundle &&
+      initialWidgetBundle.boardId === activeBoard.id &&
+      initialWidgetBundle.specsKey === specsKey &&
+      initialWidgetBundle.rows.length === activeBoard.layout.widgets.length
+    ) {
+      const map: Record<string, WidgetDataResult | null> = {};
+      activeBoard.layout.widgets.forEach((w, i) => {
+        map[w.id] = initialWidgetBundle.rows[i] ?? null;
+      });
+      setDataByWidget(map);
+      setLoadErr(null);
+      setLoadingData(false);
+      return;
+    }
+
     let cancelled = false;
     setLoadingData(true);
     setLoadErr(null);
@@ -186,7 +210,7 @@ export function DashboardBuilderClient({
     return () => {
       cancelled = true;
     };
-  }, [activeBoard?.id, specsKey, activeBoard]);
+  }, [activeBoard?.id, specsKey, activeBoard, initialWidgetBundle]);
 
   const onLayoutChange = useCallback(
     (layout: Layout) => {

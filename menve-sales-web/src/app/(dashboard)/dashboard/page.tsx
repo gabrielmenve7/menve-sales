@@ -1,11 +1,14 @@
+import { queryDashboardWidgetsBulk } from "@/actions/dashboard-widgets";
 import { DashboardBuilderClient } from "@/components/dashboard/dashboard-builder-client";
 import { apiServer } from "@/lib/api-server";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
-import type {
-  DashboardBoardDto,
-  DealCustomFieldDef,
-  PipelineListItem,
-  TagListItem,
+import {
+  parseLayoutJson,
+  type DashboardBoardDto,
+  type DealCustomFieldDef,
+  type PipelineListItem,
+  type TagListItem,
+  type WidgetDataResult,
 } from "@/lib/dashboard-builder-types";
 
 type PipelineRow = { id: string; name: string; isDefault: boolean };
@@ -25,6 +28,27 @@ export default async function DashboardPage() {
       name: p.name,
       isDefault: p.isDefault,
     }));
+
+    let initialWidgetBundle: {
+      boardId: string;
+      specsKey: string;
+      rows: WidgetDataResult[];
+    } | null = null;
+    try {
+      const firstBoard = boards[0];
+      if (firstBoard) {
+        const layout = parseLayoutJson(firstBoard.layoutJson);
+        const specs = layout.widgets.map((w) => w.querySpec);
+        if (specs.length > 0) {
+          const specsKey = JSON.stringify(specs);
+          const rows = await queryDashboardWidgetsBulk(specs);
+          initialWidgetBundle = { boardId: firstBoard.id, specsKey, rows };
+        }
+      }
+    } catch (e) {
+      console.error("[menve/dashboard] pré-carga dos cartões falhou:", e);
+    }
+
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DashboardBuilderClient
@@ -33,6 +57,7 @@ export default async function DashboardPage() {
           initialTags={tags}
           initialDealCustomFields={dealCustomFields}
           initialTenantMembers={tenantMembers}
+          initialWidgetBundle={initialWidgetBundle}
         />
       </div>
     );

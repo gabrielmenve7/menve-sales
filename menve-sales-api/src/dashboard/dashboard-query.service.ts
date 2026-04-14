@@ -123,15 +123,25 @@ export class DashboardQueryService {
     tenantId: string,
     specs: unknown[],
   ): Promise<(ScalarResult | SeriesResult)[]> {
-    const out: (ScalarResult | SeriesResult)[] = [];
-    for (const s of specs) {
+    if (specs.length === 0) return [];
+
+    const resolved = specs.map((s) => {
       const input = widgetQuerySpecSchema.parse(s);
-      const spec = resolveWidgetQuerySpec(input);
-      await this.assertPipeline(tenantId, spec.pipelineId);
-      await this.assertCustomFieldIfNeeded(tenantId, spec);
-      out.push(await this.runQuery(tenantId, spec));
-    }
-    return out;
+      return resolveWidgetQuerySpec(input);
+    });
+
+    const uniquePipelineIds = [...new Set(resolved.map((r) => r.pipelineId))];
+    await Promise.all(
+      uniquePipelineIds.map((id) => this.assertPipeline(tenantId, id)),
+    );
+
+    await Promise.all(
+      resolved.map((spec) => this.assertCustomFieldIfNeeded(tenantId, spec)),
+    );
+
+    return Promise.all(
+      resolved.map((spec) => this.runQuery(tenantId, spec)),
+    );
   }
 
   private async assertPipeline(tenantId: string, pipelineId: string) {
