@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { inboxQueryKeys } from "@/lib/inbox-query-keys";
 import { cn } from "@/lib/utils";
 import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 import { quickRepliesHaveScripts } from "@/lib/quick-reply-types";
@@ -51,8 +52,8 @@ function readFileAsDataUrl(file: Blob): Promise<string> {
   });
 }
 
-/** Mesma chave que `InboxClient` (`useQuery({ queryKey: ["inbox"] })`). */
-const INBOX_QUERY_KEY = ["inbox"] as const;
+/** Mesma chave que `InboxClient` (`inboxQueryKeys.list`). */
+const INBOX_QUERY_KEY = inboxQueryKeys.list;
 
 type InboxQueryData = { conversations: InboxConversation[] };
 
@@ -306,13 +307,24 @@ export function ChatPanel({
           c.id === conversation.id
             ? {
                 ...c,
-                messages: [...c.messages, optimistic],
+                messages: (() => {
+                  const prev = c.messages;
+                  const keep = prev.length <= 1 ? prev : prev.slice(-1);
+                  return [...keep, optimistic];
+                })(),
                 lastMessageAt: new Date(),
               }
             : c,
         ),
       };
     });
+    queryClient.setQueryData<InboxConversation | undefined>(
+      inboxQueryKeys.conversation(conversation.id),
+      (old) => {
+        if (!old) return old;
+        return { ...old, messages: [...old.messages, optimistic] };
+      },
+    );
 
     try {
       await sendWhatsAppMessage({
@@ -337,6 +349,16 @@ export function ChatPanel({
           ),
         };
       });
+      queryClient.setQueryData<InboxConversation | undefined>(
+        inboxQueryKeys.conversation(conversation.id),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: old.messages.filter((m) => m.id !== pendingId),
+          };
+        },
+      );
       setText(trimmed);
       setSendError(
         err instanceof Error ? err.message : "Não foi possível enviar a mensagem.",

@@ -1,4 +1,5 @@
 import type { CustomField } from "@prisma/client";
+import type { InboxConversation } from "@/components/inbox/inbox-types";
 import { InboxClient } from "@/inbox";
 import { apiServer } from "@/lib/api-server";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
@@ -30,6 +31,7 @@ export default async function InboxPage({
     inboxBundle,
     dealCustomFieldDefs,
     tenantMembers,
+    initialConversationDetail,
   ] = await Promise.all([
     apiServer<{
       whatsAppConnections: unknown[];
@@ -42,6 +44,11 @@ export default async function InboxPage({
     apiServer<TenantMemberOption[]>("/settings/members").catch(
       () => [] as TenantMemberOption[],
     ),
+    initialConversationId
+      ? apiServer<InboxConversation>(
+          `/inbox/conversations/${encodeURIComponent(initialConversationId)}`,
+        ).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const { whatsAppConnections, quickReplyCategories, conversations } = inboxBundle;
@@ -54,6 +61,7 @@ export default async function InboxPage({
         initialConversations={conversations as never}
         initialContactId={initialContactId}
         initialConversationId={initialConversationId}
+        initialConversationDetail={initialConversationDetail}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={tenantMembers}
         canManageConnections={canManageConnections}

@@ -3,8 +3,30 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { ConversationStatus } from "@prisma/client";
+import { ConversationStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+
+/** Contato + deals abertos (lista e detalhe do inbox). */
+const inboxContactInclude = {
+  include: {
+    deals: {
+      where: { status: "OPEN" as const },
+      orderBy: { updatedAt: "desc" as const },
+      take: 8,
+      include: {
+        pipeline: { select: { id: true, name: true } },
+        stage: {
+          select: { id: true, name: true, color: true },
+        },
+      },
+    },
+  },
+} satisfies { include: Prisma.ContactInclude };
+
+const inboxConversationIncludeBase = {
+  contact: inboxContactInclude,
+  whatsappConnection: true,
+} satisfies Prisma.ConversationInclude;
 
 @Injectable()
 export class InboxService {
@@ -94,29 +116,9 @@ export class InboxService {
           where: { tenantId },
           orderBy: { lastMessageAt: "desc" },
           include: {
-            contact: {
-              include: {
-                deals: {
-                  where: { status: "OPEN" },
-                  orderBy: { updatedAt: "desc" },
-                  take: 8,
-                  include: {
-                    pipeline: { select: { id: true, name: true } },
-                    stage: {
-                      select: { id: true, name: true, color: true },
-                    },
-                  },
-                },
-              },
-            },
-            whatsappConnection: true,
-            /* Últimas N mensagens: asc+take pegava as N mais antigas (bug). desc+take e reverse → cronológico no chat. */
-            messages: { orderBy: { createdAt: "desc" }, take: 50 },
-            internalNotes: {
-              orderBy: { createdAt: "desc" },
-              take: 30,
-              include: { user: { select: { name: true, email: true } } },
-            },
+            ...inboxConversationIncludeBase,
+            /* Só a última mensagem por conversa (preview na lista + deep link leve). */
+            messages: { orderBy: { createdAt: "desc" }, take: 1 },
           },
         }),
       ]);
@@ -124,8 +126,35 @@ export class InboxService {
     const conversations = conversationsRaw.map((c) => ({
       ...c,
       messages: [...c.messages].reverse(),
+      internalNotes: [],
     }));
 
     return { whatsAppConnections, quickReplyCategories, conversations };
+  }
+
+  /**
+   * Histórico completo da conversa (mensagens + notas) para o painel central.
+   * Evita carregar 50 mensagens × N conversas no GET /inbox.
+   */
+  async getConversationForInbox(tenantId: string, conversationId: string) {
+    const raw = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      include: {
+        ...inboxConversationIncludeBase,
+        messages: { orderBy: { createdAt: "desc" }, take: 50 },
+        internalNotes: {
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          include: { user: { select: { name: true, email: true } } },
+        },
+      },
+    });
+    if (!raw) {
+      throw new NotFoundException("Conversa não encontrada");
+    }
+    return {
+      ...raw,
+      messages: [...raw.messages].reverse(),
+    };
   }
 }

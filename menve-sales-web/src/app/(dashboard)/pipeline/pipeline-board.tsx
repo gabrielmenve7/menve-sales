@@ -464,6 +464,7 @@ function DealCard({
           <span className="min-w-0 truncate">{originLine ?? "—"}</span>
           <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
             <Link
+              prefetch
               href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}

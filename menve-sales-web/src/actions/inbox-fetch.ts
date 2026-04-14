@@ -21,6 +21,12 @@ export async function fetchInboxBundle(): Promise<InboxBundle> {
   return apiServer<InboxBundle>("/inbox");
 }
 
+export async function fetchInboxConversation(conversationId: string) {
+  return apiServer<unknown>(
+    `/inbox/conversations/${encodeURIComponent(conversationId)}`,
+  );
+}
+
 /** Garante conversa no canal WhatsApp ativo (mesmo contrato da página `/inbox?contact=`). */
 export async function ensureInboxConversationForContact(contactId: string) {
   return apiServer<{ conversationId: string; created: boolean }>(

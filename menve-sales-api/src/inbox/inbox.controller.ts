@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
 } from "@nestjs/common";
 import { InboxService } from "./inbox.service";
@@ -16,6 +17,14 @@ export class InboxController {
   @Get()
   get(@ReqUser() u: RequestUser) {
     return this.inbox.getInbox(u.tenantId);
+  }
+
+  @Get("conversations/:conversationId")
+  getConversation(
+    @ReqUser() u: RequestUser,
+    @Param("conversationId") conversationId: string,
+  ) {
+    return this.inbox.getConversationForInbox(u.tenantId, conversationId);
   }
 
   @Post("ensure-conversation")

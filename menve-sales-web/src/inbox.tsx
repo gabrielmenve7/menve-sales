@@ -1,13 +1,16 @@
 "use client";
 
 import type { CustomField, WhatsAppConnection } from "@prisma/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ensureInboxConversationForContact,
   fetchInboxBundle,
+  fetchInboxConversation,
 } from "@/actions/inbox-fetch";
+import { Button } from "@/components/ui/button";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { ChatPanel } from "@/components/inbox/chat-panel";
 import { ChatEmptyState } from "@/components/inbox/chat-empty-state";
@@ -17,6 +20,7 @@ import {
 } from "@/components/inbox/inbox-lead-sidebar";
 import type { InboxConversation } from "@/components/inbox/inbox-types";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
+import { inboxQueryKeys } from "@/lib/inbox-query-keys";
 import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 
 export type { InboxConversation } from "@/components/inbox/inbox-types";
@@ -87,12 +91,88 @@ function resolveDeepLinkConversationId(
   return null;
 }
 
+/** Coluna do chat: `useQuery` do thread com `conversationId` sempre string (evita inferência `never` do TS). */
+function InboxConversationThreadColumn({
+  listRow,
+  conversationId,
+  initialConversationDetail,
+  quickReplyCategories,
+  onRefetchInbox,
+}: {
+  listRow: InboxConversation;
+  conversationId: string;
+  initialConversationDetail: InboxConversation | null | undefined;
+  quickReplyCategories: QuickReplyCategoryDTO[];
+  onRefetchInbox: () => void;
+}) {
+  const threadQuery = useQuery({
+    queryKey: inboxQueryKeys.conversation(conversationId),
+    queryFn: async () =>
+      (await fetchInboxConversation(conversationId)) as InboxConversation,
+  });
+
+  const threadData = threadQuery.data;
+  const threadPending = threadQuery.isPending;
+  const serverSnapshot =
+    initialConversationDetail?.id === conversationId
+      ? initialConversationDetail
+      : undefined;
+
+  const merged = useMemo(() => {
+    const t = threadData ?? serverSnapshot;
+    if (!t || t.id !== conversationId) return listRow;
+    return { ...listRow, ...t };
+  }, [conversationId, listRow, serverSnapshot, threadData]);
+
+  const showThreadSpinner =
+    threadPending && !threadData && !serverSnapshot;
+
+  if (threadQuery.isError) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          Não foi possível carregar o histórico desta conversa.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void threadQuery.refetch()}
+        >
+          Tentar de novo
+        </Button>
+      </div>
+    );
+  }
+
+  if (showThreadSpinner) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <Loader2
+          className="size-8 animate-spin text-muted-foreground"
+          aria-label="Carregando conversa"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <ChatPanel
+      conversation={merged}
+      quickReplyCategories={quickReplyCategories}
+      onRefetch={onRefetchInbox}
+    />
+  );
+}
+
 export function InboxClient({
   connections,
   quickReplyCategories,
   initialConversations,
   initialContactId = null,
   initialConversationId = null,
+  /** Thread completo quando a página já resolveu o deep link (ex.: funil → inbox). */
+  initialConversationDetail = null,
   dealCustomFieldDefs,
   tenantMembers,
 }: {
@@ -103,11 +183,13 @@ export function InboxClient({
   initialContactId?: string | null;
   /** ID exato retornado por `POST /inbox/ensure-conversation` (canal ativo). */
   initialConversationId?: string | null;
+  initialConversationDetail?: InboxConversation | null;
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   canManageConnections?: boolean;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     const fromDeepLink = resolveDeepLinkConversationId(
@@ -120,12 +202,21 @@ export function InboxClient({
     return initialConversations[0]?.id ?? null;
   });
 
-  const { data, refetch } = useQuery({
-    queryKey: ["inbox"],
+  const { data: inboxListData, refetch: refetchList } = useQuery({
+    queryKey: inboxQueryKeys.list,
     queryFn: fetchInbox,
     initialData: { conversations: initialConversations },
     refetchInterval: 5000,
   });
+
+  const refetchInbox = useCallback(() => {
+    void refetchList();
+    if (selectedId) {
+      void queryClient.invalidateQueries({
+        queryKey: inboxQueryKeys.conversation(selectedId),
+      });
+    }
+  }, [refetchList, queryClient, selectedId]);
 
   const leadRefetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -136,9 +227,9 @@ export function InboxClient({
     }
     leadRefetchDebounceRef.current = setTimeout(() => {
       leadRefetchDebounceRef.current = null;
-      void refetch();
+      refetchInbox();
     }, 500);
-  }, [refetch]);
+  }, [refetchInbox]);
 
   useEffect(
     () => () => {
@@ -149,7 +240,8 @@ export function InboxClient({
     [],
   );
 
-  const conversations = data?.conversations ?? initialConversations;
+  const conversations =
+    inboxListData?.conversations ?? initialConversations;
 
   const deepLinkSpecRef = useRef<string | null>(null);
 
@@ -191,10 +283,10 @@ export function InboxClient({
     }
   }, [conversations, selectedId]);
 
-  const selected = useMemo(
-    () => conversations.find((c) => c.id === selectedId) ?? null,
-    [conversations, selectedId],
-  );
+  const selectedListRow = useMemo(() => {
+    if (!selectedId) return null;
+    return conversations.find((c) => c.id === selectedId) ?? null;
+  }, [conversations, selectedId]);
 
   const openContactInInbox = useCallback(
     async (contactId: string) => {
@@ -220,13 +312,16 @@ export function InboxClient({
 
       try {
         const ensured = await ensureInboxConversationForContact(contactId);
-        const { data, error } = await refetch();
+        const { data, error } = await refetchList();
         if (error) throw error;
         const list = (data?.conversations ?? []) as InboxConversation[];
         const nextId =
           pickBestConversationForContact(list, contactId) ??
           ensured.conversationId;
         setSelectedId(nextId);
+        void queryClient.invalidateQueries({
+          queryKey: inboxQueryKeys.conversation(nextId),
+        });
         if (typeof window !== "undefined") {
           window.history.replaceState(
             null,
@@ -238,7 +333,7 @@ export function InboxClient({
         router.push(`/inbox?contact=${encodeURIComponent(contactId)}`);
       }
     },
-    [conversations, refetch, router],
+    [conversations, queryClient, refetchList, router],
   );
 
   return (
@@ -254,11 +349,14 @@ export function InboxClient({
 
       {/* Chat panel — coluna central com altura limitada; só a área de mensagens rola */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {selected ? (
-          <ChatPanel
-            conversation={selected}
+        {selectedListRow && selectedId ? (
+          <InboxConversationThreadColumn
+            key={selectedId}
+            listRow={selectedListRow}
+            conversationId={selectedId}
+            initialConversationDetail={initialConversationDetail}
             quickReplyCategories={quickReplyCategories}
-            onRefetch={() => void refetch()}
+            onRefetchInbox={() => void refetchInbox()}
           />
         ) : (
           <ChatEmptyState />
@@ -267,10 +365,10 @@ export function InboxClient({
 
       {/* Oportunidade / pipeline (desktop) — mesmo painel editável do funil */}
       <div className="hidden min-h-0 w-[min(100%,28rem)] min-w-[260px] max-w-[28rem] shrink-0 flex-col overflow-hidden lg:flex">
-        {selected ? (
+        {selectedListRow ? (
           <InboxLeadSidebar
-            contact={selected.contact}
-            deals={selected.contact.deals ?? []}
+            contact={selectedListRow.contact}
+            deals={selectedListRow.contact.deals ?? []}
             dealCustomFieldDefs={dealCustomFieldDefs}
             tenantMembers={tenantMembers}
             onLeadChanged={debouncedLeadRefetch}
