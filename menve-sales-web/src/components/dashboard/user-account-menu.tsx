@@ -10,7 +10,7 @@ import {
   Sun,
   UserRoundPen,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,14 +20,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import {
-  ACCENT_OPTIONS,
-  type AccentId,
-  applyAccentToDocument,
-  persistAccent,
-  readStoredAccent,
-} from "@/lib/accent-presets";
-
 function userInitial(
   name: string | null | undefined,
   email: string | null | undefined,
@@ -52,16 +44,9 @@ export function UserAccountMenu({
 }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [accent, setAccent] = useState<AccentId>("slate");
 
   useEffect(() => {
     setMounted(true);
-    setAccent(readStoredAccent());
-  }, []);
-
-  const onAccentPick = useCallback((id: AccentId) => {
-    setAccent(id);
-    persistAccent(id);
   }, []);
 
   const nameTrim = (userName ?? "").trim();
@@ -164,41 +149,6 @@ export function UserAccountMenu({
               <Moon className="size-3.5" />
               Escuro
             </Button>
-          </div>
-        </div>
-        <DropdownMenuSeparator />
-        <div className="px-2 py-2">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Cor de destaque
-          </p>
-          <p className="mb-2 text-xs text-muted-foreground">
-            Botões principais e realces ao passar o mouse
-          </p>
-          <div className="grid grid-cols-5 gap-1.5">
-            {ACCENT_OPTIONS.map((opt) => {
-              const active = accent === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  title={opt.label}
-                  aria-label={opt.label}
-                  aria-pressed={active}
-                  onClick={() => onAccentPick(opt.id)}
-                  className={cn(
-                    "relative flex aspect-square items-center justify-center rounded-md border-2 transition-transform hover:scale-105",
-                    active
-                      ? "border-primary-solid ring-2 ring-ring ring-offset-2 ring-offset-background"
-                      : "border-border/60 hover:border-border",
-                  )}
-                >
-                  <span
-                    className="size-5 rounded-sm shadow-inner"
-                    style={{ backgroundColor: opt.swatch }}
-                  />
-                </button>
-              );
-            })}
           </div>
         </div>
         <DropdownMenuSeparator />
