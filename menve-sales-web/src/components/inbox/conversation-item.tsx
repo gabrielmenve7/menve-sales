@@ -1,6 +1,7 @@
 import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
 import { cn } from "@/lib/utils";
 import type { InboxConversation } from "./inbox-types";
+import { OutboundAckIcons, type OutboundAckStatus } from "./outbound-ack-icons";
 import { relativeTime, getContactPhotoUrl, initials } from "./inbox-utils";
 
 type BadgeConfig =
@@ -25,6 +26,9 @@ export function ConversationItem({
   const c = conversation;
   const photo = getContactPhotoUrl(c.contact);
   const lastMsg = c.messages.at(-1);
+  const isOutbound = lastMsg?.direction === "OUTBOUND";
+  const outboundAck: OutboundAckStatus | null =
+    isOutbound && lastMsg ? (lastMsg.ackStatus ?? "DELIVERED") : null;
   const preview = lastMsg?.body
     ? lastMsg.body.length > 40
       ? lastMsg.body.slice(0, 40) + "…"
@@ -80,7 +84,15 @@ export function ConversationItem({
           </span>
         </div>
         {preview && (
-          <p className="truncate text-xs text-muted-foreground">{preview}</p>
+          <p className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
+            {outboundAck ? (
+              <>
+                <OutboundAckIcons status={outboundAck} variant="onList" />
+                <span className="shrink-0">Você: </span>
+              </>
+            ) : null}
+            <span className="min-w-0 truncate">{preview}</span>
+          </p>
         )}
       </div>
     </button>

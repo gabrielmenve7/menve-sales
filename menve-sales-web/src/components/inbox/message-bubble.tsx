@@ -1,34 +1,11 @@
-import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  OutboundAckIcons,
+  type OutboundAckStatus,
+} from "./outbound-ack-icons";
 import { VoiceMessagePlayer } from "./voice-message-player";
 
-/** Alinhado ao enum Prisma `MessageAckStatus` (enviada → entregue → lida). */
-export type OutboundAckStatus = "SENT" | "DELIVERED" | "READ";
-
-function OutboundAckIcons({ status }: { status: OutboundAckStatus }) {
-  const read = status === "READ";
-  const delivered = status === "DELIVERED" || read;
-  const tickClass = cn(
-    "size-3.5 stroke-[2.5]",
-    read
-      ? "text-[#6FD4F8]"
-      : "text-primary-solid-fg/55 dark:text-primary-solid-fg/50",
-  );
-
-  if (!delivered) {
-    return <Check className={tickClass} aria-hidden />;
-  }
-
-  return (
-    <span
-      className="relative inline-flex h-3.5 w-[22px] shrink-0"
-      aria-label={read ? "Visualizada" : "Entregue"}
-    >
-      <Check className={cn(tickClass, "absolute left-0 top-0")} aria-hidden />
-      <Check className={cn(tickClass, "absolute left-2 top-0")} aria-hidden />
-    </span>
-  );
-}
+export type { OutboundAckStatus };
 
 export function MessageBubble({
   body,
