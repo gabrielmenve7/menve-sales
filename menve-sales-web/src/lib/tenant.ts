@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { cache } from "react";
+import { getSessionCached } from "@/lib/get-session-cached";
 import { getSubdomain, resolveTenantSlug } from "@/lib/tenant-edge";
 
 function apiBase() {
@@ -25,8 +26,8 @@ export async function getTenantSlugFromRequest(): Promise<string> {
  * Usuário logado: prioriza `session.user.tenantId` (workspace ativo na sessão).
  * Visitante: slug do host / DEFAULT_TENANT_SLUG.
  */
-export async function getTenantFromRequest() {
-  const session = await auth();
+async function getTenantFromRequestUncached() {
+  const session = await getSessionCached();
   const isSuperAdmin =
     session?.user != null &&
     (session.user.globalRole ?? session.user.role) === "SUPER_ADMIN";
@@ -84,6 +85,9 @@ export async function getTenantFromRequest() {
     return null;
   }
 }
+
+/** Uma resolução de tenant por request (layout + vários `apiServer` em paralelo). */
+export const getTenantFromRequest = cache(getTenantFromRequestUncached);
 
 export async function requireTenant() {
   const tenant = await getTenantFromRequest();

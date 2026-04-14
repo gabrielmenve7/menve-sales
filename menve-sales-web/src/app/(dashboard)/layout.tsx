@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getSessionCached } from "@/lib/get-session-cached";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { redirect } from "next/navigation";
@@ -8,7 +8,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  const session = await getSessionCached();
   if (!session?.user) redirect("/login");
 
   if (

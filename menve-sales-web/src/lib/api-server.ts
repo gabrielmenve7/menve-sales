@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { loadEnvConfig } from "@next/env";
-import { auth } from "@/auth";
+import { getSessionCached } from "@/lib/get-session-cached";
 import { getTenantFromRequest } from "@/lib/tenant";
 
 function isMenveMonorepoRoot(dir: string) {
@@ -52,7 +52,7 @@ export async function apiServer<T>(
   path: string,
   init: ApiServerOptions = {},
 ): Promise<T> {
-  const session = await auth();
+  const session = await getSessionCached();
   if (!session?.user?.id) {
     throw new Error("Não autenticado");
   }
@@ -125,7 +125,7 @@ export async function apiServerText(
   path: string,
   init: ApiServerOptions = {},
 ): Promise<string> {
-  const session = await auth();
+  const session = await getSessionCached();
   if (!session?.user?.id) throw new Error("Não autenticado");
   const key = apiKey();
   if (!key) {

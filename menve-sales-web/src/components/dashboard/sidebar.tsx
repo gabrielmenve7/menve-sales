@@ -90,6 +90,7 @@ export function Sidebar({
           <Link
             key={href}
             href={href}
+            prefetch={true}
             title={collapsed ? label : undefined}
             className={linkClass(
               pathname === href || pathname.startsWith(href + "/"),
@@ -109,6 +110,7 @@ export function Sidebar({
         {isSuperAdmin ? (
           <Link
             href="/admin"
+            prefetch={true}
             title={collapsed ? "Admin" : undefined}
             className={linkClass(pathname.startsWith("/admin"))}
           >

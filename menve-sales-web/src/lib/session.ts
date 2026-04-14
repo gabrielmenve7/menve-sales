@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getSessionCached } from "@/lib/get-session-cached";
 import { getTenantFromRequest } from "@/lib/tenant";
 import type { UserRole } from "@/types/domain";
 import { redirect } from "next/navigation";
@@ -12,7 +12,7 @@ function internalKey() {
 }
 
 export async function requireSession() {
-  const session = await auth();
+  const session = await getSessionCached();
   if (!session?.user) throw new Error("Não autenticado");
   return session;
 }
@@ -102,7 +102,7 @@ export async function getActiveTenantId() {
 }
 
 export async function canAccessAdmin() {
-  const session = await auth();
+  const session = await getSessionCached();
   if (!session?.user?.id) return false;
   let t: Awaited<ReturnType<typeof getTenantFromRequest>> = null;
   try {
@@ -176,7 +176,7 @@ export async function assertCanConfigureTenantApiRoute() {
 }
 
 export async function canConfigureTenant() {
-  const session = await auth();
+  const session = await getSessionCached();
   if (!session?.user?.id) return false;
   const hint = await activeTenantHintForSession(session);
   const { role } = await resolveRoleAndTenantId(
@@ -199,7 +199,7 @@ export async function canConfigureTenant() {
 }
 
 export async function canManageWorkspaceFeatures() {
-  const session = await auth();
+  const session = await getSessionCached();
   if (!session?.user?.id) return false;
   const hint = await activeTenantHintForSession(session);
   const { role } = await resolveRoleAndTenantId(
