@@ -36,4 +36,6 @@ export type InboxConversation = Conversation & {
   whatsappConnection: WhatsAppConnection;
   messages: InboxMessage[];
   internalNotes: NoteRow[];
+  /** Há mais mensagens anteriores às carregadas (paginação). */
+  hasOlderMessages?: boolean;
 };

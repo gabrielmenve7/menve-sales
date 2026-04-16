@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
 } from "@nestjs/common";
 import { InboxService } from "./inbox.service";
 import { ReqUser } from "../common/req-user.decorator";
@@ -17,6 +18,19 @@ export class InboxController {
   @Get()
   get(@ReqUser() u: RequestUser) {
     return this.inbox.getInbox(u.tenantId);
+  }
+
+  @Get("conversations/:conversationId/messages")
+  listOlderMessages(
+    @ReqUser() u: RequestUser,
+    @Param("conversationId") conversationId: string,
+    @Query("before") before: string,
+  ) {
+    const b = before?.trim();
+    if (!b) {
+      throw new BadRequestException("Query before (id da mensagem) é obrigatória");
+    }
+    return this.inbox.listMessagesBefore(u.tenantId, conversationId, b);
   }
 
   @Get("conversations/:conversationId")

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useEffect, useState, useCallback } from "react";
+import { fetchOlderInboxMessages } from "@/actions/inbox-fetch";
 import { addConversationNote } from "@/actions/conversation-notes";
 import {
   sendWhatsAppMediaMessage,
@@ -130,6 +131,8 @@ export function ChatPanel({
     null,
   );
   const [templateSendBusy, setTemplateSendBusy] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
 
   const conn = conversation.whatsappConnection;
 
@@ -141,7 +144,55 @@ export function ChatPanel({
 
   useEffect(() => {
     setOpenQuickReplyCategoryId(null);
+    setOlderError(null);
   }, [conversation.id]);
+
+  const loadOlderMessages = useCallback(async () => {
+    const oldestId = conversation.messages[0]?.id;
+    if (!oldestId || loadingOlder) return;
+    setOlderError(null);
+    setLoadingOlder(true);
+    try {
+      const r = await fetchOlderInboxMessages(conversation.id, oldestId);
+      const incoming = r.messages as InboxMessage[];
+      queryClient.setQueryData<InboxConversation | undefined>(
+        inboxQueryKeys.conversation(conversation.id),
+        (old) => {
+          if (!old) return old;
+          const byId = new Map<string, InboxMessage>();
+          for (const m of [...incoming, ...old.messages]) {
+            byId.set(m.id, m);
+          }
+          const merged = [...byId.values()].sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() -
+              new Date(b.createdAt).getTime(),
+          );
+          return {
+            ...old,
+            messages: merged,
+            hasOlderMessages: r.hasOlderMessages,
+          };
+        },
+      );
+      const el = scrollRef.current;
+      if (el && incoming.length > 0) {
+        const prevScrollHeight = el.scrollHeight;
+        requestAnimationFrame(() => {
+          const next = scrollRef.current;
+          if (next) {
+            next.scrollTop += next.scrollHeight - prevScrollHeight;
+          }
+        });
+      }
+    } catch (e) {
+      setOlderError(
+        e instanceof Error ? e.message : "Não foi possível carregar mensagens anteriores.",
+      );
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [conversation.id, conversation.messages, loadingOlder, queryClient]);
 
   useEffect(() => {
     if (conn?.provider !== "META" || !conn.isActive) {
@@ -487,6 +538,30 @@ export function ChatPanel({
             ref={scrollRef}
             className="inbox-chat-messages-pattern min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4"
           >
+            {conversation.hasOlderMessages ? (
+              <div className="mb-3 flex flex-col items-center gap-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={loadingOlder}
+                  onClick={() => void loadOlderMessages()}
+                >
+                  {loadingOlder ? (
+                    <>
+                      <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden />
+                      Carregando…
+                    </>
+                  ) : (
+                    "Carregar mensagens anteriores"
+                  )}
+                </Button>
+                {olderError ? (
+                  <p className="text-center text-xs text-destructive">{olderError}</p>
+                ) : null}
+              </div>
+            ) : null}
             {conversation.messages.map((m, i) => {
               const prev = conversation.messages[i - 1];
               const continuation = prev?.direction === m.direction;

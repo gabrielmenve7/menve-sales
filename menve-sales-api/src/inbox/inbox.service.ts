@@ -150,7 +150,7 @@ export class InboxService {
         createdAt: true,
         updatedAt: true,
         whatsappConnection: true,
-        messages: { orderBy: { createdAt: "desc" }, take: 50 },
+        messages: { orderBy: { createdAt: "desc" }, take: 20 },
         internalNotes: {
           orderBy: { createdAt: "desc" },
           take: 30,
@@ -161,9 +161,56 @@ export class InboxService {
     if (!raw) {
       throw new NotFoundException("Conversa não encontrada");
     }
+    const messagesAsc = [...raw.messages].reverse();
     return {
       ...raw,
-      messages: [...raw.messages].reverse(),
+      messages: messagesAsc,
+      hasOlderMessages: raw.messages.length >= 20,
+    };
+  }
+
+  /**
+   * Mensagens mais antigas que `beforeMessageId` (exclusivo), ordem cronológica crescente.
+   */
+  async listMessagesBefore(
+    tenantId: string,
+    conversationId: string,
+    beforeMessageId: string,
+  ): Promise<{ messages: unknown[]; hasOlderMessages: boolean }> {
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { id: true },
+    });
+    if (!conv) {
+      throw new NotFoundException("Conversa não encontrada");
+    }
+
+    const anchor = await this.prisma.message.findFirst({
+      where: {
+        id: beforeMessageId,
+        conversationId,
+        tenantId,
+      },
+      select: { createdAt: true },
+    });
+    if (!anchor) {
+      throw new BadRequestException("Mensagem de referência inválida");
+    }
+
+    const rows = await this.prisma.message.findMany({
+      where: {
+        conversationId,
+        tenantId,
+        createdAt: { lt: anchor.createdAt },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+
+    const messagesAsc = [...rows].reverse();
+    return {
+      messages: messagesAsc,
+      hasOlderMessages: rows.length >= 20,
     };
   }
 }

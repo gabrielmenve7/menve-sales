@@ -27,6 +27,15 @@ export async function fetchInboxConversation(conversationId: string) {
   );
 }
 
+export async function fetchOlderInboxMessages(
+  conversationId: string,
+  beforeMessageId: string,
+) {
+  return apiServer<{ messages: unknown[]; hasOlderMessages: boolean }>(
+    `/inbox/conversations/${encodeURIComponent(conversationId)}/messages?before=${encodeURIComponent(beforeMessageId)}`,
+  );
+}
+
 /** Garante conversa no canal WhatsApp ativo (mesmo contrato da página `/inbox?contact=`). */
 export async function ensureInboxConversationForContact(contactId: string) {
   return apiServer<{ conversationId: string; created: boolean }>(
