@@ -2,7 +2,6 @@
 
 import type { CustomField, WhatsAppConnection } from "@prisma/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -113,7 +112,6 @@ function InboxConversationThreadColumn({
   });
 
   const threadData = threadQuery.data;
-  const threadPending = threadQuery.isPending;
   const serverSnapshot =
     initialConversationDetail?.id === conversationId
       ? initialConversationDetail
@@ -126,14 +124,11 @@ function InboxConversationThreadColumn({
     return listRow;
   }, [conversationId, listRow, serverSnapshot, threadData]);
 
-  const showHistoryLoading =
-    threadPending && !threadData && !serverSnapshot;
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {threadQuery.isError ? (
         <div className="flex shrink-0 items-center justify-center gap-2 border-b border-border/40 bg-muted/30 px-3 py-2 text-center text-xs text-muted-foreground">
-          <span>Não foi possível carregar o histórico completo.</span>
+          <span>Não foi possível carregar as últimas mensagens.</span>
           <Button
             type="button"
             variant="outline"
@@ -143,12 +138,6 @@ function InboxConversationThreadColumn({
           >
             Tentar de novo
           </Button>
-        </div>
-      ) : null}
-      {showHistoryLoading ? (
-        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-border/40 bg-muted/20 py-1.5 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin shrink-0" aria-hidden />
-          <span>Carregando histórico…</span>
         </div>
       ) : null}
       <ChatPanel
