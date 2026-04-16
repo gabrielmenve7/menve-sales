@@ -1,6 +1,6 @@
 "use client";
 
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
@@ -29,8 +29,8 @@ export function ThemeToggle({
       <div
         className={cn(
           variant === "compact"
-            ? "flex h-[6.6rem] w-10 rounded-md border border-border/50 bg-muted/20"
-            : "flex h-9 w-[6.6rem] rounded-md border border-border/50 bg-muted/20",
+            ? "flex h-[4.6rem] w-10 rounded-md border border-border/50 bg-muted/20"
+            : "flex h-9 w-[4.6rem] rounded-md border border-border/50 bg-muted/20",
           className,
         )}
         aria-hidden
@@ -63,19 +63,6 @@ export function ThemeToggle({
         aria-label="Modo claro"
       >
         <Sun className="size-[16.8px]" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(
-          isCompact ? "h-8 w-full rounded-sm" : "h-8 w-8 rounded-sm",
-          theme === "system" && "bg-background shadow-sm",
-        )}
-        onClick={() => setTheme("system")}
-        aria-label="Seguir o sistema"
-      >
-        <Monitor className="size-[16.8px]" />
       </Button>
       <Button
         type="button"

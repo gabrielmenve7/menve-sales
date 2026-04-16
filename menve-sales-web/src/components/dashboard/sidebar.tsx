@@ -50,17 +50,17 @@ export function Sidebar({
 
   const linkClass = (active: boolean) =>
     cn(
-      "flex items-center rounded-lg text-[15.6px] font-medium leading-snug transition-colors",
+      "flex items-center rounded-xl text-[15.6px] font-medium leading-snug transition-colors",
       collapsed
         ? "justify-center px-2 py-2.5"
         : "gap-3 px-3 py-2.5",
       active
-        ? "bg-primary-solid/14 text-foreground dark:bg-primary-solid/22"
-        : "text-muted-foreground hover:bg-primary-solid/9 hover:text-foreground dark:hover:bg-primary-solid/16",
+        ? "bg-foreground/10 text-foreground dark:bg-white/[0.14] dark:text-white"
+        : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground dark:hover:bg-white/[0.08] dark:hover:text-white",
     );
 
   return (
-    <aside className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-0 bg-sidebar ring-0">
+    <aside className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-0 bg-sidebar text-foreground ring-0">
       <nav
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto py-2",
@@ -97,7 +97,7 @@ export function Sidebar({
             )}
           >
             <Icon
-              className="size-[18px] shrink-0 text-primary-solid"
+              className="size-[18px] shrink-0 opacity-95"
               strokeWidth={1.75}
             />
             {collapsed ? (
@@ -115,7 +115,7 @@ export function Sidebar({
             className={linkClass(pathname.startsWith("/admin"))}
           >
             <Shield
-              className="size-[18px] shrink-0 text-primary-solid"
+              className="size-[18px] shrink-0 opacity-95"
               strokeWidth={1.75}
             />
             {collapsed ? <span className="sr-only">Admin</span> : "Admin"}

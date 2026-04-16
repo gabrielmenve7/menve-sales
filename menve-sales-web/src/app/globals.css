@@ -28,13 +28,13 @@
   --chart-bar-4: #27272a;
   --chart-bar-5: #525252;
   --chart-line-stroke: #3f3f46;
-  /* Marca fixa (ex-Menta): botões, links e bolhas enviadas no inbox — modo claro */
-  --primary: #047857;
-  --primary-foreground: #ffffff;
-  --ring: #059669;
-  --accent: #d1fae5;
-  --accent-foreground: #064e3b;
-  --primary-solid: #047857;
+  /* Neutro: CTAs, links e bolhas enviadas — modo claro (ícones/botões escuros) */
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  --ring: #737373;
+  --accent: #ebebeb;
+  --accent-foreground: #171717;
+  --primary-solid: #171717;
   --primary-solid-fg: #ffffff;
 }
 
@@ -56,7 +56,6 @@
   --destructive-foreground: #fafafa;
   --border: #2a2a2a;
   --input: #2a2a2a;
-  --ring: #d4d4d4;
   --sidebar: #0d0d0d;
   /* Barras / pizza no dashboard (fundo de cartão escuro → brancos/off-white) */
   --chart-bar-1: #ffffff;
@@ -65,12 +64,12 @@
   --chart-bar-4: #fafafa;
   --chart-bar-5: #d4d4d4;
   --chart-line-stroke: #fafafa;
-  /* Texto/links “primary” neutros; bolhas enviadas = verde estilo WhatsApp escuro */
-  --primary-solid: #005c4b;
-  --primary-solid-fg: #ffffff;
-  --accent: rgba(5, 150, 105, 0.22);
-  --accent-foreground: #d1fae5;
-  --ring: #6ee7b7;
+  /* Neutro: bolhas enviadas e CTAs — modo escuro (ícones/botões claros) */
+  --primary-solid: #e8e8e8;
+  --primary-solid-fg: #0d0d0d;
+  --accent: rgba(255, 255, 255, 0.12);
+  --accent-foreground: #fafafa;
+  --ring: #737373;
 }
 
 @theme inline {
