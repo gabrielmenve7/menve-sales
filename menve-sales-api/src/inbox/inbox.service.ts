@@ -133,14 +133,23 @@ export class InboxService {
   }
 
   /**
-   * Histórico completo da conversa (mensagens + notas) para o painel central.
-   * Evita carregar 50 mensagens × N conversas no GET /inbox.
+   * Mensagens + notas + canal (sem re-carregar `contact`/deals — o web mescla com a linha da lista).
+   * Reduz payload e joins vs. incluir contact completo a cada troca de conversa.
    */
   async getConversationForInbox(tenantId: string, conversationId: string) {
     const raw = await this.prisma.conversation.findFirst({
       where: { id: conversationId, tenantId },
-      include: {
-        ...inboxConversationIncludeBase,
+      select: {
+        id: true,
+        tenantId: true,
+        contactId: true,
+        whatsappConnectionId: true,
+        assignedUserId: true,
+        status: true,
+        lastMessageAt: true,
+        createdAt: true,
+        updatedAt: true,
+        whatsappConnection: true,
         messages: { orderBy: { createdAt: "desc" }, take: 50 },
         internalNotes: {
           orderBy: { createdAt: "desc" },

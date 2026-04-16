@@ -52,6 +52,15 @@ export default async function InboxPage({
   ]);
 
   const { whatsAppConnections, quickReplyCategories, conversations } = inboxBundle;
+  const convs = conversations as InboxConversation[];
+  const listRowForDeepLink =
+    initialConversationId != null
+      ? (convs.find((c) => c.id === initialConversationId) ?? null)
+      : null;
+  const mergedInitialConversationDetail =
+    listRowForDeepLink && initialConversationDetail
+      ? ({ ...listRowForDeepLink, ...initialConversationDetail } as InboxConversation)
+      : (initialConversationDetail as InboxConversation | null);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -61,7 +70,7 @@ export default async function InboxPage({
         initialConversations={conversations as never}
         initialContactId={initialContactId}
         initialConversationId={initialConversationId}
-        initialConversationDetail={initialConversationDetail}
+        initialConversationDetail={mergedInitialConversationDetail}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={tenantMembers}
         canManageConnections={canManageConnections}

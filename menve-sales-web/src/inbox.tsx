@@ -109,6 +109,7 @@ function InboxConversationThreadColumn({
     queryKey: inboxQueryKeys.conversation(conversationId),
     queryFn: async () =>
       (await fetchInboxConversation(conversationId)) as InboxConversation,
+    staleTime: 60_000,
   });
 
   const threadData = threadQuery.data;
@@ -118,50 +119,44 @@ function InboxConversationThreadColumn({
       ? initialConversationDetail
       : undefined;
 
+  /** Sempre mostra algo na hora: lista já traz última mensagem; thread completa em background. */
   const merged = useMemo(() => {
     const t = threadData ?? serverSnapshot;
-    if (!t || t.id !== conversationId) return listRow;
-    return { ...listRow, ...t };
+    if (t && t.id === conversationId) return { ...listRow, ...t };
+    return listRow;
   }, [conversationId, listRow, serverSnapshot, threadData]);
 
-  const showThreadSpinner =
+  const showHistoryLoading =
     threadPending && !threadData && !serverSnapshot;
 
-  if (threadQuery.isError) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          Não foi possível carregar o histórico desta conversa.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => void threadQuery.refetch()}
-        >
-          Tentar de novo
-        </Button>
-      </div>
-    );
-  }
-
-  if (showThreadSpinner) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center">
-        <Loader2
-          className="size-8 animate-spin text-muted-foreground"
-          aria-label="Carregando conversa"
-        />
-      </div>
-    );
-  }
-
   return (
-    <ChatPanel
-      conversation={merged}
-      quickReplyCategories={quickReplyCategories}
-      onRefetch={onRefetchInbox}
-    />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {threadQuery.isError ? (
+        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-border/40 bg-muted/30 px-3 py-2 text-center text-xs text-muted-foreground">
+          <span>Não foi possível carregar o histórico completo.</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => void threadQuery.refetch()}
+          >
+            Tentar de novo
+          </Button>
+        </div>
+      ) : null}
+      {showHistoryLoading ? (
+        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-border/40 bg-muted/20 py-1.5 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin shrink-0" aria-hidden />
+          <span>Carregando histórico…</span>
+        </div>
+      ) : null}
+      <ChatPanel
+        conversation={merged}
+        quickReplyCategories={quickReplyCategories}
+        onRefetch={onRefetchInbox}
+      />
+    </div>
   );
 }
 
