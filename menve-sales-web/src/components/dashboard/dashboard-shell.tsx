@@ -146,7 +146,7 @@ export function DashboardShell({
     <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden bg-background">
       <div
         className={cn(
-          "relative flex h-full shrink-0 flex-col border-r border-border/40 bg-sidebar dark:border-border/30",
+          "relative flex h-full shrink-0 flex-col bg-transparent",
           "transition-[width] duration-300 ease-in-out motion-reduce:transition-none",
         )}
         style={{ width: outerWidth }}
@@ -223,8 +223,8 @@ export function DashboardShell({
         ) : null}
       </div>
 
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/30 p-4 md:p-5 dark:bg-muted/15">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/50 border-l-0 bg-card shadow-sm dark:border-border/40">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background p-4 md:p-5">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/45 bg-card shadow-sm dark:border-border/50">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {children}
           </div>

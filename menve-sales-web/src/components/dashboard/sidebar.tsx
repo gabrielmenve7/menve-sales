@@ -48,7 +48,7 @@ export function Sidebar({
   const isInboxRoute = pathname === "/inbox" || pathname.startsWith("/inbox/");
 
   return (
-    <aside className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-0 bg-sidebar text-foreground ring-0">
+    <aside className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-0 bg-transparent text-foreground ring-0">
       <nav
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2",
