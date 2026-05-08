@@ -1,5 +1,6 @@
 import path from "node:path";
 import { loadEnvConfig } from "@next/env";
+import { cache } from "react";
 import type { UserRole } from "@/types/domain";
 
 const cwd = process.cwd();
@@ -17,23 +18,46 @@ export type WorkspaceListRow = {
   role: UserRole;
 };
 
+export type AuthMeForWebSession = {
+  name: string | null;
+  email: string;
+  image: string | null;
+  workspaces: WorkspaceListRow[];
+};
+
 function apiBase() {
   return process.env.INTERNAL_API_URL?.replace(/\/$/, "") ?? "http://localhost:4000";
 }
 
-/** Lista completa de workspaces para o shell — não entra no cookie JWT (evita REQUEST_HEADER_TOO_LARGE). */
-export async function fetchUserWorkspaces(
+/**
+ * Uma chamada GET /auth/me hidrata shell e páginas sem colocar lista/foto no cookie JWT
+ * (evita REQUEST_HEADER_TOO_LARGE na Vercel). Dedup por request React (`cache`).
+ */
+async function fetchAuthMeForWebSessionImpl(
   accessToken: string,
-): Promise<WorkspaceListRow[]> {
+): Promise<AuthMeForWebSession | null> {
   const token = accessToken.trim();
-  if (!token) return [];
+  if (!token) return null;
 
-  const r = await fetch(`${apiBase()}/workspaces`, {
+  const r = await fetch(`${apiBase()}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
-  if (!r.ok) return [];
+  if (!r.ok) return null;
 
-  const data = (await r.json()) as WorkspaceListRow[];
-  return Array.isArray(data) ? data : [];
+  const u = (await r.json()) as {
+    name?: string | null;
+    email?: string;
+    image?: string | null;
+    workspaces?: WorkspaceListRow[];
+  };
+
+  return {
+    name: u.name ?? null,
+    email: typeof u.email === "string" ? u.email : "",
+    image: typeof u.image === "string" ? u.image : null,
+    workspaces: Array.isArray(u.workspaces) ? u.workspaces : [],
+  };
 }
+
+export const fetchAuthMeForWebSession = cache(fetchAuthMeForWebSessionImpl);

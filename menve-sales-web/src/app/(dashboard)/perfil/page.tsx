@@ -1,10 +1,15 @@
 import { auth } from "@/auth";
+import { fetchAuthMeForWebSession } from "@/lib/fetch-user-workspaces";
 import { redirect } from "next/navigation";
 import { SettingsProfile } from "../settings/settings-profile";
 
 export default async function PerfilPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
+  const me = session.user.accessToken?.trim()
+    ? await fetchAuthMeForWebSession(session.user.accessToken)
+    : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4 md:px-6 md:py-6">
@@ -16,9 +21,9 @@ export default async function PerfilPage() {
           </p>
         </div>
         <SettingsProfile
-          initialName={session.user.name ?? null}
-          initialEmail={session.user.email ?? ""}
-          initialImage={session.user.image ?? null}
+          initialName={me?.name ?? session.user.name ?? null}
+          initialEmail={me?.email ?? session.user.email ?? ""}
+          initialImage={me?.image ?? session.user.image ?? null}
         />
       </div>
     </div>

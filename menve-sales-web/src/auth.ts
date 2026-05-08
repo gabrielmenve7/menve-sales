@@ -27,58 +27,24 @@ function resolveAuthSecret(): string | undefined {
   return undefined;
 }
 
-type WorkspaceRow = {
-  id: string;
-  name: string;
-  slug: string;
-  plan: string;
-  image?: string | null;
-  role: UserRole;
-};
-
-/** Poucos itens no JWT; lista completa vem de GET /workspaces no layout do dashboard. */
-const MAX_WORKSPACES_IN_JWT = 10;
-const MAX_WS_NAME_IN_JWT = 48;
-const MAX_WS_SLUG_IN_JWT = 40;
+const MAX_JWT_NAME_LEN = 72;
+const MAX_JWT_EMAIL_LEN = 96;
 
 /**
- * JWT vira cookie; muitos workspaces / strings longas estouram REQUEST_HEADER_TOO_LARGE na Vercel.
- * Avatar do workspace continua funcionando via inicial quando `image` some.
+ * Cookie Auth.js / JWT não pode carregar lista de workspaces, foto nem URLs longas —
+ * a Vercel responde 494 REQUEST_HEADER_TOO_LARGE. UI hidrata via GET /auth/me no SSR.
  */
-function compactWorkspacesForJwt(
-  ws: WorkspaceRow[] | undefined,
-  preferredTenantId?: string | null,
-): WorkspaceRow[] {
-  if (!ws?.length) return [];
-  const mapped = ws.map((w) => ({
-    id: w.id,
-    name:
-      w.name.length > MAX_WS_NAME_IN_JWT
-        ? `${w.name.slice(0, MAX_WS_NAME_IN_JWT - 1)}…`
-        : w.name,
-    slug:
-      w.slug.length > MAX_WS_SLUG_IN_JWT
-        ? `${w.slug.slice(0, MAX_WS_SLUG_IN_JWT - 1)}…`
-        : w.slug,
-    plan: w.plan,
-    role: w.role,
-  }));
-  const pref = preferredTenantId?.trim();
-  let ordered = mapped;
-  if (pref) {
-    const ix = mapped.findIndex((x) => x.id === pref);
-    if (ix > 0) {
-      ordered = [mapped[ix], ...mapped.slice(0, ix), ...mapped.slice(ix + 1)];
-    }
+function shrinkClaimsForSessionCookie(token: Record<string, unknown>) {
+  delete token.workspaces;
+  delete token.picture;
+  const name = token.name;
+  if (typeof name === "string" && name.length > MAX_JWT_NAME_LEN) {
+    token.name = `${name.slice(0, MAX_JWT_NAME_LEN - 1)}…`;
   }
-  return ordered.slice(0, MAX_WORKSPACES_IN_JWT);
-}
-
-function compactPictureForJwt(url: unknown): string | undefined {
-  if (typeof url !== "string" || !url.trim()) return undefined;
-  const t = url.trim();
-  if (t.length > 180) return undefined;
-  return t;
+  const email = token.email;
+  if (typeof email === "string" && email.length > MAX_JWT_EMAIL_LEN) {
+    token.email = `${email.slice(0, MAX_JWT_EMAIL_LEN - 1)}…`;
+  }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -104,23 +70,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             id: string;
             email: string;
             name: string | null;
-            image?: string | null;
             role: UserRole;
             tenantId: string | null;
             globalRole?: UserRole;
-            workspaces?: WorkspaceRow[];
             needsOnboarding?: boolean;
           };
           return {
             id: u.id,
             email: u.email,
             name: u.name,
-            image: u.image ?? undefined,
             role: u.role,
             globalRole: u.globalRole ?? u.role,
             tenantId: u.tenantId,
             accessToken: tokenOnly.trim(),
-            workspaces: u.workspaces ?? [],
             needsOnboarding: Boolean(u.needsOnboarding),
           };
         }
@@ -167,12 +129,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const data = (await res.json()) as {
           accessToken?: string;
           needsOnboarding?: boolean;
-          workspaces?: WorkspaceRow[];
           user?: {
             id: string;
             email: string;
             name: string | null;
-            image?: string | null;
             role: UserRole;
             tenantId: string | null;
             globalRole?: UserRole;
@@ -184,12 +144,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: data.user.id,
           email: data.user.email,
           name: data.user.name,
-          image: data.user.image ?? undefined,
           role: data.user.role,
           globalRole: data.user.globalRole ?? data.user.role,
           tenantId: data.user.tenantId,
           accessToken: data.accessToken,
-          workspaces: data.workspaces ?? [],
           needsOnboarding: Boolean(data.needsOnboarding),
         };
       },
@@ -203,50 +161,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           (user as { globalRole?: UserRole }).globalRole ?? token.role;
         token.tenantId = (user as { tenantId: string | null }).tenantId;
         token.accessToken = (user as { accessToken?: string }).accessToken;
-        token.workspaces = compactWorkspacesForJwt(
-          (user as { workspaces?: WorkspaceRow[] }).workspaces,
-          (user as { tenantId?: string | null }).tenantId,
-        );
         token.needsOnboarding = (user as { needsOnboarding?: boolean })
           .needsOnboarding;
         token.name = user.name ?? undefined;
         token.email = user.email ?? undefined;
-        token.picture = compactPictureForJwt(
-          typeof (user as { image?: string | null }).image === "string"
-            ? ((user as { image?: string | null }).image ?? undefined)
-            : undefined,
-        );
       }
       if (trigger === "update") {
         const s = session as
           | {
               user?: {
                 name?: string | null;
-                image?: string | null;
               };
               accessToken?: string;
               tenantId?: string | null;
-              workspaces?: WorkspaceRow[];
               needsOnboarding?: boolean;
             }
           | undefined;
         if (s?.user?.name !== undefined) {
           token.name = s.user.name ?? undefined;
         }
-        if (s?.user?.image !== undefined) {
-          token.picture = compactPictureForJwt(s.user.image ?? undefined);
-        }
         if (s?.accessToken !== undefined) {
           token.accessToken = s.accessToken;
         }
         if (s?.tenantId !== undefined) {
           token.tenantId = s.tenantId;
-        }
-        if (s?.workspaces !== undefined) {
-          token.workspaces = compactWorkspacesForJwt(
-            s.workspaces,
-            token.tenantId as string | null | undefined,
-          );
         }
         if (s?.needsOnboarding !== undefined) {
           token.needsOnboarding = s.needsOnboarding;
@@ -274,33 +212,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 tenantId: string | null;
                 globalRole?: UserRole;
                 name?: string | null;
-                image?: string | null;
-                workspaces?: WorkspaceRow[];
                 needsOnboarding?: boolean;
               };
               token.role = u.role;
               token.globalRole = u.globalRole ?? u.role;
               token.tenantId = u.tenantId;
-              token.workspaces = compactWorkspacesForJwt(
-                u.workspaces,
-                token.tenantId as string | null | undefined,
-              );
               token.needsOnboarding = u.needsOnboarding;
               if (u.name !== undefined) token.name = u.name ?? undefined;
-              if (u.image !== undefined) {
-                token.picture = compactPictureForJwt(u.image ?? undefined);
-              }
             }
           } catch {
             /* keep token as-is */
           }
         }
       }
-      token.workspaces = compactWorkspacesForJwt(
-        token.workspaces as WorkspaceRow[] | undefined,
-        token.tenantId as string | null | undefined,
-      );
-      token.picture = compactPictureForJwt(token.picture);
+      shrinkClaimsForSessionCookie(token as Record<string, unknown>);
       return token;
     },
     session({ session, token }) {
@@ -310,15 +235,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.globalRole = (token.globalRole as UserRole) ?? session.user.role;
         session.user.tenantId = token.tenantId as string | null;
         session.user.accessToken = token.accessToken as string | undefined;
-        session.user.workspaces = (token.workspaces as WorkspaceRow[]) ?? [];
+        session.user.workspaces = [];
         session.user.needsOnboarding = Boolean(token.needsOnboarding);
         if (token.name !== undefined) {
           session.user.name = token.name as string | null;
         }
-        session.user.image =
-          typeof token.picture === "string" && token.picture !== ""
-            ? token.picture
-            : null;
+        session.user.image = null;
       }
       return session;
     },

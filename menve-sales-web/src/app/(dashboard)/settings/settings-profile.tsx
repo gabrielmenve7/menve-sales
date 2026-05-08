@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { updateMyProfile } from "@/actions/profile";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ export function SettingsProfile({
   initialEmail: string;
   initialImage: string | null;
 }) {
+  const router = useRouter();
   const { update } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState((initialName ?? "").trim() || "");
@@ -97,6 +99,7 @@ export function SettingsProfile({
         image: res.user.image,
       },
     });
+    router.refresh();
     setPreview(res.user.image);
     setImageUrl("");
   }
@@ -118,6 +121,7 @@ export function SettingsProfile({
         image: null,
       },
     });
+    router.refresh();
   }
 
   return (

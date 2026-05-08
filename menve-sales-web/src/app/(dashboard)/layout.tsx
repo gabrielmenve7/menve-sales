@@ -1,6 +1,6 @@
 import { getSessionCached } from "@/lib/get-session-cached";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { fetchUserWorkspaces } from "@/lib/fetch-user-workspaces";
+import { fetchAuthMeForWebSession } from "@/lib/fetch-user-workspaces";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { redirect } from "next/navigation";
 
@@ -35,20 +35,19 @@ export default async function DashboardLayout({
     image?: string | null;
   };
 
-  const workspacesList =
-    session.user.accessToken?.trim()
-      ? await fetchUserWorkspaces(session.user.accessToken)
-      : session.user.workspaces ?? [];
+  const me = session.user.accessToken?.trim()
+    ? await fetchAuthMeForWebSession(session.user.accessToken)
+    : null;
 
   return (
     <DashboardShell
       tenant={tenantForShell}
-      workspaces={workspacesList.length > 0 ? workspacesList : (session.user.workspaces ?? [])}
+      workspaces={me?.workspaces?.length ? me.workspaces : []}
       isSuperAdmin={isSuperAdmin}
       researchEnabled={researchEnabled}
-      userName={session.user.name}
-      userEmail={session.user.email}
-      userImage={session.user.image}
+      userName={me?.name ?? session.user.name}
+      userEmail={me?.email ?? session.user.email ?? ""}
+      userImage={me?.image ?? session.user.image}
     >
       {children}
     </DashboardShell>
