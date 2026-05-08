@@ -124,6 +124,7 @@ export class ContactsService {
         email: true,
         company: true,
         jobTitle: true,
+        campaignSource: { select: { id: true, name: true } },
         contactTags: {
           include: { tag: { select: { id: true, name: true, color: true } } },
         },
@@ -137,6 +138,7 @@ export class ContactsService {
             value: true,
             stage: { select: { name: true } },
             pipeline: { select: { name: true } },
+            assignedTo: { select: { id: true, name: true, email: true } },
           },
         },
       },

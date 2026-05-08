@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Menve Sales — WhatsApp Web",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Painel lateral com cadastro e oportunidades do Menve ao usar o WhatsApp Web.",
   "permissions": ["storage", "sidePanel"],
   "host_permissions": ["https://web.whatsapp.com/*", "<all_urls>"],

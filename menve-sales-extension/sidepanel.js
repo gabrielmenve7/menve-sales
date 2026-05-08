@@ -17,6 +17,16 @@ function fmtMoney(v) {
   });
 }
 
+function dealStatusPt(s) {
+  const m = {
+    OPEN: "Aberta",
+    WON: "Ganha",
+    LOST: "Perdida",
+    ARCHIVED: "Arquivada",
+  };
+  return m[s] || s || "—";
+}
+
 async function loadSettings() {
   return chrome.storage.local.get([
     "menveApiBaseUrl",
@@ -28,7 +38,6 @@ async function loadSettings() {
   ]);
 }
 
-/** Aceita host sem esquema (ex.: railway.app) — fetch exige URL absoluta. */
 function normalizeHttpOrigin(raw) {
   const t = (raw || "").trim();
   if (!t) return "";
@@ -59,6 +68,7 @@ async function fetchResolve(apiBase, token, phone) {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
     },
+    cache: "no-store",
   });
   const text = await res.text();
   let json = null;
@@ -70,8 +80,14 @@ async function fetchResolve(apiBase, token, phone) {
   return { ok: res.ok, status: res.status, json };
 }
 
-function renderLoading(settings) {
-  if (!settings.menveApiBaseUrl?.trim() || !settings.menveAccessToken?.trim()) {
+/** Evita que respostas antigas sobrescrevam o painel após troca rápida de chat. */
+let paintGeneration = 0;
+
+async function paint() {
+  const gen = ++paintGeneration;
+  const s = await loadSettings();
+
+  if (!s.menveApiBaseUrl?.trim() || !s.menveAccessToken?.trim()) {
     root.innerHTML =
       '<div class="card"><p class="muted">Configure a URL da API e o token JWT.</p><p><button type="button" id="openOpts" style="padding:8px 12px;cursor:pointer;font-weight:600">Abrir opções</button></p></div>';
     queueMicrotask(() => {
@@ -81,15 +97,6 @@ function renderLoading(settings) {
     });
     return;
   }
-  root.innerHTML =
-    '<div class="card muted">Carregando ou aguardando chat no WhatsApp Web…</div>';
-}
-
-async function paint() {
-  const s = await loadSettings();
-  renderLoading(s);
-
-  if (!s.menveApiBaseUrl?.trim() || !s.menveAccessToken?.trim()) return;
 
   if (s.menveWaChatKind === "group") {
     root.innerHTML =
@@ -99,19 +106,19 @@ async function paint() {
 
   if (s.menveWaChatKind === "lid") {
     root.innerHTML =
-      '<div class="card"><p class="muted">Este chat usa identificador interno do WhatsApp (lid), não o número público. Abra um chat em que o número apareça na URL (formato <code>…@c.us</code>) ou cadastre o contato por telefone explícito.</p></div>';
+      '<div class="card"><p class="muted">Este chat usa identificador interno do WhatsApp (lid). Abra uma conversa 1:1 em que o número apareça na lista à esquerda ou na URL.</p></div>';
     return;
   }
 
   const phone = (s.menveWaLastPhone || "").trim();
   if (!phone) {
     root.innerHTML =
-      '<div class="card"><p class="muted">Não foi possível ler o número deste chat.</p><p class="muted">Recarregue a página do WhatsApp Web (F5), aguarde alguns segundos ou abra de novo o contato. Se o topo da conversa mostrar <strong>só o nome</strong> (contato salvo) e nunca o telefone, abra os dados do contato ou teste com um número que apareça no cabeçalho.</p></div>';
+      '<div class="card"><p><span class="pulse"></span> <strong>Aguardando número do chat…</strong></p><p class="muted">Clique na conversa na <strong>lista à esquerda</strong> no WhatsApp Web. Se não atualizar em alguns segundos, pressione <strong>F5</strong> na aba do WhatsApp.</p></div>';
     return;
   }
 
   root.innerHTML =
-    '<div class="card muted">Consultando Menve… <code>' +
+    '<div class="card muted"><strong>Buscando lead no Menve…</strong><br/><code>' +
     esc(phone) +
     "</code></div>";
 
@@ -121,6 +128,8 @@ async function paint() {
       s.menveAccessToken.trim(),
       phone,
     );
+
+    if (gen !== paintGeneration) return;
 
     if (!ok) {
       let msg =
@@ -135,7 +144,7 @@ async function paint() {
         esc(String(status)) +
         "</p><p class=\"err\">" +
         esc(msg) +
-        '</p><p class="muted">Confira token JWT, workspace ativo na sessão e URL da API.</p></div>';
+        '</p><p class="muted">Token JWT expirado ou workspace errado — gere novo token (<code>POST /auth/login</code>) e salve em Opções.</p></div>';
       return;
     }
 
@@ -144,16 +153,16 @@ async function paint() {
         ? json.triedVariants.join(", ")
         : "";
       root.innerHTML =
-        '<div class="card"><p>Nenhum contato encontrado no Menve com esse telefone.</p>' +
-        '<p class="muted">Dígitos detectados no WhatsApp: <code>' +
+        '<div class="card"><p><strong>Nenhum lead encontrado</strong> no Menve para este número.</p>' +
+        '<p class="muted">Dígitos no WhatsApp: <code>' +
         esc(phone) +
         "</code></p>" +
         (tried
-          ? '<p class="muted">A API tentou estes formatos: <code>' +
+          ? '<p class="muted">Formatos tentados na API: <code>' +
             esc(tried) +
             "</code></p>"
           : "") +
-        '<p class="muted">Verifique no CRM se o contato tem o campo <strong>telefone</strong> preenchido e alinhado ao número da conversa (com ou sem código 55).</p></div>';
+        '<p class="muted">Cadastre o <strong>telefone</strong> no contato no CRM (com ou sem 55).</p></div>';
       return;
     }
 
@@ -177,6 +186,13 @@ async function paint() {
         )
         .join("") || '<span class="muted">Sem tags</span>';
 
+    const origin =
+      c.campaignSource?.name != null
+        ? '<p class="muted">Origem: <strong>' +
+          esc(c.campaignSource.name) +
+          "</strong></p>"
+        : "";
+
     const deals = Array.isArray(c.deals) ? c.deals : [];
     const dealsHtml =
       deals.length === 0
@@ -185,7 +201,11 @@ async function paint() {
             .map((d) => {
               const pipe = d.pipeline?.name || "—";
               const stage = d.stage?.name || "—";
-              const st = d.status || "";
+              const st = dealStatusPt(d.status);
+              const owner = d.assignedTo?.name || d.assignedTo?.email || "";
+              const ownerLine = owner
+                ? '<span class="muted"> · Resp.: ' + esc(owner) + "</span>"
+                : "";
               return (
                 '<div class="deal"><strong>' +
                 esc(d.title || "(sem título)") +
@@ -195,7 +215,9 @@ async function paint() {
                 esc(stage) +
                 " · " +
                 esc(st) +
-                "</span><br/>" +
+                "</span>" +
+                ownerLine +
+                "<br/>" +
                 fmtMoney(d.value) +
                 "</div>"
               );
@@ -204,10 +226,10 @@ async function paint() {
 
     root.innerHTML =
       '<div class="card">' +
-      "<p><strong>" +
+      "<p style=\"font-size:14px;margin:0 0 8px\"><strong>" +
       esc(c.name) +
       "</strong></p>" +
-      '<p class="muted">' +
+      '<p class="muted" style="margin:0 0 8px">' +
       esc(c.phone || phone) +
       (c.email
         ? '<br/><a href="mailto:' +
@@ -219,19 +241,21 @@ async function paint() {
       (c.company ? "<br/>" + esc(c.company) : "") +
       (c.jobTitle ? "<br/>" + esc(c.jobTitle) : "") +
       "</p>" +
-      "<div>" +
+      origin +
+      "<div style=\"margin-top:8px\">" +
       tags +
       "</div>" +
       (detailUrl
         ? '<p style="margin-top:12px"><a class="btn" target="_blank" rel="noopener noreferrer" href="' +
           esc(detailUrl) +
-          '">Abrir no CRM</a></p>'
+          '">Abrir ficha no CRM</a></p>'
         : "") +
       "</div>" +
       '<div class="card"><p style="margin:0 0 8px;font-weight:600">Oportunidades</p>' +
       dealsHtml +
       "</div>";
   } catch (e) {
+    if (gen !== paintGeneration) return;
     root.innerHTML =
       '<div class="card"><p class="err">' +
       esc(e instanceof Error ? e.message : String(e)) +
@@ -240,4 +264,16 @@ async function paint() {
 }
 
 chrome.storage.onChanged.addListener(() => paint());
+
+document.getElementById("btnRefresh")?.addEventListener("click", () => paint());
+document.getElementById("btnOpts")?.addEventListener("click", () => {
+  chrome.runtime.openOptionsPage?.();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") paint();
+});
+
+window.addEventListener("focus", () => paint());
+
 paint();

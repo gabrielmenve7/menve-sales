@@ -21,10 +21,36 @@
         font-size: 13px;
         line-height: 1.45;
       }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
       h1 {
         font-size: 15px;
-        margin: 0 0 12px;
+        margin: 0;
         font-weight: 600;
+      }
+      .top-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      button.btn-icon {
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        color: #334155;
+      }
+      button.btn-icon:hover {
+        background: #f1f5f9;
       }
       .muted {
         color: #64748b;
@@ -73,10 +99,37 @@
         font-size: 11px;
         word-break: break-all;
       }
+      .pulse {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
+      }
     </style>
   </head>
   <body>
-    <h1>Menve Sales</h1>
+    <div class="topbar">
+      <h1>Menve Sales</h1>
+      <div class="top-actions">
+        <button type="button" class="btn-icon" id="btnRefresh" title="Recarregar lead">
+          Atualizar
+        </button>
+        <button type="button" class="btn-icon" id="btnOpts" title="API e token">
+          Opções
+        </button>
+      </div>
+    </div>
     <div id="root"></div>
     <script src="sidepanel.js"></script>
   </body>
