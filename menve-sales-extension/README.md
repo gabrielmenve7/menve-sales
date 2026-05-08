@@ -17,6 +17,7 @@ Extensão Manifest V3 (Chrome / Edge) que abre um **painel lateral** com dados d
    - **URL do CRM (opcional):** para o botão “Abrir no CRM” (`…/contacts/:id`).
 3. Abra [WhatsApp Web](https://web.whatsapp.com) e uma conversa **1:1**.
 4. Clique no ícone da extensão para abrir o **painel lateral** (Side Panel).
+5. Use **Atualizar** no painel para forçar nova busca do lead; ao voltar ao painel, os dados são atualizados.
 
 ## Permissões
 
