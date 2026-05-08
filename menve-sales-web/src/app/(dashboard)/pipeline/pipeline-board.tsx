@@ -30,12 +30,12 @@ import { UserAvatar } from "@/components/user/user-avatar";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import { PipelineDealDetailDialog } from "./pipeline-deal-detail-dialog";
-import { PipelineNewDeal } from "./pipeline-new-deal";
 import {
-  columnSurfaceStyle,
-  stageAccentHex,
-  stageBadgeStyle,
-} from "./pipeline-stage-visual";
+  PipelineColumnNewDealFooterTrigger,
+  PipelineColumnNewDealHeaderButton,
+  PipelineNewDealDialog,
+} from "./pipeline-new-deal";
+import { columnSurfaceStyle } from "./pipeline-stage-visual";
 import type { DealRow } from "./pipeline-types";
 
 export type { DealRow } from "./pipeline-types";
@@ -83,33 +83,71 @@ function dealOriginLine(deal: DealRow): string | null {
   return extra > 0 ? `${head} +${extra}` : head;
 }
 
+function formatDealCurrency(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function formatPriority(deal: DealRow): string {
+  if (deal.probability == null) return "—";
+  const n = Number(deal.probability);
+  if (!Number.isFinite(n)) return "—";
+  return `${Math.round(n)}%`;
+}
+
 /** Só visual — usado no DragOverlay (fora da coluna com overflow). */
 function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
   const originLine = dealOriginLine(deal);
+  const displayValue =
+    deal.value != null && Number.isFinite(Number(deal.value))
+      ? Number(deal.value)
+      : 0;
   return (
-    <div className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),18.25rem)] shrink-0 overflow-hidden rounded-md border border-border/60 bg-card font-sans shadow-lg ring-2 ring-foreground/10">
-      <div className="px-3 py-2.5 font-sans">
-        <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 flex-1 text-[15px] font-semibold leading-[1.2] tracking-tight text-foreground">
-            {deal.contact.name}
-          </p>
+    <div className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),18.25rem)] shrink-0 overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-lg ring-2 ring-foreground/10">
+      <div className="relative px-4 py-3 font-sans">
+        <div className="absolute right-3 top-3 flex justify-end">
           <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
         </div>
-        <p className="mt-0.5 text-[12px] font-normal leading-[1.2] text-muted-foreground">
-          {deal.contact.company?.trim() || "—"}
+        <div className="grid grid-cols-3 gap-x-2 pr-7">
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+              Contato
+            </p>
+            <p className="truncate text-[14px] font-medium leading-snug text-foreground">
+              {deal.contact.name}
+            </p>
+            {deal.contact.company?.trim() ? (
+              <p className="truncate text-[11px] leading-snug text-muted-foreground">
+                {deal.contact.company.trim()}
+              </p>
+            ) : null}
+          </div>
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+              Prioridade
+            </p>
+            <p className="truncate text-[14px] leading-snug text-foreground">
+              {formatPriority(deal)}
+            </p>
+          </div>
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+              Observação
+            </p>
+            <p className="truncate text-[14px] leading-snug text-foreground">
+              {deal.title?.trim() || "—"}
+            </p>
+          </div>
+        </div>
+        <p className="mt-4 text-[14px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
+          {formatDealCurrency(displayValue)}
         </p>
-        {deal.value != null ? (
-          <p className="mt-2 text-[15px] font-bold leading-[1.2] tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
-            {Number(deal.value).toLocaleString("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            })}
-          </p>
-        ) : null}
         <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-normal leading-none text-muted-foreground">
           <span className="min-w-0 truncate">{originLine ?? "—"}</span>
           <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
-            <span className="flex size-6 items-center justify-center text-emerald-600 dark:text-emerald-500">
+            <span className="flex size-6 items-center justify-center text-foreground/80">
               <WhatsAppLogo className="size-3.5" />
             </span>
             <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
@@ -135,9 +173,9 @@ function LeadAssigneeAvatar({
       <span
         title="Sem responsável"
         aria-label="Sem responsável"
-        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-violet-600 dark:bg-violet-500"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
       >
-        <User className="size-3 text-white/80" strokeWidth={2} />
+        <User className="size-3 text-foreground/55" strokeWidth={2} />
       </span>
     );
   }
@@ -237,6 +275,11 @@ function DealCard({
 
   const originLine = dealOriginLine(deal);
 
+  const displayValue =
+    deal.value != null && Number.isFinite(Number(deal.value))
+      ? Number(deal.value)
+      : 0;
+
   function onCardKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -327,7 +370,7 @@ function DealCard({
       tabIndex={0}
       aria-label={`Lead ${deal.contact.name}. Arraste para mover de etapa ou clique para abrir.`}
       className={cn(
-        "group w-full shrink-0 touch-none overflow-hidden rounded-md border border-border/60 bg-card font-sans shadow-sm outline-none transition-[box-shadow,opacity] hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "group w-full shrink-0 touch-none overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-[0_1px_3px_rgba(15,23,42,0.06)] outline-none transition-[box-shadow,opacity] hover:shadow-[0_2px_8px_rgba(15,23,42,0.08)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.45)]",
         isDragging
           ? "cursor-grabbing opacity-50 shadow-md ring-1 ring-foreground/15"
           : "cursor-grab opacity-100 active:cursor-grabbing",
@@ -338,43 +381,9 @@ function DealCard({
         onCardKeyDown(e);
       }}
     >
-      <div className="px-3 py-2.5 font-sans">
-        <div className="flex items-start justify-between gap-2">
-          <div
-            className="min-w-0 flex-1"
-            onPointerDown={(e) => renaming && e.stopPropagation()}
-            onClick={(e) => renaming && e.stopPropagation()}
-          >
-            {renaming ? (
-              <Input
-                ref={renameInputRef}
-                disabled={renameBusy}
-                placeholder="Nome do lead"
-                className="h-8 border-0 bg-transparent px-0 text-[15px] font-semibold shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                aria-label="Nome do lead"
-                value={renameLeadName}
-                onChange={(e) => setRenameLeadName(e.target.value)}
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void onRenameSave();
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setRenameLeadName(deal.contact.name);
-                    setRenaming(false);
-                  }
-                }}
-                onBlur={() => onRenameBlur()}
-              />
-            ) : (
-              <p className="text-[15px] font-semibold leading-[1.2] tracking-tight text-foreground">
-                {deal.contact.name}
-              </p>
-            )}
-          </div>
-          {!renaming ? (
+      <div className="relative px-4 py-3 font-sans">
+        {!renaming ? (
+          <div className="absolute right-2 top-2 z-10">
             <div className="relative size-6 shrink-0">
               <span
                 className={cn(
@@ -447,36 +456,95 @@ function DealCard({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          ) : null}
-        </div>
-        <p className="mt-0.5 text-[12px] font-normal leading-[1.2] text-muted-foreground">
-          {deal.contact.company?.trim() || "—"}
-        </p>
-        {deal.value != null ? (
-          <p className="mt-2 text-[15px] font-bold leading-[1.2] tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
-            {Number(deal.value).toLocaleString("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            })}
-          </p>
+          </div>
         ) : null}
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-normal leading-none text-muted-foreground">
-          <span className="min-w-0 truncate">{originLine ?? "—"}</span>
-          <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
-            <Link
-              prefetch
-              href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="flex size-6 items-center justify-center rounded-md text-emerald-600 outline-none transition-colors hover:bg-emerald-600/10 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-emerald-500 dark:hover:text-emerald-400"
-              title="Abrir conversa no Inbox"
-              aria-label={`WhatsApp: abrir conversa com ${deal.contact.name} no Inbox`}
-            >
-              <WhatsAppLogo className="size-3.5" />
-            </Link>
-            <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
-          </span>
+
+        <div className={cn("grid grid-cols-3 gap-x-2", !renaming && "pr-7")}>
+          <div
+            className="min-w-0 space-y-1.5"
+            onPointerDown={(e) => renaming && e.stopPropagation()}
+            onClick={(e) => renaming && e.stopPropagation()}
+          >
+            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+              Contato
+            </p>
+            {renaming ? (
+              <Input
+                ref={renameInputRef}
+                disabled={renameBusy}
+                placeholder="Nome do lead"
+                className="h-8 border-0 bg-transparent px-0 text-[14px] font-medium shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                aria-label="Nome do lead"
+                value={renameLeadName}
+                onChange={(e) => setRenameLeadName(e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void onRenameSave();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setRenameLeadName(deal.contact.name);
+                    setRenaming(false);
+                  }
+                }}
+                onBlur={() => onRenameBlur()}
+              />
+            ) : (
+              <>
+                <p className="truncate text-[14px] font-medium leading-snug text-foreground">
+                  {deal.contact.name}
+                </p>
+                {deal.contact.company?.trim() ? (
+                  <p className="truncate text-[11px] leading-snug text-muted-foreground">
+                    {deal.contact.company.trim()}
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+              Prioridade
+            </p>
+            <p className="truncate text-[14px] leading-snug text-foreground">
+              {formatPriority(deal)}
+            </p>
+          </div>
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+              Observação
+            </p>
+            <p className="truncate text-[14px] leading-snug text-foreground">
+              {deal.title?.trim() || "—"}
+            </p>
+          </div>
         </div>
+
+        <p className="mt-4 text-[14px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
+          {formatDealCurrency(displayValue)}
+        </p>
+
+        {!renaming ? (
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-normal leading-none text-muted-foreground">
+            <span className="min-w-0 truncate">{originLine ?? "—"}</span>
+            <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+              <Link
+                prefetch
+                href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="flex size-6 items-center justify-center rounded-md text-foreground/75 outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                title="Abrir conversa no Inbox"
+                aria-label={`WhatsApp: abrir conversa com ${deal.contact.name} no Inbox`}
+              >
+                <WhatsAppLogo className="size-3.5" />
+              </Link>
+              <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
+            </span>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -485,54 +553,56 @@ function DealCard({
 function StageColumn({
   stage,
   deals,
-  stageIndex,
   pipeline,
   onOpenDetail,
 }: {
   stage: Stage;
   deals: DealRow[];
-  stageIndex: number;
   pipeline: Pipeline & { stages: Stage[] };
   onOpenDetail: (d: DealRow) => void;
 }) {
+  const [newDealOpen, setNewDealOpen] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
   const sum = deals.reduce((acc, d) => acc + Number(d.value ?? 0), 0);
-  const accent = stageAccentHex(stage, stageIndex);
 
   return (
     <div
       ref={setNodeRef}
-      style={columnSurfaceStyle(accent)}
+      style={columnSurfaceStyle()}
       className={cn(
-        "flex h-full min-h-0 w-[min(100vw-2rem,20rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/35",
+        "flex h-full min-h-0 w-[min(100vw-2rem,20rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/40",
         isOver &&
           "ring-2 ring-foreground/12 ring-offset-2 ring-offset-background",
       )}
     >
-      <div className="shrink-0 px-3 pb-2 pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <span
-            className="inline-block max-w-[min(100%,11rem)] truncate rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide"
-            style={stageBadgeStyle(accent)}
-          >
-            {stage.name}
-          </span>
-          <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-            {deals.length}
-          </span>
-        </div>
-        <div className="mt-1 flex justify-end">
-          <span className="text-xs tabular-nums text-emerald-600 dark:text-emerald-400">
-            {sum.toLocaleString("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            })}
-          </span>
+      <div className="shrink-0 px-4 pb-3 pt-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-[15px] font-bold leading-tight text-foreground">
+                {stage.name}
+              </h3>
+              <span className="inline-flex min-h-[1.375rem] min-w-[1.375rem] shrink-0 items-center justify-center rounded-md bg-muted px-1.5 text-xs font-semibold tabular-nums text-foreground">
+                {deals.length}
+              </span>
+            </div>
+            <p className="mt-1 text-[13px] tabular-nums leading-snug text-muted-foreground">
+              {sum.toLocaleString("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              })}
+            </p>
+          </div>
+          <PipelineColumnNewDealHeaderButton
+            onClick={() => setNewDealOpen(true)}
+          />
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-0">
+      <div className="shrink-0 border-t border-border/45 px-4" aria-hidden />
+
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
         <div
           className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
           aria-label={`Leads na etapa ${stage.name}`}
@@ -542,21 +612,26 @@ function StageColumn({
               Arraste leads aqui
             </p>
           ) : (
-            <div className="flex flex-col gap-2 pb-1">
+            <div className="flex flex-col gap-3 pb-1">
               {deals.map((d) => (
                 <DealCard key={d.id} deal={d} onOpenDetail={onOpenDetail} />
               ))}
             </div>
           )}
         </div>
-        <div className="shrink-0 pt-2">
-          <PipelineNewDeal
-            pipeline={pipeline}
-            defaultStageId={stage.id}
-            variant="column"
+        <div className="shrink-0 pt-3">
+          <PipelineColumnNewDealFooterTrigger
+            onClick={() => setNewDealOpen(true)}
           />
         </div>
       </div>
+
+      <PipelineNewDealDialog
+        open={newDealOpen}
+        onOpenChange={setNewDealOpen}
+        pipeline={pipeline}
+        stageId={stage.id}
+      />
     </div>
   );
 }
@@ -766,11 +841,10 @@ export function PipelineBoard({
           onPointerUp={endBoardPan}
           onPointerCancel={endBoardPan}
         >
-          {pipeline.stages.map((stage, idx) => (
+          {pipeline.stages.map((stage) => (
             <StageColumn
               key={stage.id}
               stage={stage}
-              stageIndex={idx}
               pipeline={pipeline}
               deals={byStage.get(stage.id) ?? []}
               onOpenDetail={openDetail}

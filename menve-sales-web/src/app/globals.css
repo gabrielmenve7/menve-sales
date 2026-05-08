@@ -23,7 +23,7 @@
   /* Sidebar um tom abaixo do canvas principal */
   --sidebar: #f3f4f6;
   /* Colunas do funil (Kanban) — cinza médio sobre canvas quase branco */
-  --kanban-column: #e5e7eb;
+  --kanban-column: #f8f9fa;
   /* Barras / pizza no dashboard (fundo de cartão claro → cinzas) */
   --chart-bar-1: #3f3f46;
   --chart-bar-2: #52525b;

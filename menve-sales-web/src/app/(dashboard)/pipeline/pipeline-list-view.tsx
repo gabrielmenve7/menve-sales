@@ -25,12 +25,13 @@ import {
 import { moveDealStage } from "@/actions/deals";
 import { UserAvatar } from "@/components/user/user-avatar";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
-import { stageSolidPillStyle } from "@/lib/stage-pill-style";
 import { cn } from "@/lib/utils";
 import { PipelineDealDetailDialog } from "./pipeline-deal-detail-dialog";
-import { PipelineNewDeal } from "./pipeline-new-deal";
+import {
+  PipelineColumnNewDealFooterTrigger,
+  PipelineNewDealDialog,
+} from "./pipeline-new-deal";
 import { PipelineListBulkToolbar } from "./pipeline-list-bulk-toolbar";
-import { stageAccentHex } from "./pipeline-stage-visual";
 import type { DealRow } from "./pipeline-types";
 
 const ROW_TRANSITION_MS = 100;
@@ -51,9 +52,9 @@ function LeadAssigneeAvatar({
       <span
         title="Sem responsável"
         aria-label="Sem responsável"
-        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-violet-600 dark:bg-violet-500"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
       >
-        <User className="size-3 text-white/80" strokeWidth={2} />
+        <User className="size-3 text-foreground/55" strokeWidth={2} />
       </span>
     );
   }
@@ -128,7 +129,6 @@ function ListDragOverlayFace({ deal }: { deal: DealRow }) {
 function DealListRow({
   deal,
   stage,
-  accent,
   colSpanDetail,
   isSelected,
   onToggleSelect,
@@ -138,7 +138,6 @@ function DealListRow({
 }: {
   deal: DealRow;
   stage: Stage;
-  accent: string;
   colSpanDetail: number;
   isSelected: boolean;
   onToggleSelect: () => void;
@@ -224,8 +223,7 @@ function DealListRow({
         >
           <div className="flex min-w-0 items-center gap-1.5">
             <span
-              className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: accent }}
+              className="size-2 shrink-0 rounded-full bg-muted-foreground/35"
               aria-hidden
             />
             <span className="min-w-0 truncate text-[13px] font-medium leading-snug text-foreground">
@@ -238,8 +236,7 @@ function DealListRow({
           onClick={onOpenDetail}
         >
           <span
-            className="inline-block max-w-full truncate rounded-md px-2 py-px text-[10px] font-bold uppercase leading-tight tracking-wide"
-            style={stageSolidPillStyle(accent)}
+            className="inline-block max-w-full truncate rounded-md bg-muted px-2 py-px text-[10px] font-bold uppercase leading-tight tracking-wide text-foreground"
           >
             {stage.name}
           </span>
@@ -311,7 +308,6 @@ const STAGE_BAR_GRID =
 
 function ListStageTbody({
   stage,
-  stageIndex,
   stageDeals,
   pipeline,
   collapsed,
@@ -324,7 +320,6 @@ function ListStageTbody({
   isFirst,
 }: {
   stage: Stage;
-  stageIndex: number;
   stageDeals: DealRow[];
   pipeline: Pipeline & { stages: Stage[] };
   collapsed: boolean;
@@ -336,7 +331,7 @@ function ListStageTbody({
   onOpenDetail: (d: DealRow) => void;
   isFirst: boolean;
 }) {
-  const accent = stageAccentHex(stage, stageIndex);
+  const [newDealOpen, setNewDealOpen] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const dealIds = useMemo(() => stageDeals.map((d) => d.id), [stageDeals]);
 
@@ -359,7 +354,7 @@ function ListStageTbody({
       ref={setNodeRef}
       className={cn(
         !isFirst && "border-t-2 border-t-border/30",
-        isOver && "bg-primary-solid/[0.07]",
+        isOver && "bg-foreground/[0.04]",
       )}
     >
       <tr className="bg-muted/40">
@@ -395,17 +390,11 @@ function ListStageTbody({
               />
               <span
                 className={cn(
-                  "inline-flex min-w-0 max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                  collapsed ? "border-2 bg-background/60" : "border-0 shadow-sm",
-                )}
-                style={
+                  "inline-flex min-w-0 max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground",
                   collapsed
-                    ? {
-                        borderColor: accent,
-                        color: `color-mix(in srgb, ${accent} 78%, var(--foreground) 22%)`,
-                      }
-                    : stageSolidPillStyle(accent)
-                }
+                    ? "border-2 border-border bg-background/70"
+                    : "border-0 bg-muted shadow-sm",
+                )}
               >
                 {stage.name}
               </span>
@@ -436,7 +425,6 @@ function ListStageTbody({
                 key={deal.id}
                 deal={deal}
                 stage={stage}
-                accent={accent}
                 colSpanDetail={COL_COUNT}
                 isSelected={selectedIds.has(deal.id)}
                 onToggleSelect={() => {
@@ -462,10 +450,14 @@ function ListStageTbody({
           )}
           <tr className="border-b border-border/25 bg-muted/10">
             <td colSpan={COL_COUNT} className="p-1.5 pt-1.5">
-              <PipelineNewDeal
+              <PipelineColumnNewDealFooterTrigger
+                onClick={() => setNewDealOpen(true)}
+              />
+              <PipelineNewDealDialog
+                open={newDealOpen}
+                onOpenChange={setNewDealOpen}
                 pipeline={pipeline}
-                defaultStageId={stage.id}
-                variant="column"
+                stageId={stage.id}
               />
             </td>
           </tr>
@@ -521,12 +513,6 @@ export function PipelineListView({
     if (!visibleStageIds || visibleStageIds.size === 0) return sortedStages;
     return sortedStages.filter((s) => visibleStageIds.has(s.id));
   }, [sortedStages, visibleStageIds]);
-
-  const stageIndexInPipeline = useMemo(() => {
-    const m = new Map<string, number>();
-    sortedStages.forEach((s, i) => m.set(s.id, i));
-    return m;
-  }, [sortedStages]);
 
   const displayedDeals = useMemo(() => {
     return deals.map((d) => {
@@ -689,7 +675,6 @@ export function PipelineListView({
                   key={stage.id}
                   isFirst={stageIndex === 0}
                   stage={stage}
-                  stageIndex={stageIndexInPipeline.get(stage.id) ?? 0}
                   stageDeals={byStage.get(stage.id) ?? []}
                   pipeline={pipeline}
                   collapsed={collapsedStageIds.has(stage.id)}

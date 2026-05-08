@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listContactsForPipeline } from "@/actions/contacts";
 import { createDeal } from "@/actions/deals";
@@ -11,7 +12,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,21 +20,20 @@ import type { Pipeline, Stage } from "@prisma/client";
 
 type ContactOpt = { id: string; name: string; phone: string | null };
 
-export function PipelineNewDeal({
+export function PipelineNewDealDialog({
+  open,
+  onOpenChange,
   pipeline,
-  defaultStageId,
-  variant = "toolbar",
+  stageId,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   pipeline: Pipeline & { stages: Stage[] };
-  defaultStageId?: string;
-  variant?: "toolbar" | "column";
+  stageId: string;
 }) {
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contacts, setContacts] = useState<ContactOpt[]>([]);
-
-  const stageId = defaultStageId ?? pipeline.stages[0]?.id;
 
   useEffect(() => {
     if (!open) return;
@@ -54,8 +53,6 @@ export function PipelineNewDeal({
       cancelled = true;
     };
   }, [open]);
-
-  if (!stageId) return null;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -77,29 +74,12 @@ export function PipelineNewDeal({
       value: Number.isFinite(value) ? value : undefined,
     });
     setLoading(false);
-    setOpen(false);
+    onOpenChange(false);
     e.currentTarget.reset();
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {variant === "column" ? (
-          <button
-            type="button"
-            className={cn(
-              "w-full rounded-xl border border-dashed border-border/70 bg-background/60 py-2.5 text-[13px] font-medium text-muted-foreground transition-colors",
-              "hover:border-foreground/25 hover:bg-background hover:text-foreground",
-            )}
-          >
-            + Novo lead
-          </button>
-        ) : (
-          <Button type="button" className="shrink-0 font-medium">
-            + Novo lead
-          </Button>
-        )}
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <form onSubmit={onSubmit}>
           <DialogHeader>
@@ -160,9 +140,7 @@ export function PipelineNewDeal({
             ) : null}
             <Button
               type="submit"
-              disabled={
-                loading || contactsLoading || contacts.length === 0
-              }
+              disabled={loading || contactsLoading || contacts.length === 0}
             >
               {loading ? "Criando…" : "Criar deal"}
             </Button>
@@ -170,5 +148,80 @@ export function PipelineNewDeal({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Botão “+” circular no topo da coluna Kanban (abre o mesmo diálogo que o rodapé). */
+export function PipelineColumnNewDealHeaderButton({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="Novo lead nesta etapa"
+      title="Novo lead nesta etapa"
+      className={cn(
+        "flex size-9 shrink-0 items-center justify-center rounded-full border border-border/45 bg-card text-foreground shadow-sm transition-colors",
+        "hover:bg-card/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "dark:border-border/50",
+      )}
+      onClick={onClick}
+    >
+      <Plus className="size-[18px]" strokeWidth={2} />
+    </button>
+  );
+}
+
+/** Área tracejada “ADICIONAR” no rodapé da coluna Kanban. */
+export function PipelineColumnNewDealFooterTrigger({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/70 bg-transparent py-4 text-muted-foreground transition-colors",
+        "hover:border-foreground/20 hover:bg-background/50 hover:text-foreground",
+      )}
+      onClick={onClick}
+    >
+      <span className="flex size-8 items-center justify-center rounded-full border border-border/80 text-foreground">
+        <Plus className="size-4" strokeWidth={2} />
+      </span>
+      <span className="text-[11px] font-bold uppercase tracking-wide">
+        Adicionar
+      </span>
+    </button>
+  );
+}
+
+export function PipelineNewDeal({
+  pipeline,
+  defaultStageId,
+}: {
+  pipeline: Pipeline & { stages: Stage[] };
+  defaultStageId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const stageId = defaultStageId ?? pipeline.stages[0]?.id;
+
+  if (!stageId) return null;
+
+  return (
+    <>
+      <Button type="button" className="shrink-0 font-medium" onClick={() => setOpen(true)}>
+        + Novo lead
+      </Button>
+      <PipelineNewDealDialog
+        open={open}
+        onOpenChange={setOpen}
+        pipeline={pipeline}
+        stageId={stageId}
+      />
+    </>
   );
 }
