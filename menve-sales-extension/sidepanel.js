@@ -106,7 +106,7 @@ async function paint() {
   const phone = (s.menveWaLastPhone || "").trim();
   if (!phone) {
     root.innerHTML =
-      '<div class="card"><p class="muted">Abra uma conversa no WhatsApp Web. O número é lido pela URL do chat (veja documentação se não atualizar).</p></div>';
+      '<div class="card"><p class="muted">Não foi possível ler o número deste chat.</p><p class="muted">Recarregue a página do WhatsApp Web (F5), aguarde alguns segundos ou abra de novo o contato. Se o topo da conversa mostrar <strong>só o nome</strong> (contato salvo) e nunca o telefone, abra os dados do contato ou teste com um número que apareça no cabeçalho.</p></div>';
     return;
   }
 
