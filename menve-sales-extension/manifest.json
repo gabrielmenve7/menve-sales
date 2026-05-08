@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Menve Sales — WhatsApp Web",
+  "version": "0.1.0",
+  "description": "Painel lateral com cadastro e oportunidades do Menve ao usar o WhatsApp Web.",
+  "permissions": ["storage", "sidePanel"],
+  "host_permissions": ["https://web.whatsapp.com/*", "<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Abrir Menve (painel lateral)"
+  },
+  "options_page": "options.html"
+}

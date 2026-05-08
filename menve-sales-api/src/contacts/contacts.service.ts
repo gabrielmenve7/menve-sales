@@ -12,6 +12,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { coerceCustomFieldValue } from "../custom-fields/custom-field-coerce";
 import { findContactCustomFieldDefinitions } from "../custom-fields/custom-fields-load.util";
 import { z } from "zod";
+import { phoneDigitsOnly } from "./phone-normalize.util";
 
 const contactSchema = z.object({
   name: z.string().min(1),
@@ -67,6 +68,75 @@ export class ContactsService {
         contactTags: { include: { tag: true } },
       },
     });
+  }
+
+  /**
+   * Resolve contato por telefone (dígitos) para side panel / extensão.
+   * Usa comparação só nos dígitos do campo `phone` no banco.
+   */
+  async resolveByPhone(tenantId: string, rawPhone: string) {
+    const digits = phoneDigitsOnly(rawPhone);
+    if (digits.length < 8) {
+      throw new BadRequestException(
+        "Informe um telefone com pelo menos 8 dígitos.",
+      );
+    }
+
+    const matches = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT c.id
+      FROM "Contact" c
+      WHERE c."tenantId" = ${tenantId}
+        AND regexp_replace(COALESCE(c."phone", ''), '[^0-9]', '', 'g') = ${digits}
+      LIMIT 5
+    `;
+
+    if (matches.length === 0) {
+      return {
+        found: false as const,
+        normalizedDigits: digits,
+      };
+    }
+
+    if (matches.length > 1) {
+      throw new BadRequestException(
+        "Vários contatos correspondem a este número; ajuste os cadastros no CRM.",
+      );
+    }
+
+    const contact = await this.prisma.contact.findFirst({
+      where: { id: matches[0].id, tenantId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        company: true,
+        jobTitle: true,
+        contactTags: {
+          include: { tag: { select: { id: true, name: true, color: true } } },
+        },
+        deals: {
+          orderBy: { updatedAt: "desc" },
+          take: 25,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            value: true,
+            stage: { select: { name: true } },
+            pipeline: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!contact) throw new NotFoundException();
+
+    return {
+      found: true as const,
+      normalizedDigits: digits,
+      contact,
+    };
   }
 
   async getDetail(tenantId: string, id: string) {

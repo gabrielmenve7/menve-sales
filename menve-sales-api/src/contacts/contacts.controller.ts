@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Res,
 } from "@nestjs/common";
 import type { Response } from "express";
@@ -43,6 +44,16 @@ export class ContactsController {
   @Get("campaign-sources")
   campaignSources(@ReqUser() u: RequestUser) {
     return this.contacts.listCampaignSources(u.tenantId);
+  }
+
+  /** Busca contato + resumo de deals por telefone (extensão WhatsApp Web / integrações). */
+  @Get("resolve")
+  resolve(
+    @ReqUser() u: RequestUser,
+    @Query("phone") phone: string | undefined,
+  ) {
+    const raw = phone?.trim() ?? "";
+    return this.contacts.resolveByPhone(u.tenantId, raw);
   }
 
   @Get(":id")

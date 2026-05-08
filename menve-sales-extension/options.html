@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Menve — Opções</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 520px;
+        padding: 20px;
+        line-height: 1.5;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-top: 14px;
+      }
+      input[type="text"],
+      input[type="password"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px;
+        margin-top: 4px;
+      }
+      button {
+        margin-top: 18px;
+        padding: 10px 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .hint {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 4px;
+      }
+      .ok {
+        color: #15803d;
+        font-size: 13px;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Menve Sales — conexão</h1>
+    <p>
+      Informe a URL pública da API Nest (ex.: <code>https://sua-api.up.railway.app</code>)
+      e um JWT de usuário válido (mesmo token usado no header
+      <code>Authorization: Bearer</code>).
+    </p>
+
+    <label for="api">URL da API (sem barra no final)</label>
+    <input id="api" type="text" placeholder="https://..." autocomplete="off" />
+    <p class="hint">
+      O token deve ser emitido após login (<code>POST /auth/login</code>) ou equivalente; use o workspace ativo desejado antes de copiar o JWT.
+    </p>
+
+    <label for="token">JWT (Bearer)</label>
+    <input id="token" type="password" placeholder="eyJ..." autocomplete="off" />
+
+    <label for="crm">URL do CRM (links “Abrir no CRM”, opcional)</label>
+    <input id="crm" type="text" placeholder="https://app.seudominio.com" autocomplete="off" />
+
+    <button type="button" id="save">Salvar</button>
+    <div id="msg" class="ok" style="display: none">Salvo.</div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
