@@ -36,6 +36,51 @@ type WorkspaceRow = {
   role: UserRole;
 };
 
+/** Poucos itens no JWT; lista completa vem de GET /workspaces no layout do dashboard. */
+const MAX_WORKSPACES_IN_JWT = 10;
+const MAX_WS_NAME_IN_JWT = 48;
+const MAX_WS_SLUG_IN_JWT = 40;
+
+/**
+ * JWT vira cookie; muitos workspaces / strings longas estouram REQUEST_HEADER_TOO_LARGE na Vercel.
+ * Avatar do workspace continua funcionando via inicial quando `image` some.
+ */
+function compactWorkspacesForJwt(
+  ws: WorkspaceRow[] | undefined,
+  preferredTenantId?: string | null,
+): WorkspaceRow[] {
+  if (!ws?.length) return [];
+  const mapped = ws.map((w) => ({
+    id: w.id,
+    name:
+      w.name.length > MAX_WS_NAME_IN_JWT
+        ? `${w.name.slice(0, MAX_WS_NAME_IN_JWT - 1)}…`
+        : w.name,
+    slug:
+      w.slug.length > MAX_WS_SLUG_IN_JWT
+        ? `${w.slug.slice(0, MAX_WS_SLUG_IN_JWT - 1)}…`
+        : w.slug,
+    plan: w.plan,
+    role: w.role,
+  }));
+  const pref = preferredTenantId?.trim();
+  let ordered = mapped;
+  if (pref) {
+    const ix = mapped.findIndex((x) => x.id === pref);
+    if (ix > 0) {
+      ordered = [mapped[ix], ...mapped.slice(0, ix), ...mapped.slice(ix + 1)];
+    }
+  }
+  return ordered.slice(0, MAX_WORKSPACES_IN_JWT);
+}
+
+function compactPictureForJwt(url: unknown): string | undefined {
+  if (typeof url !== "string" || !url.trim()) return undefined;
+  const t = url.trim();
+  if (t.length > 180) return undefined;
+  return t;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   secret: resolveAuthSecret(),
@@ -158,15 +203,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           (user as { globalRole?: UserRole }).globalRole ?? token.role;
         token.tenantId = (user as { tenantId: string | null }).tenantId;
         token.accessToken = (user as { accessToken?: string }).accessToken;
-        token.workspaces = (user as { workspaces?: WorkspaceRow[] }).workspaces;
+        token.workspaces = compactWorkspacesForJwt(
+          (user as { workspaces?: WorkspaceRow[] }).workspaces,
+          (user as { tenantId?: string | null }).tenantId,
+        );
         token.needsOnboarding = (user as { needsOnboarding?: boolean })
           .needsOnboarding;
         token.name = user.name ?? undefined;
         token.email = user.email ?? undefined;
-        token.picture =
+        token.picture = compactPictureForJwt(
           typeof (user as { image?: string | null }).image === "string"
             ? ((user as { image?: string | null }).image ?? undefined)
-            : undefined;
+            : undefined,
+        );
       }
       if (trigger === "update") {
         const s = session as
@@ -185,7 +234,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.name = s.user.name ?? undefined;
         }
         if (s?.user?.image !== undefined) {
-          token.picture = s.user.image ?? undefined;
+          token.picture = compactPictureForJwt(s.user.image ?? undefined);
         }
         if (s?.accessToken !== undefined) {
           token.accessToken = s.accessToken;
@@ -194,7 +243,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.tenantId = s.tenantId;
         }
         if (s?.workspaces !== undefined) {
-          token.workspaces = s.workspaces;
+          token.workspaces = compactWorkspacesForJwt(
+            s.workspaces,
+            token.tenantId as string | null | undefined,
+          );
         }
         if (s?.needsOnboarding !== undefined) {
           token.needsOnboarding = s.needsOnboarding;
@@ -229,11 +281,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               token.role = u.role;
               token.globalRole = u.globalRole ?? u.role;
               token.tenantId = u.tenantId;
-              token.workspaces = u.workspaces;
+              token.workspaces = compactWorkspacesForJwt(
+                u.workspaces,
+                token.tenantId as string | null | undefined,
+              );
               token.needsOnboarding = u.needsOnboarding;
               if (u.name !== undefined) token.name = u.name ?? undefined;
               if (u.image !== undefined) {
-                token.picture = u.image ?? undefined;
+                token.picture = compactPictureForJwt(u.image ?? undefined);
               }
             }
           } catch {
@@ -241,6 +296,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
       }
+      token.workspaces = compactWorkspacesForJwt(
+        token.workspaces as WorkspaceRow[] | undefined,
+        token.tenantId as string | null | undefined,
+      );
+      token.picture = compactPictureForJwt(token.picture);
       return token;
     },
     session({ session, token }) {

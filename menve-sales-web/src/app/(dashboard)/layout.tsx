@@ -1,5 +1,6 @@
 import { getSessionCached } from "@/lib/get-session-cached";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { fetchUserWorkspaces } from "@/lib/fetch-user-workspaces";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { redirect } from "next/navigation";
 
@@ -34,10 +35,15 @@ export default async function DashboardLayout({
     image?: string | null;
   };
 
+  const workspacesList =
+    session.user.accessToken?.trim()
+      ? await fetchUserWorkspaces(session.user.accessToken)
+      : session.user.workspaces ?? [];
+
   return (
     <DashboardShell
       tenant={tenantForShell}
-      workspaces={session.user.workspaces ?? []}
+      workspaces={workspacesList.length > 0 ? workspacesList : (session.user.workspaces ?? [])}
       isSuperAdmin={isSuperAdmin}
       researchEnabled={researchEnabled}
       userName={session.user.name}
