@@ -109,7 +109,9 @@ export function WorkspaceSwitcher({
           <span
             className={cn(
               "relative flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#15263f] font-semibold text-white dark:bg-[#1e3a5f]",
-              compactIconOnly ? "size-11 text-[13px] tracking-tight" : "size-9 text-[12px] tracking-tight",
+              compactIconOnly
+                ? "size-[35px] text-[10px] tracking-tight"
+                : "size-[29px] text-[10px] tracking-tight",
             )}
             aria-hidden={!!tenant.image}
           >
@@ -153,7 +155,7 @@ export function WorkspaceSwitcher({
         <div className="border-b border-border/60 px-4 pb-4 pt-4 dark:border-border/50">
           <div className="flex gap-3">
             <span
-              className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#15263f] text-[15px] font-semibold text-white dark:bg-[#1e3a5f]"
+              className="relative flex size-[38px] shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#15263f] text-[12px] font-semibold text-white dark:bg-[#1e3a5f]"
               aria-hidden={!!tenant.image}
             >
               {tenant.image ? (
