@@ -40,6 +40,8 @@ import type { DealRow } from "./pipeline-types";
 
 export type { DealRow } from "./pipeline-types";
 
+/** Largura das colunas abaixo (~16,75rem): cabe ~5 etapas + borda da 6ª na área útil típica. */
+
 function relativeShort(iso: Date | string): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
   const diff = Date.now() - d.getTime();
@@ -98,7 +100,7 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
       ? Number(deal.value)
       : 0;
   return (
-    <div className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),18.25rem)] shrink-0 overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-lg ring-2 ring-foreground/10">
+    <div className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),16.75rem)] shrink-0 overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-lg ring-2 ring-foreground/10">
       <div className="relative px-4 py-3 font-sans">
         <div className="absolute right-3 top-3 flex justify-end">
           <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
@@ -528,7 +530,7 @@ function StageColumn({
       ref={setNodeRef}
       style={columnSurfaceStyle()}
       className={cn(
-        "flex h-full min-h-0 w-[min(100vw-2rem,20rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/40",
+        "flex h-full min-h-0 w-[min(100vw-2rem,16.75rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/40",
         isOver &&
           "ring-2 ring-foreground/12 ring-offset-2 ring-offset-background",
       )}
@@ -788,7 +790,7 @@ export function PipelineBoard({
           role="region"
           aria-label="Etapas do funil: arraste nesta área para rolar horizontalmente ou use a barra de rolagem."
           className={cn(
-            "pipeline-board-scroll flex min-h-0 flex-1 gap-4 overflow-x-auto overscroll-x-contain pt-1",
+            "pipeline-board-scroll flex min-h-0 flex-1 gap-3 overflow-x-auto overscroll-x-contain pt-1",
             /* touch-pan-x faz o browser disputar o gesto horizontal com o card; pan continua via pointer events */
             "cursor-grab touch-pan-y",
             isPanningBoard && "cursor-grabbing select-none",
