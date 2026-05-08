@@ -8,6 +8,7 @@ import {
   Inbox,
   Kanban,
   LayoutGrid,
+  Settings2,
   Shield,
   Users,
   Search,
@@ -122,6 +123,16 @@ export function Sidebar({
         >
           <LayoutGrid className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
           {collapsed ? <span className="sr-only">Dashboard</span> : "Dashboard"}
+        </Link>
+
+        <Link
+          href="/settings"
+          prefetch={true}
+          title={collapsed ? "Configurações" : undefined}
+          className={linkClass(pathname === "/settings" || pathname.startsWith("/settings/"))}
+        >
+          <Settings2 className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
+          {collapsed ? <span className="sr-only">Configurações</span> : "Configurações"}
         </Link>
 
         {researchEnabled ? (
