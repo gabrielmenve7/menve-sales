@@ -636,7 +636,12 @@ function PipelineBlock({
   }
 
   async function onDeleteStage(id: string) {
-    if (!confirm("Excluir esta etapa?")) return;
+    if (
+      !confirm(
+        "Excluir esta etapa? Se houver oportunidades nela, serão movidas para a primeira etapa restante deste funil (ordem do Kanban).",
+      )
+    )
+      return;
     setBusy(true);
     onError(null);
     try {

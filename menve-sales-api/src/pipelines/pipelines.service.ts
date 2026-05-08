@@ -326,14 +326,39 @@ export class PipelinesService {
   async deleteStage(u: RequestUser, stageId: string) {
     assertCanConfigureTenant(u.role);
     const tenantId = u.tenantId;
-    await this.assertStageInTenant(stageId, tenantId);
-    const dealCount = await this.prisma.deal.count({ where: { stageId } });
-    if (dealCount > 0) {
+
+    const stage = await this.prisma.stage.findFirst({
+      where: { id: stageId, pipeline: { tenantId } },
+      include: {
+        pipeline: {
+          select: {
+            stages: {
+              select: { id: true, sortOrder: true },
+              orderBy: { sortOrder: "asc" },
+            },
+          },
+        },
+      },
+    });
+    if (!stage) throw new BadRequestException("Etapa inválida");
+
+    const siblings = stage.pipeline.stages.filter((s) => s.id !== stageId);
+    if (siblings.length === 0) {
       throw new BadRequestException(
-        "Não é possível excluir: há oportunidades nesta etapa.",
+        "Não é possível excluir a última etapa do funil.",
       );
     }
-    await this.prisma.stage.delete({ where: { id: stageId } });
+
+    /** Primeira etapa restante no Kanban (menor sortOrder). */
+    const targetStageId = siblings[0]!.id;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.deal.updateMany({
+        where: { stageId },
+        data: { stageId: targetStageId },
+      });
+      await tx.stage.delete({ where: { id: stageId } });
+    });
   }
 
   async reorderStages(
