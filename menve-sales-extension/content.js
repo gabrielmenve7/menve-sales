@@ -6,18 +6,40 @@ function parseChatFromLocation() {
     window.location.pathname +
     window.location.search +
     window.location.hash;
-  const m = blob.match(/chat\/([^/?&#]+)/);
-  if (!m) return null;
-  let jid = m[1];
+
+  const phoneParam = blob.match(/[?&]phone=(\d{8,16})\b/);
+  if (phoneParam) {
+    return {
+      kind: "direct",
+      jid: `${phoneParam[1]}@c.us`,
+      digits: phoneParam[1],
+    };
+  }
+
+  let segment = blob.match(/chat\/([^/?&#]+)/);
+  let jid = segment ? segment[1] : null;
+
+  if (!jid) {
+    const embedded = blob.match(/(\d{8,15})@(c\.us|s\.whatsapp\.net)/);
+    if (embedded) jid = embedded[0];
+  }
+
+  if (!jid) return null;
+
   try {
     jid = decodeURIComponent(jid);
   } catch {
     /* ignore */
   }
+
   if (jid.includes("@g.us")) {
     return { kind: "group", jid };
   }
+  if (jid.includes("@lid")) {
+    return { kind: "lid", jid };
+  }
   if (!jid.includes("@")) return null;
+
   const user = jid.split("@")[0];
   const digits = user.replace(/\D/g, "");
   if (digits.length < 8) return null;
@@ -47,6 +69,16 @@ function publish() {
       },
       finish,
     );
+  } else if (parsed?.kind === "lid") {
+    chrome.runtime.sendMessage(
+      {
+        type: "MENVE_WA_PHONE",
+        phone: "",
+        jid: parsed.jid,
+        kind: "lid",
+      },
+      finish,
+    );
   } else {
     chrome.runtime.sendMessage(
       {
@@ -60,15 +92,7 @@ function publish() {
   }
 }
 
-let lastHref = location.href;
-function tick() {
-  if (location.href !== lastHref) {
-    lastHref = location.href;
-    publish();
-  }
-}
-
 publish();
-setInterval(tick, 1200);
+setInterval(publish, 2000);
 window.addEventListener("hashchange", publish);
 window.addEventListener("popstate", publish);

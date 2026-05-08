@@ -12,7 +12,10 @@ import { PrismaService } from "../prisma/prisma.service";
 import { coerceCustomFieldValue } from "../custom-fields/custom-field-coerce";
 import { findContactCustomFieldDefinitions } from "../custom-fields/custom-fields-load.util";
 import { z } from "zod";
-import { phoneDigitsOnly } from "./phone-normalize.util";
+import {
+  phoneDigitsOnly,
+  phoneMatchCandidates,
+} from "./phone-normalize.util";
 
 const contactSchema = z.object({
   name: z.string().min(1),
@@ -82,18 +85,27 @@ export class ContactsService {
       );
     }
 
-    const matches = await this.prisma.$queryRaw<Array<{ id: string }>>`
-      SELECT c.id
-      FROM "Contact" c
-      WHERE c."tenantId" = ${tenantId}
-        AND regexp_replace(COALESCE(c."phone", ''), '[^0-9]', '', 'g') = ${digits}
-      LIMIT 5
-    `;
+    const candidates = phoneMatchCandidates(digits);
+    let matches: Array<{ id: string }> = [];
+    for (const cand of candidates) {
+      const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT c.id
+        FROM "Contact" c
+        WHERE c."tenantId" = ${tenantId}
+          AND regexp_replace(COALESCE(c."phone", ''), '[^0-9]', '', 'g') = ${cand}
+        LIMIT 5
+      `;
+      if (rows.length > 0) {
+        matches = rows;
+        break;
+      }
+    }
 
     if (matches.length === 0) {
       return {
         found: false as const,
         normalizedDigits: digits,
+        triedVariants: candidates,
       };
     }
 

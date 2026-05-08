@@ -97,6 +97,12 @@ async function paint() {
     return;
   }
 
+  if (s.menveWaChatKind === "lid") {
+    root.innerHTML =
+      '<div class="card"><p class="muted">Este chat usa identificador interno do WhatsApp (lid), não o número público. Abra um chat em que o número apareça na URL (formato <code>…@c.us</code>) ou cadastre o contato por telefone explícito.</p></div>';
+    return;
+  }
+
   const phone = (s.menveWaLastPhone || "").trim();
   if (!phone) {
     root.innerHTML =
@@ -134,10 +140,20 @@ async function paint() {
     }
 
     if (!json.found) {
+      const tried = Array.isArray(json.triedVariants)
+        ? json.triedVariants.join(", ")
+        : "";
       root.innerHTML =
-        '<div class="card"><p>Nenhum contato no Menve para <strong>' +
+        '<div class="card"><p>Nenhum contato encontrado no Menve com esse telefone.</p>' +
+        '<p class="muted">Dígitos detectados no WhatsApp: <code>' +
         esc(phone) +
-        "</strong>.</p></div>";
+        "</code></p>" +
+        (tried
+          ? '<p class="muted">A API tentou estes formatos: <code>' +
+            esc(tried) +
+            "</code></p>"
+          : "") +
+        '<p class="muted">Verifique no CRM se o contato tem o campo <strong>telefone</strong> preenchido e alinhado ao número da conversa (com ou sem código 55).</p></div>';
       return;
     }
 
