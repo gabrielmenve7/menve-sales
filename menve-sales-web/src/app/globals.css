@@ -20,7 +20,8 @@
   --border: #e5e5e5;
   --input: #e5e5e5;
   --radius: 0.625rem;
-  --sidebar: #f7f7f8;
+  /* Shell lateral: branco puro (referência produto) sobre fundo off-white */
+  --sidebar: #ffffff;
   /* Barras / pizza no dashboard (fundo de cartão claro → cinzas) */
   --chart-bar-1: #3f3f46;
   --chart-bar-2: #52525b;

@@ -8,13 +8,13 @@ import {
 } from "@/components/dashboard/workspace-switcher";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronsLeft } from "lucide-react";
+import { PanelLeftClose } from "lucide-react";
 
 const LS_WIDTH = "menve.sidebar.width";
 const LS_COLLAPSED = "menve.sidebar.collapsed";
 
-/** Padrão: 216 → 259 (+20%) → 311 (+20%) */
-const WIDTH_DEFAULT = 311;
+/** Largura padrão alinhada à referência visual (~260px). */
+const WIDTH_DEFAULT = 268;
 const WIDTH_MIN = 240;
 const WIDTH_MAX = 456;
 const WIDTH_COLLAPSED = 96;
@@ -154,7 +154,7 @@ export function DashboardShell({
         <div
           className={cn(
             "shrink-0 border-b border-border/40 dark:border-border/30",
-            collapsed ? "px-1.5 pb-2 pt-6 md:pt-7" : "px-2 pb-3 pt-7 md:pt-8",
+            collapsed ? "px-1.5 pb-2 pt-6 md:pt-7" : "px-3 pb-3 pt-6 md:pt-7",
           )}
         >
           {collapsed ? (
@@ -177,12 +177,12 @@ export function DashboardShell({
                 type="button"
                 variant="outline"
                 size="icon"
-                className="mt-0.5 size-11 shrink-0 rounded-lg border-border/60 bg-card/60 shadow-sm dark:border-border/50"
+                className="mt-0.5 size-9 shrink-0 rounded-md border-border/50 bg-transparent shadow-none hover:bg-muted/70 dark:border-border/40"
                 aria-label="Recolher barra lateral"
                 title="Recolher barra lateral"
                 onClick={() => setCollapsedSafe(true)}
               >
-                <ChevronsLeft className="size-[19px] opacity-80" strokeWidth={2} />
+                <PanelLeftClose className="size-[18px] opacity-85" strokeWidth={2} />
               </Button>
             </div>
           )}

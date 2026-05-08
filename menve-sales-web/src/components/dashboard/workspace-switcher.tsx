@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useTransition } from "react";
 import { switchWorkspace } from "@/actions/workspace";
-import { ChevronDown, Settings2, Users } from "lucide-react";
+import { ChevronsUpDown, Settings2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,10 +32,18 @@ function planLabel(plan: string) {
   return plan || "—";
 }
 
-function workspaceInitial(name: string) {
-  const t = name.trim();
-  if (!t) return "M";
-  return t.slice(0, 1).toUpperCase();
+/** Duas letras (ex.: João Pedro → JP), como na referência visual do seletor de workspace. */
+function workspaceInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const a = parts[0]?.[0];
+    const b = parts[1]?.[0];
+    if (a && b) return (a + b).toUpperCase();
+  }
+  const w = parts[0] ?? "";
+  if (w.length >= 2) return w.slice(0, 2).toUpperCase();
+  const one = w.slice(0, 1).toUpperCase();
+  return one || "M";
 }
 
 export function WorkspaceSwitcher({
@@ -89,8 +97,8 @@ export function WorkspaceSwitcher({
           variant="ghost"
           className={cn(
             compactIconOnly
-              ? "h-auto w-full flex-col justify-center gap-0 rounded-xl border border-border/60 bg-card/80 px-1.5 py-2.5 shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60"
-              : "h-auto w-full justify-start gap-2.5 rounded-xl border border-border/60 bg-card/80 px-3 py-2.5 text-left shadow-sm hover:bg-card dark:border-border/50 dark:bg-card/40 dark:hover:bg-card/60",
+              ? "h-auto w-full flex-col justify-center gap-0 rounded-xl border-0 bg-transparent px-1.5 py-2.5 shadow-none hover:bg-muted/60 dark:hover:bg-white/[0.06]"
+              : "h-auto w-full justify-start gap-2.5 rounded-xl border-0 bg-transparent px-2 py-2 text-left shadow-none hover:bg-muted/60 dark:hover:bg-white/[0.06]",
             className,
           )}
           aria-expanded={open}
@@ -100,8 +108,8 @@ export function WorkspaceSwitcher({
         >
           <span
             className={cn(
-              "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-foreground font-semibold text-background dark:bg-foreground dark:text-background",
-              compactIconOnly ? "size-11 text-[16.8px]" : "size-10 text-[15.6px]",
+              "relative flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#15263f] font-semibold text-white dark:bg-[#1e3a5f]",
+              compactIconOnly ? "size-11 text-[13px] tracking-tight" : "size-9 text-[12px] tracking-tight",
             )}
             aria-hidden={!!tenant.image}
           >
@@ -114,19 +122,19 @@ export function WorkspaceSwitcher({
                 referrerPolicy="no-referrer"
               />
             ) : (
-              workspaceInitial(tenant.name)
+              workspaceInitials(tenant.name)
             )}
           </span>
           {!compactIconOnly ? (
             <>
               <span className="min-w-0 flex-1 text-left">
-                <span className="block truncate text-[15.6px] font-semibold leading-tight tracking-tight">
+                <span className="block truncate text-[15px] font-semibold leading-tight tracking-tight text-foreground">
                   {tenant.name}
                 </span>
               </span>
-              <ChevronDown
+              <ChevronsUpDown
                 className={cn(
-                  "size-[19px] shrink-0 text-muted-foreground opacity-70 transition-transform",
+                  "size-[17px] shrink-0 text-muted-foreground opacity-80 transition-transform",
                   open && "rotate-180",
                 )}
                 strokeWidth={2}
@@ -145,7 +153,7 @@ export function WorkspaceSwitcher({
         <div className="border-b border-border/60 px-4 pb-4 pt-4 dark:border-border/50">
           <div className="flex gap-3">
             <span
-              className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-foreground text-lg font-semibold text-background dark:bg-foreground dark:text-background"
+              className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#15263f] text-[15px] font-semibold text-white dark:bg-[#1e3a5f]"
               aria-hidden={!!tenant.image}
             >
               {tenant.image ? (
@@ -157,7 +165,7 @@ export function WorkspaceSwitcher({
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                workspaceInitial(tenant.name)
+                workspaceInitials(tenant.name)
               )}
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
