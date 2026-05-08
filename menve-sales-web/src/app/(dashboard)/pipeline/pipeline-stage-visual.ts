@@ -18,7 +18,7 @@ export function stageAccentHex(stage: Stage, index: number): string {
 
 export function columnSurfaceStyle(hex: string): CSSProperties {
   return {
-    backgroundColor: `color-mix(in srgb, var(--background) 98.5%, ${hex} 1.5%)`,
+    backgroundColor: `color-mix(in srgb, var(--kanban-column) 88%, ${hex} 12%)`,
   };
 }
 

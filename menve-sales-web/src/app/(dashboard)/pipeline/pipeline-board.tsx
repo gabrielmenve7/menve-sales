@@ -99,7 +99,7 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
           {deal.contact.company?.trim() || "—"}
         </p>
         {deal.value != null ? (
-          <p className="mt-2 text-[15px] font-bold leading-[1.2] tabular-nums tracking-tight text-foreground">
+          <p className="mt-2 text-[15px] font-bold leading-[1.2] tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
             {Number(deal.value).toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -453,7 +453,7 @@ function DealCard({
           {deal.contact.company?.trim() || "—"}
         </p>
         {deal.value != null ? (
-          <p className="mt-2 text-[15px] font-bold leading-[1.2] tabular-nums tracking-tight text-foreground">
+          <p className="mt-2 text-[15px] font-bold leading-[1.2] tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
             {Number(deal.value).toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -523,7 +523,7 @@ function StageColumn({
           </span>
         </div>
         <div className="mt-1 flex justify-end">
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="text-xs tabular-nums text-emerald-600 dark:text-emerald-400">
             {sum.toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
