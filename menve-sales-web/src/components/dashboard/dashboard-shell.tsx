@@ -13,9 +13,9 @@ import { PanelLeftClose } from "lucide-react";
 const LS_WIDTH = "menve.sidebar.width";
 const LS_COLLAPSED = "menve.sidebar.collapsed";
 
-/** Largura padrão alinhada à referência visual (~260px). */
-const WIDTH_DEFAULT = 268;
-const WIDTH_MIN = 240;
+/** Barra lateral mais estreita (referência tipo CRM ~14–15% do viewport em telas comuns). */
+const WIDTH_DEFAULT = 228;
+const WIDTH_MIN = 220;
 const WIDTH_MAX = 456;
 const WIDTH_COLLAPSED = 96;
 const RESIZE_HANDLE_W = 10;
@@ -154,7 +154,7 @@ export function DashboardShell({
         <div
           className={cn(
             "shrink-0 border-b border-border/40 dark:border-border/30",
-            collapsed ? "px-1.5 pb-2 pt-6 md:pt-7" : "px-3 pb-3 pt-6 md:pt-7",
+            collapsed ? "px-1.5 pb-2 pt-6 md:pt-7" : "px-2.5 pb-3 pt-6 md:pt-7",
           )}
         >
           {collapsed ? (

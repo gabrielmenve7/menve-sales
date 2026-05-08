@@ -40,7 +40,7 @@ import type { DealRow } from "./pipeline-types";
 
 export type { DealRow } from "./pipeline-types";
 
-/** Largura das colunas abaixo (~16,75rem): cabe ~5 etapas + borda da 6ª na área útil típica. */
+/** Colunas mais largas (~18,75rem); sidebar mais fina libera área para cartões maiores. */
 
 function relativeShort(iso: Date | string): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
@@ -100,28 +100,28 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
       ? Number(deal.value)
       : 0;
   return (
-    <div className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),16.75rem)] shrink-0 overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-lg ring-2 ring-foreground/10">
-      <div className="relative px-4 py-3 font-sans">
+    <div className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),18.75rem)] shrink-0 overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-lg ring-2 ring-foreground/10">
+      <div className="relative px-4 py-4 font-sans">
         <div className="absolute right-3 top-3 flex justify-end">
           <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
         </div>
-        <div className="min-w-0 space-y-1.5 pr-7">
-          <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+        <div className="min-w-0 space-y-2 pr-8">
+          <p className="text-[14px] font-semibold leading-none text-muted-foreground">
             Contato
           </p>
-          <p className="truncate text-[14px] font-medium leading-snug text-foreground">
+          <p className="truncate text-[15px] font-medium leading-snug text-foreground">
             {deal.contact.name}
           </p>
           {deal.contact.company?.trim() ? (
-            <p className="truncate text-[11px] leading-snug text-muted-foreground">
+            <p className="truncate text-[12px] leading-snug text-muted-foreground">
               {deal.contact.company.trim()}
             </p>
           ) : null}
         </div>
-        <p className="mt-4 text-[14px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
+        <p className="mt-5 text-[15px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
           {formatDealCurrency(displayValue)}
         </p>
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-normal leading-none text-muted-foreground">
+        <div className="mt-2.5 flex items-center justify-between gap-2 text-[12px] font-normal leading-none text-muted-foreground">
           <span className="min-w-0 truncate">{originLine ?? "—"}</span>
           <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
             <span className="flex size-6 items-center justify-center text-foreground/80">
@@ -358,9 +358,9 @@ function DealCard({
         onCardKeyDown(e);
       }}
     >
-      <div className="relative px-4 py-3 font-sans">
+      <div className="relative px-4 py-4 font-sans">
         {!renaming ? (
-          <div className="absolute right-2 top-2 z-10">
+          <div className="absolute right-2.5 top-2.5 z-10">
             <div className="relative size-6 shrink-0">
               <span
                 className={cn(
@@ -437,11 +437,11 @@ function DealCard({
         ) : null}
 
         <div
-          className={cn("min-w-0 space-y-1.5", !renaming && "pr-7")}
+          className={cn("min-w-0 space-y-2", !renaming && "pr-8")}
           onPointerDown={(e) => renaming && e.stopPropagation()}
           onClick={(e) => renaming && e.stopPropagation()}
         >
-          <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+          <p className="text-[14px] font-semibold leading-none text-muted-foreground">
             Contato
           </p>
           {renaming ? (
@@ -449,7 +449,7 @@ function DealCard({
               ref={renameInputRef}
               disabled={renameBusy}
               placeholder="Nome do lead"
-              className="h-8 border-0 bg-transparent px-0 text-[14px] font-medium shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-9 border-0 bg-transparent px-0 text-[15px] font-medium shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
               aria-label="Nome do lead"
               value={renameLeadName}
               onChange={(e) => setRenameLeadName(e.target.value)}
@@ -467,26 +467,26 @@ function DealCard({
               }}
               onBlur={() => onRenameBlur()}
             />
-          ) : (
-            <>
-              <p className="truncate text-[14px] font-medium leading-snug text-foreground">
-                {deal.contact.name}
-              </p>
-              {deal.contact.company?.trim() ? (
-                <p className="truncate text-[11px] leading-snug text-muted-foreground">
-                  {deal.contact.company.trim()}
+            ) : (
+              <>
+                <p className="truncate text-[15px] font-medium leading-snug text-foreground">
+                  {deal.contact.name}
                 </p>
-              ) : null}
-            </>
-          )}
-        </div>
+                {deal.contact.company?.trim() ? (
+                  <p className="truncate text-[12px] leading-snug text-muted-foreground">
+                    {deal.contact.company.trim()}
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
 
-        <p className="mt-4 text-[14px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
+        <p className="mt-5 text-[15px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
           {formatDealCurrency(displayValue)}
         </p>
 
         {!renaming ? (
-          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-normal leading-none text-muted-foreground">
+          <div className="mt-2.5 flex items-center justify-between gap-2 text-[12px] font-normal leading-none text-muted-foreground">
             <span className="min-w-0 truncate">{originLine ?? "—"}</span>
             <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
               <Link
@@ -530,7 +530,7 @@ function StageColumn({
       ref={setNodeRef}
       style={columnSurfaceStyle()}
       className={cn(
-        "flex h-full min-h-0 w-[min(100vw-2rem,16.75rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/40",
+        "flex h-full min-h-0 w-[min(100vw-2rem,18.75rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/40",
         isOver &&
           "ring-2 ring-foreground/12 ring-offset-2 ring-offset-background",
       )}
@@ -571,7 +571,7 @@ function StageColumn({
               Arraste leads aqui
             </p>
           ) : (
-            <div className="flex flex-col gap-3 pb-1">
+            <div className="flex flex-col gap-3.5 pb-1">
               {deals.map((d) => (
                 <DealCard key={d.id} deal={d} onOpenDetail={onOpenDetail} />
               ))}
