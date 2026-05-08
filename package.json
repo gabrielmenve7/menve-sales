@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstall": "prisma generate --schema ./menve-sales-api/prisma/schema.prisma",
+    "postinstall": "prisma generate --schema ./menve-sales-api/prisma/schema.prisma && node ./menve-sales-api/scripts/sync-prisma-client.js",
     "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
     "dev:web": "npm run start:dev --prefix menve-sales-web",
     "dev:web:3001": "npm run start:dev:3001 --prefix menve-sales-web",

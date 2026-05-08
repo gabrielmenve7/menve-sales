@@ -8,6 +8,7 @@ import {
   Inbox,
   Kanban,
   LayoutGrid,
+  Package,
   Settings2,
   Shield,
   Users,
@@ -93,6 +94,16 @@ export function Sidebar({
         >
           <Kanban className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
           {collapsed ? <span className="sr-only">Pipelines</span> : "Pipelines"}
+        </Link>
+
+        <Link
+          href="/produtos"
+          prefetch={true}
+          title={collapsed ? "Produtos" : undefined}
+          className={linkClass(pathname === "/produtos" || pathname.startsWith("/produtos/"))}
+        >
+          <Package className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
+          {collapsed ? <span className="sr-only">Produtos</span> : "Produtos"}
         </Link>
 
         <Link

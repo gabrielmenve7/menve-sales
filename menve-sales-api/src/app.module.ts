@@ -24,6 +24,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
 import { TenantsModule } from "./tenants/tenants.module";
 import { ProspectingModule } from "./prospecting/prospecting.module";
 import { PipelineAutomationsModule } from "./pipeline-automations/pipeline-automations.module";
+import { ProductsModule } from "./products/products.module";
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { PipelineAutomationsModule } from "./pipeline-automations/pipeline-autom
     TenantsModule,
     ProspectingModule,
     PipelineAutomationsModule,
+    ProductsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
