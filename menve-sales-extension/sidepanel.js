@@ -28,8 +28,25 @@ async function loadSettings() {
   ]);
 }
 
+/** Aceita host sem esquema (ex.: railway.app) — fetch exige URL absoluta. */
+function normalizeHttpOrigin(raw) {
+  const t = (raw || "").trim();
+  if (!t) return "";
+  let u = t.replace(/\/$/, "");
+  if (/^https?:\/\//i.test(u)) return u;
+  const hostPart = u.split("/")[0].toLowerCase();
+  if (
+    hostPart.startsWith("localhost") ||
+    hostPart.startsWith("127.0.0.1") ||
+    hostPart === "[::1]"
+  ) {
+    return `http://${u}`;
+  }
+  return `https://${u}`;
+}
+
 function joinApiUrl(base, path) {
-  const b = base.replace(/\/$/, "");
+  const b = normalizeHttpOrigin(base);
   const p = path.startsWith("/") ? path : `/${path}`;
   return b + p;
 }
@@ -125,7 +142,7 @@ async function paint() {
     }
 
     const c = json.contact;
-    const crm = (s.menveCrmBaseUrl || "").replace(/\/$/, "");
+    const crm = normalizeHttpOrigin(s.menveCrmBaseUrl || "");
     const detailUrl = crm
       ? crm + "/contacts/" + encodeURIComponent(c.id)
       : "";
