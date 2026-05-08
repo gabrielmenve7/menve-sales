@@ -48,8 +48,9 @@ import { Label } from "@/components/ui/label";
 
 type PipelineWithStages = Pipeline & { stages: Stage[] };
 
+/** Clone para estado local; JSON evita falha de `structuredClone` no SSR com props do Flight. */
 function clonePipelines(p: PipelineWithStages[]): PipelineWithStages[] {
-  return structuredClone(p);
+  return JSON.parse(JSON.stringify(p)) as PipelineWithStages[];
 }
 
 function normColor(c: string | null | undefined): string {

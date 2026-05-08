@@ -11,7 +11,7 @@ type SettingsBundle = {
     slug: string;
     plan: string;
     researchEnabled?: boolean;
-  };
+  } | null;
   whatsAppConnections: unknown[];
   quickReplyCategories: unknown[];
   pipelines: unknown[];
@@ -50,6 +50,10 @@ export default async function SettingsPage({
     canManageWorkspaceFeatures(),
   ]);
 
+  if (!data.tenant) {
+    redirect("/setup");
+  }
+
   const webhookBaseUrl =
     process.env.WEBHOOK_PUBLIC_URL?.replace(/\/$/, "") ||
     process.env.INTERNAL_API_URL?.replace(/\/$/, "") ||
@@ -66,7 +70,7 @@ export default async function SettingsPage({
           </p>
         </div>
         <SettingsClient
-          tenant={data.tenant as never}
+          tenant={data.tenant}
           canManageWorkspace={canManageWorkspace}
           defaultTab={defaultTab}
           connections={data.whatsAppConnections as never}
