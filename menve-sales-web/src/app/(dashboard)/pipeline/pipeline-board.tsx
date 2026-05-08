@@ -90,13 +90,6 @@ function formatDealCurrency(value: number): string {
   });
 }
 
-function formatPriority(deal: DealRow): string {
-  if (deal.probability == null) return "—";
-  const n = Number(deal.probability);
-  if (!Number.isFinite(n)) return "—";
-  return `${Math.round(n)}%`;
-}
-
 /** Só visual — usado no DragOverlay (fora da coluna com overflow). */
 function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
   const originLine = dealOriginLine(deal);
@@ -110,36 +103,18 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
         <div className="absolute right-3 top-3 flex justify-end">
           <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
         </div>
-        <div className="grid grid-cols-3 gap-x-2 pr-7">
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
-              Contato
+        <div className="min-w-0 space-y-1.5 pr-7">
+          <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+            Contato
+          </p>
+          <p className="truncate text-[14px] font-medium leading-snug text-foreground">
+            {deal.contact.name}
+          </p>
+          {deal.contact.company?.trim() ? (
+            <p className="truncate text-[11px] leading-snug text-muted-foreground">
+              {deal.contact.company.trim()}
             </p>
-            <p className="truncate text-[14px] font-medium leading-snug text-foreground">
-              {deal.contact.name}
-            </p>
-            {deal.contact.company?.trim() ? (
-              <p className="truncate text-[11px] leading-snug text-muted-foreground">
-                {deal.contact.company.trim()}
-              </p>
-            ) : null}
-          </div>
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
-              Prioridade
-            </p>
-            <p className="truncate text-[14px] leading-snug text-foreground">
-              {formatPriority(deal)}
-            </p>
-          </div>
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
-              Observação
-            </p>
-            <p className="truncate text-[14px] leading-snug text-foreground">
-              {deal.title?.trim() || "—"}
-            </p>
-          </div>
+          ) : null}
         </div>
         <p className="mt-4 text-[14px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
           {formatDealCurrency(displayValue)}
@@ -459,67 +434,49 @@ function DealCard({
           </div>
         ) : null}
 
-        <div className={cn("grid grid-cols-3 gap-x-2", !renaming && "pr-7")}>
-          <div
-            className="min-w-0 space-y-1.5"
-            onPointerDown={(e) => renaming && e.stopPropagation()}
-            onClick={(e) => renaming && e.stopPropagation()}
-          >
-            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
-              Contato
-            </p>
-            {renaming ? (
-              <Input
-                ref={renameInputRef}
-                disabled={renameBusy}
-                placeholder="Nome do lead"
-                className="h-8 border-0 bg-transparent px-0 text-[14px] font-medium shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                aria-label="Nome do lead"
-                value={renameLeadName}
-                onChange={(e) => setRenameLeadName(e.target.value)}
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void onRenameSave();
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setRenameLeadName(deal.contact.name);
-                    setRenaming(false);
-                  }
-                }}
-                onBlur={() => onRenameBlur()}
-              />
-            ) : (
-              <>
-                <p className="truncate text-[14px] font-medium leading-snug text-foreground">
-                  {deal.contact.name}
+        <div
+          className={cn("min-w-0 space-y-1.5", !renaming && "pr-7")}
+          onPointerDown={(e) => renaming && e.stopPropagation()}
+          onClick={(e) => renaming && e.stopPropagation()}
+        >
+          <p className="text-[13px] font-semibold leading-none text-muted-foreground">
+            Contato
+          </p>
+          {renaming ? (
+            <Input
+              ref={renameInputRef}
+              disabled={renameBusy}
+              placeholder="Nome do lead"
+              className="h-8 border-0 bg-transparent px-0 text-[14px] font-medium shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              aria-label="Nome do lead"
+              value={renameLeadName}
+              onChange={(e) => setRenameLeadName(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void onRenameSave();
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setRenameLeadName(deal.contact.name);
+                  setRenaming(false);
+                }
+              }}
+              onBlur={() => onRenameBlur()}
+            />
+          ) : (
+            <>
+              <p className="truncate text-[14px] font-medium leading-snug text-foreground">
+                {deal.contact.name}
+              </p>
+              {deal.contact.company?.trim() ? (
+                <p className="truncate text-[11px] leading-snug text-muted-foreground">
+                  {deal.contact.company.trim()}
                 </p>
-                {deal.contact.company?.trim() ? (
-                  <p className="truncate text-[11px] leading-snug text-muted-foreground">
-                    {deal.contact.company.trim()}
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
-              Prioridade
-            </p>
-            <p className="truncate text-[14px] leading-snug text-foreground">
-              {formatPriority(deal)}
-            </p>
-          </div>
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-[13px] font-semibold leading-none text-muted-foreground">
-              Observação
-            </p>
-            <p className="truncate text-[14px] leading-snug text-foreground">
-              {deal.title?.trim() || "—"}
-            </p>
-          </div>
+              ) : null}
+            </>
+          )}
         </div>
 
         <p className="mt-4 text-[14px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
