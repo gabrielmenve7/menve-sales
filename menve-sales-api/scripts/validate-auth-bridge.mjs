@@ -5,8 +5,12 @@
  * Uso:
  *   node menve-sales-api/scripts/validate-auth-bridge.mjs
  *
- * Para testar a URL pública da API (ex.: Railway), sem alterar o .env:
+ * Testar a URL pública da API (ex.: Railway), sem alterar o .env:
  *   VALIDATE_AUTH_BRIDGE_BASE=https://sua-api.example.com node menve-sales-api/scripts/validate-auth-bridge.mjs
+ *
+ * Testar produção via rota /api/_diag/auth-bridge do Next (revela INTERNAL_API_URL real):
+ *   DIAG_SITE_URL=https://mnvsales.vercel.app DIAG_KEY=<INTERNAL_API_KEY> \
+ *     node menve-sales-api/scripts/validate-auth-bridge.mjs
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -168,6 +172,35 @@ try {
   }
 } catch (e) {
   fail(`Rede em POST /auth/login: ${e?.message || e}`);
+}
+
+const diagSite = process.env.DIAG_SITE_URL?.trim();
+const diagKey = process.env.DIAG_KEY?.trim();
+if (diagSite && diagKey) {
+  const url = `${diagSite.replace(/\/$/, "")}/api/_diag/auth-bridge`;
+  console.log("\n=== Diagnóstico remoto (via Next /api/_diag/auth-bridge) ===");
+  console.log("URL:", url);
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "x-diag-key": diagKey },
+    });
+    const t = await r.text();
+    console.log("Status:", r.status);
+    try {
+      const j = JSON.parse(t);
+      console.log(JSON.stringify(j, null, 2));
+    } catch {
+      console.log(t.slice(0, 800));
+    }
+    if (!r.ok) fail(`Diagnóstico remoto retornou ${r.status}.`);
+  } catch (e) {
+    fail(`Falha ao chamar diagnóstico remoto: ${e?.message || e}`);
+  }
+} else {
+  console.log(
+    "\n(Defina DIAG_SITE_URL e DIAG_KEY para diagnóstico remoto em produção.)",
+  );
 }
 
 console.log("\n=== Fim do relatório ===\n");
