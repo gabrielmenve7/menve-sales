@@ -17,6 +17,14 @@ class MenveAuthServiceError extends CredentialsSignin {
   code = AUTH_CREDENTIAL_CODE.AUTH_SERVICE_ERROR;
 }
 
+class MenveAuthApiNotFound extends CredentialsSignin {
+  code = AUTH_CREDENTIAL_CODE.AUTH_API_NOT_FOUND;
+}
+
+class MenveAuthApiServerError extends CredentialsSignin {
+  code = AUTH_CREDENTIAL_CODE.AUTH_API_SERVER_ERROR;
+}
+
 class MenveAuthRateLimited extends CredentialsSignin {
   code = AUTH_CREDENTIAL_CODE.AUTH_RATE_LIMITED;
 }
@@ -27,6 +35,22 @@ class MenveInvalidAuthResponse extends CredentialsSignin {
 
 class MenveSessionInvalid extends CredentialsSignin {
   code = AUTH_CREDENTIAL_CODE.SESSION_INVALID;
+}
+
+/** Respostas HTTP não OK das rotas públicas `/auth/login` e `/auth/me`. */
+function throwForAuthUpstreamError(status: number, mode: "login" | "me") {
+  if (status === 401) {
+    throw mode === "login"
+      ? new MenveInvalidCredentials()
+      : new MenveSessionInvalid();
+  }
+  if (status === 429) throw new MenveAuthRateLimited();
+  if (status === 502 || status === 503 || status === 504) {
+    throw new MenveAuthApiUnreachable();
+  }
+  if (status === 404) throw new MenveAuthApiNotFound();
+  if (status >= 500) throw new MenveAuthApiServerError();
+  throw new MenveAuthServiceError();
 }
 
 const cwd = process.cwd();
@@ -105,14 +129,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             console.error(
               "[menve/auth] auth/me não OK:",
               r.status,
+              apiBase(),
               snippet.slice(0, 400),
             );
-            if (r.status === 401) throw new MenveSessionInvalid();
-            if (r.status === 429) throw new MenveAuthRateLimited();
-            if (r.status === 502 || r.status === 503 || r.status === 504) {
-              throw new MenveAuthApiUnreachable();
-            }
-            throw new MenveAuthServiceError();
+            throwForAuthUpstreamError(r.status, "me");
           }
           const u = (await r.json()) as {
             id: string;
@@ -170,14 +190,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           console.error(
             "[menve/auth] auth/login não OK:",
             res.status,
+            loginUrl,
             snippet.slice(0, 400),
           );
-          if (res.status === 401) throw new MenveInvalidCredentials();
-          if (res.status === 429) throw new MenveAuthRateLimited();
-          if (res.status === 502 || res.status === 503 || res.status === 504) {
-            throw new MenveAuthApiUnreachable();
-          }
-          throw new MenveAuthServiceError();
+          throwForAuthUpstreamError(res.status, "login");
         }
         const data = (await res.json()) as {
           accessToken?: string;
