@@ -1,8 +1,29 @@
 import path from "node:path";
 import { loadEnvConfig } from "@next/env";
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { AUTH_CREDENTIAL_CODE } from "@/lib/auth-credential-codes";
 import type { UserRole } from "@/types/domain";
+
+class MenveInvalidCredentials extends CredentialsSignin {
+  code = AUTH_CREDENTIAL_CODE.INVALID_CREDENTIALS;
+}
+
+class MenveAuthApiUnreachable extends CredentialsSignin {
+  code = AUTH_CREDENTIAL_CODE.API_UNREACHABLE;
+}
+
+class MenveAuthServiceError extends CredentialsSignin {
+  code = AUTH_CREDENTIAL_CODE.AUTH_SERVICE_ERROR;
+}
+
+class MenveInvalidAuthResponse extends CredentialsSignin {
+  code = AUTH_CREDENTIAL_CODE.INVALID_AUTH_RESPONSE;
+}
+
+class MenveSessionInvalid extends CredentialsSignin {
+  code = AUTH_CREDENTIAL_CODE.SESSION_INVALID;
+}
 
 const cwd = process.cwd();
 const monorepoRoot =
@@ -62,10 +83,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       authorize: async (credentials) => {
         const tokenOnly = credentials?.accessToken as string | undefined;
         if (tokenOnly?.trim()) {
-          const r = await fetch(`${apiBase()}/auth/me`, {
-            headers: { Authorization: `Bearer ${tokenOnly.trim()}` },
-          });
-          if (!r.ok) return null;
+          let r: Response;
+          try {
+            r = await fetch(`${apiBase()}/auth/me`, {
+              headers: { Authorization: `Bearer ${tokenOnly.trim()}` },
+            });
+          } catch (err) {
+            console.error(
+              "[menve/auth] Falha de rede ao chamar auth/me:",
+              `${apiBase()}/auth/me`,
+              err,
+            );
+            throw new MenveAuthApiUnreachable();
+          }
+          if (!r.ok) {
+            const snippet = await r.text().catch(() => "");
+            console.error(
+              "[menve/auth] auth/me não OK:",
+              r.status,
+              snippet.slice(0, 400),
+            );
+            if (r.status === 401) throw new MenveSessionInvalid();
+            throw new MenveAuthServiceError();
+          }
           const u = (await r.json()) as {
             id: string;
             email: string;
@@ -89,7 +129,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const email = credentials?.email as string | undefined;
         const password = credentials?.password as string | undefined;
-        if (!email || !password) return null;
+        if (!email || !password) throw new MenveInvalidCredentials();
 
         const base = apiBase();
         const loginUrl = `${base}/auth/login`;
@@ -115,7 +155,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             loginUrl,
             err,
           );
-          return null;
+          throw new MenveAuthApiUnreachable();
         }
         if (!res.ok) {
           const snippet = await res.text().catch(() => "");
@@ -124,7 +164,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             res.status,
             snippet.slice(0, 400),
           );
-          return null;
+          if (res.status === 401) throw new MenveInvalidCredentials();
+          throw new MenveAuthServiceError();
         }
         const data = (await res.json()) as {
           accessToken?: string;
@@ -138,7 +179,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             globalRole?: UserRole;
           };
         };
-        if (!data.user?.id || !data.accessToken) return null;
+        if (!data.user?.id || !data.accessToken) {
+          console.error(
+            "[menve/auth] auth/login resposta sem user/accessToken",
+            { hasUser: Boolean(data.user), hasToken: Boolean(data.accessToken) },
+          );
+          throw new MenveInvalidAuthResponse();
+        }
 
         return {
           id: data.user.id,

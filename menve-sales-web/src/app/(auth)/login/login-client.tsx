@@ -4,6 +4,8 @@ import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { SignInResponse } from "next-auth/react";
+import { messageForCredentialsSignIn } from "@/lib/auth-credential-codes";
 import {
   fetchInvitePreview,
   registerAccount,
@@ -123,14 +125,14 @@ export function LoginPageClient() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const res = await signIn("credentials", {
+    const res = (await signIn("credentials", {
       email,
       password,
       redirect: false,
-    });
+    })) as SignInResponse;
     setLoading(false);
     if (res?.error) {
-      setError("Credenciais inválidas ou API indisponível.");
+      setError(messageForCredentialsSignIn(res.code));
       return;
     }
     if (inviteToken) {
@@ -169,13 +171,13 @@ export function LoginPageClient() {
         setLoading(false);
         return;
       }
-      const res = await signIn("credentials", {
+      const res = (await signIn("credentials", {
         accessToken: result.accessToken,
         redirect: false,
-      });
+      })) as SignInResponse;
       setLoading(false);
       if (res?.error) {
-        setError("Sessão não pôde ser criada. Tente entrar com e-mail e senha.");
+        setError(messageForCredentialsSignIn(res.code));
         return;
       }
       if (inviteToken) {
