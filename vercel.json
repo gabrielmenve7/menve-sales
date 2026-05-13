@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm ci",
-  "buildCommand": "node ./scripts/vercel-check-direct-url.mjs && prisma generate --schema ./menve-sales-api/prisma/schema.prisma && prisma migrate deploy --schema ./menve-sales-api/prisma/schema.prisma && npm run build --prefix menve-sales-web",
+  "buildCommand": "node ./scripts/vercel-prisma-build.mjs && npm run build --prefix menve-sales-web",
   "outputDirectory": "menve-sales-web/.next"
 }
