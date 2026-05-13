@@ -17,6 +17,10 @@ class MenveAuthServiceError extends CredentialsSignin {
   code = AUTH_CREDENTIAL_CODE.AUTH_SERVICE_ERROR;
 }
 
+class MenveAuthRateLimited extends CredentialsSignin {
+  code = AUTH_CREDENTIAL_CODE.AUTH_RATE_LIMITED;
+}
+
 class MenveInvalidAuthResponse extends CredentialsSignin {
   code = AUTH_CREDENTIAL_CODE.INVALID_AUTH_RESPONSE;
 }
@@ -104,6 +108,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               snippet.slice(0, 400),
             );
             if (r.status === 401) throw new MenveSessionInvalid();
+            if (r.status === 429) throw new MenveAuthRateLimited();
+            if (r.status === 502 || r.status === 503 || r.status === 504) {
+              throw new MenveAuthApiUnreachable();
+            }
             throw new MenveAuthServiceError();
           }
           const u = (await r.json()) as {
@@ -165,6 +173,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             snippet.slice(0, 400),
           );
           if (res.status === 401) throw new MenveInvalidCredentials();
+          if (res.status === 429) throw new MenveAuthRateLimited();
+          if (res.status === 502 || res.status === 503 || res.status === 504) {
+            throw new MenveAuthApiUnreachable();
+          }
           throw new MenveAuthServiceError();
         }
         const data = (await res.json()) as {
