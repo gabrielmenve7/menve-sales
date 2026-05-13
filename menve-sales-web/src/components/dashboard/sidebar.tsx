@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Bot,
   ChevronsRight,
   Inbox,
   Kanban,
@@ -114,16 +113,6 @@ export function Sidebar({
         >
           <Users className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
           {collapsed ? <span className="sr-only">Contatos</span> : "Contatos"}
-        </Link>
-
-        <Link
-          href="/agentes"
-          prefetch={true}
-          title={collapsed ? "Agentes IA" : undefined}
-          className={linkClass(pathname === "/agentes" || pathname.startsWith("/agentes/"))}
-        >
-          <Bot className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Agentes IA</span> : "Agentes IA"}
         </Link>
 
         <Link
