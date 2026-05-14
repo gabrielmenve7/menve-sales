@@ -163,9 +163,9 @@ export function PipelineColumnNewDealHeaderButton({
       aria-label="Novo lead nesta etapa"
       title="Novo lead nesta etapa"
       className={cn(
-        "flex size-9 shrink-0 items-center justify-center rounded-full border border-border/45 bg-card text-foreground shadow-sm transition-colors",
-        "hover:bg-card/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        "dark:border-border/50",
+        "flex size-10 shrink-0 items-center justify-center rounded-full border border-transparent bg-white text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.08)] transition-colors",
+        "hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "dark:border-border/50 dark:bg-card",
       )}
       onClick={onClick}
     >

@@ -530,7 +530,7 @@ function StageColumn({
       ref={setNodeRef}
       style={columnSurfaceStyle()}
       className={cn(
-        "flex h-full min-h-0 w-[min(100vw-2rem,18.75rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-border/40",
+        "flex h-full min-h-0 w-[min(100vw-2rem,18.75rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-transparent dark:border-border/40",
         isOver &&
           "ring-2 ring-foreground/12 ring-offset-2 ring-offset-background",
       )}
@@ -542,7 +542,7 @@ function StageColumn({
               <h3 className="truncate text-[15px] font-bold leading-tight text-foreground">
                 {stage.name}
               </h3>
-              <span className="inline-flex min-h-[1.375rem] min-w-[1.375rem] shrink-0 items-center justify-center rounded-md bg-muted px-1.5 text-xs font-semibold tabular-nums text-foreground">
+              <span className="inline-flex min-h-[1.375rem] min-w-[1.375rem] shrink-0 items-center justify-center rounded-md bg-black/[0.06] px-1.5 text-xs font-semibold tabular-nums text-foreground/80 dark:bg-white/10">
                 {deals.length}
               </span>
             </div>
@@ -559,9 +559,7 @@ function StageColumn({
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-border/45 px-4" aria-hidden />
-
-      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-1">
         <div
           className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
           aria-label={`Leads na etapa ${stage.name}`}
