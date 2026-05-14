@@ -70,7 +70,7 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
       : 0;
   return (
     <div className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),18.75rem)] shrink-0 overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-lg ring-2 ring-foreground/10">
-      <div className="relative px-4 py-4 font-sans">
+      <div className="relative px-4 py-3 font-sans">
         <div className="absolute right-3 top-3 flex justify-end">
           <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
         </div>
@@ -87,14 +87,16 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
             </p>
           ) : null}
         </div>
-        <p className="mt-5 text-[12.5px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
-          {formatDealCurrency(displayValue)}
-        </p>
-        <div className="mt-2.5 flex items-center justify-end gap-1.5 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
-          <span className="flex size-6 items-center justify-center text-foreground/80">
-            <WhatsAppLogo className="size-3.5" />
-          </span>
-          <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
+        <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-[12.5px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
+            {formatDealCurrency(displayValue)}
+          </p>
+          <div className="flex shrink-0 items-center gap-1 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
+            <span className="flex size-6 items-center justify-center text-foreground/80">
+              <WhatsAppLogo className="size-3.5" />
+            </span>
+            <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -322,7 +324,7 @@ function DealCard({
         onCardKeyDown(e);
       }}
     >
-      <div className="relative px-4 py-4 font-sans">
+      <div className="relative px-4 py-3 font-sans">
         {!renaming ? (
           <div className="absolute right-2.5 top-2.5 z-10">
             <div className="relative size-6 shrink-0">
@@ -445,26 +447,27 @@ function DealCard({
             )}
           </div>
 
-        <p className="mt-5 text-[12.5px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
-          {formatDealCurrency(displayValue)}
-        </p>
-
-        {!renaming ? (
-          <div className="mt-2.5 flex items-center justify-end gap-1.5 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
-            <Link
-              prefetch
-              href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="flex size-6 items-center justify-center rounded-md text-foreground/75 outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              title="Abrir conversa no Inbox"
-              aria-label={`WhatsApp: abrir conversa com ${deal.contact.name} no Inbox`}
-            >
-              <WhatsAppLogo className="size-3.5" />
-            </Link>
-            <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
-          </div>
-        ) : null}
+        <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-[12.5px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
+            {formatDealCurrency(displayValue)}
+          </p>
+          {!renaming ? (
+            <div className="flex shrink-0 items-center gap-1 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
+              <Link
+                prefetch
+                href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="flex size-6 items-center justify-center rounded-md text-foreground/75 outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                title="Abrir conversa no Inbox"
+                aria-label={`WhatsApp: abrir conversa com ${deal.contact.name} no Inbox`}
+              >
+                <WhatsAppLogo className="size-3.5" />
+              </Link>
+              <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
