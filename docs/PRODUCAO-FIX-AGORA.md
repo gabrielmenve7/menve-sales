@@ -6,23 +6,72 @@ Este documento descreve o que **precisa estar configurado** em cada serviço (Ve
 
 ## ❗ Causa raiz do incidente atual (13/05/2026)
 
-A `INTERNAL_API_URL` do projeto **`menve-sales`** na Vercel (que serve `crm.menvedigital.com.br`) aponta para:
+Diagnóstico via `/api/diag-auth-bridge` na produção (`crm.menvedigital.com.br`):
 
+```jsonc
+{
+  "env": {
+    "VERCEL_ENV": "production",
+    "INTERNAL_API_URL": {
+      "origin": "https://menve-sales-production.up.railway.app",
+      "pathname": "",  // formato OK
+      "trailing_slash": false
+    }
+  },
+  "probes": [
+    {"url": ".../health",     "status": 404, "body_snippet": "{\"status\":\"error\",\"code\":404,\"message\":\"Application not found\",...}"},
+    {"url": ".../health/live","status": 404, "body_snippet": "Application not found"},
+    {"url": ".../auth/login", "status": 404, "body_snippet": "Application not found"},
+    {"url": ".../auth/me",    "status": 404, "body_snippet": "Application not found"}
+  ],
+  "verdict": ["GET /health não retornou 200 (status 404). URL pode não ser a API Nest, ou o serviço está fora."]
+}
 ```
-INTERNAL_API_URL=https://menve-sales-production.up.railway.app
-```
 
-Essa URL retorna **HTTP 404** com o payload:
+**`Application not found`** é o erro padrão da Railway quando o **serviço não existe** (foi removido, renomeado ou sem deploy ativo). Configuração na Vercel está correta — falta a API rodando.
 
-```json
-{"status":"error","code":404,"message":"Application not found","request_id":"..."}
-```
+**Ação obrigatória**: re-criar/reativar o serviço da API Nest na Railway.
 
-Esse é o erro padrão da Railway quando o **serviço não existe** (foi removido, renomeado ou está sem deploy). Por isso o login mostra “HTTP 404 /auth/login” e o `/api/health` do Next também retorna esse JSON.
+Em paralelo: existem **5 projetos Vercel duplicados** ligados ao mesmo repo (`menve-sales` ✓, `mnvsales`, `sales`, `menvesales`, `comercial`). O único produtivo é **`menve-sales`** com domínio **`crm.menvedigital.com.br`**. Recomenda-se **arquivar/excluir os outros 4** na Vercel para não gerar 5 deploys a cada push (4 deles falham por falta de envs).
 
-**Ação obrigatória**: re-deployar a API Nest na Railway (ou em outro host) e atualizar `INTERNAL_API_URL` na Vercel.
+### Passo a passo para reativar a API na Railway
 
-Em paralelo: existem **vários projetos Vercel duplicados** ligados ao mesmo repositório (`mnvsales`, `sales`, `menvesales`, `comercial`, `menve-sales`). O único que está rodando bem é **`menve-sales`** com domínio principal **`crm.menvedigital.com.br`**. Recomenda-se **arquivar/excluir os outros 4 projetos** na Vercel para não gerar deploy duplicado e confusão (cada push tenta 5 builds simultâneos).
+1. Acessar https://railway.app/dashboard e abrir o projeto onde estava a API.
+2. Se o serviço foi **deletado** sem possibilidade de restore: criar **novo serviço** com **Deploy from GitHub repo** → `gabrielmenve7/menve-sales` (branch `master`).
+3. **Settings → Source**:
+   - **Root Directory** = vazio (raiz do repo).
+   - **Builder** = **Dockerfile**.
+   - **Dockerfile path** = `menve-sales-api/Dockerfile`.
+   - (Não preencher Custom Build/Start; o `railway.toml` da raiz cuida disso.)
+4. **Variables** (idênticas, em ordem):
+   - `DATABASE_URL` = `postgresql://neondb_owner:npg_tGxc9lV0daDP@ep-crimson-frog-acsw125p-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   - `DIRECT_URL` = `postgresql://neondb_owner:npg_tGxc9lV0daDP@ep-crimson-frog-acsw125p.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   - `JWT_SECRET` = gerar com `openssl rand -base64 48` (obrigatório em prod; commit `213a2485` faz a API não subir sem isso).
+   - `INTERNAL_API_KEY` = **mesmo valor da Vercel**. Hoje está como `dev-internal-key-change-me` (placeholder); trocar nos dois lados por algo forte (`openssl rand -base64 32`).
+   - `CORS_ORIGIN` = `https://crm.menvedigital.com.br`
+   - `PUBLIC_APP_URL` = URL pública que a Railway atribuir ao serviço.
+   - `NODE_ENV` = `production`
+   - `USE_WORKSPACE_MEMBERSHIP` = `true`
+5. **Settings → Networking → Generate domain** → anotar a URL gerada (ex.: `https://menve-sales-production-XXXX.up.railway.app`).
+6. **Vercel** (projeto `menve-sales` → Settings → Environment Variables → Production):
+   - Atualizar `INTERNAL_API_URL` para a URL exata do passo 5.
+   - **Redeploy** o último deploy de Production.
+7. Smoke check:
+   ```bash
+   curl -i https://<sua-api>.up.railway.app/health
+   # esperado: 200 + {"ok":true,"db":"up",...}
+   curl -i -X POST -H "Content-Type: application/json" \
+     -d '{"email":"x@y","password":"bad"}' \
+     https://<sua-api>.up.railway.app/auth/login
+   # esperado: 401
+   ```
+8. Diagnóstico no Next:
+   ```bash
+   curl -sS -X POST -H "x-diag-key: <INTERNAL_API_KEY>" \
+     https://crm.menvedigital.com.br/api/diag-auth-bridge | jq .verdict
+   # esperado: []  (ou frase "POST /auth/login ... → 401 (esperado)")
+   ```
+9. Login real em https://crm.menvedigital.com.br/login.
 
 ---
 
