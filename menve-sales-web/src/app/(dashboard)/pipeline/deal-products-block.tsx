@@ -323,7 +323,7 @@ export function DealProductsBlock({
   );
 }
 
-function ProductPicker({
+export function ProductPicker({
   value,
   products,
   onPick,

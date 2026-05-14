@@ -42,22 +42,37 @@ export async function archiveDeal(dealId: string) {
   revalidatePath("/inbox", "page");
 }
 
+const createDealItemSchema = z.object({
+  productId: z.string().min(1).nullable().optional(),
+  productName: z.string().min(1).max(200),
+  quantity: z.number().finite().min(0).max(1e9),
+  unitPrice: z.number().finite().min(0).max(1e11),
+});
+
 const dealSchema = z.object({
   contactId: z.string(),
   pipelineId: z.string(),
   stageId: z.string(),
   title: z.string().min(1),
   value: z.number().optional(),
+  /** 0..1 (0%..100%) — Prioridade do registro (Alta/Média/Baixa). */
+  probability: z.number().min(0).max(1).nullable().optional(),
+  /** Vira uma Activity NOTE inicial vinculada ao deal/contato. */
+  observation: z.string().min(1).max(5000).optional(),
+  items: z.array(createDealItemSchema).max(200).optional(),
 });
 
-export async function createDeal(input: z.infer<typeof dealSchema>) {
+export async function createDeal(
+  input: z.infer<typeof dealSchema>,
+): Promise<{ id: string }> {
   const data = dealSchema.parse(input);
-  await apiServer("/deals", {
+  const res = await apiServer<{ id: string }>("/deals", {
     method: "POST",
     json: data,
   });
   revalidatePath("/pipeline", "page");
   revalidatePath("/inbox", "page");
+  return res;
 }
 
 export async function markDealWon(dealId: string) {

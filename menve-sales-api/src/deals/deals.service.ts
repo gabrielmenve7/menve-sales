@@ -17,12 +17,24 @@ import { PIPELINE_AUTOMATION_MAX_DEPTH } from "../pipeline-automations/pipeline-
 import { PipelineAutomationEngineService } from "../pipeline-automations/pipeline-automation-engine.service";
 import { PrismaService } from "../prisma/prisma.service";
 
+const createDealItemSchema = z.object({
+  productId: z.string().min(1).nullable().optional(),
+  productName: z.string().min(1).max(200),
+  quantity: z.number().finite().min(0).max(1e9),
+  unitPrice: z.number().finite().min(0).max(1e11),
+});
+
 const dealSchema = z.object({
   contactId: z.string(),
   pipelineId: z.string(),
   stageId: z.string(),
   title: z.string().min(1),
   value: z.number().optional(),
+  /** 0..1 (0%..100%). Usado pelo seletor de Prioridade no diálogo de “Novo registro”. */
+  probability: z.number().min(0).max(1).nullable().optional(),
+  /** Vira uma `Activity NOTE` inicial vinculada ao deal/contato. */
+  observation: z.string().min(1).max(5000).optional(),
+  items: z.array(createDealItemSchema).max(200).optional(),
 });
 
 const lostSchema = z.object({
@@ -515,6 +527,36 @@ export class DealsService {
 
   async create(tenantId: string, actorUserId: string, input: unknown) {
     const data = dealSchema.parse(input);
+
+    /** Calcula valor a partir dos itens (se enviados); senão usa `value` passado. */
+    const itemsTotal =
+      data.items && data.items.length > 0
+        ? data.items.reduce(
+            (acc, it) => acc + it.quantity * it.unitPrice,
+            0,
+          )
+        : null;
+    const effectiveValue =
+      itemsTotal != null ? itemsTotal : data.value ?? null;
+
+    const validProductIds = new Set<string>();
+    if (data.items && data.items.length > 0) {
+      const productIds = Array.from(
+        new Set(
+          data.items
+            .map((it) => it.productId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+      if (productIds.length > 0) {
+        const found = await this.prisma.product.findMany({
+          where: { tenantId, id: { in: productIds } },
+          select: { id: true },
+        });
+        for (const p of found) validProductIds.add(p.id);
+      }
+    }
+
     const deal = await this.prisma.deal.create({
       data: {
         tenantId,
@@ -522,10 +564,12 @@ export class DealsService {
         pipelineId: data.pipelineId,
         stageId: data.stageId,
         title: data.title,
-        value: data.value,
+        value: effectiveValue,
+        probability: data.probability ?? null,
       },
     });
-    await this.prisma.activity.create({
+
+    const created = await this.prisma.activity.create({
       data: {
         tenantId,
         userId: actorUserId,
@@ -539,6 +583,38 @@ export class DealsService {
         }),
       },
     });
+    void created;
+
+    if (data.observation && data.observation.trim().length > 0) {
+      await this.prisma.activity.create({
+        data: {
+          tenantId,
+          userId: actorUserId,
+          dealId: deal.id,
+          contactId: deal.contactId,
+          type: ActivityType.NOTE,
+          title: data.observation.trim(),
+        },
+      });
+    }
+
+    if (data.items && data.items.length > 0) {
+      await this.prisma.dealItem.createMany({
+        data: data.items.map((it, idx) => ({
+          tenantId,
+          dealId: deal.id,
+          productId:
+            it.productId && validProductIds.has(it.productId)
+              ? it.productId
+              : null,
+          productName: it.productName.trim(),
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          sortOrder: idx,
+        })),
+      });
+    }
+
     if (this.pipelineAutomationEngine) {
       try {
         const contact = await this.prisma.contact.findFirst({
@@ -557,6 +633,8 @@ export class DealsService {
         /* ignore */
       }
     }
+
+    return { id: deal.id };
   }
 
   async markWon(tenantId: string, actorUserId: string, dealId: string) {
