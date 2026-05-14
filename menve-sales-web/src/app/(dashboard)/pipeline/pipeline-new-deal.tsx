@@ -1,8 +1,11 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { listContactsForPipeline } from "@/actions/contacts";
+import { useEffect, useMemo, useState } from "react";
+import {
+  createContact,
+  listContactsForPipeline,
+} from "@/actions/contacts";
 import { createDeal } from "@/actions/deals";
 import { listProducts, type ProductOption } from "@/actions/products";
 import { Button } from "@/components/ui/button";
@@ -269,6 +272,15 @@ export function PipelineNewDealDialog({
                       contacts={contacts}
                       loading={contactsLoading}
                       onPick={(id) => setContactId(id)}
+                      onContactCreated={(c) =>
+                        setContacts((prev) =>
+                          [...prev, c].sort((a, b) =>
+                            a.name.localeCompare(b.name, "pt-BR", {
+                              sensitivity: "base",
+                            }),
+                          ),
+                        )
+                      }
                     />
                   </Field>
                   <Field label="Prioridade">
@@ -496,33 +508,66 @@ function ContactPicker({
   contacts,
   loading,
   onPick,
+  onContactCreated,
 }: {
   contactId: string;
   contacts: ContactOpt[];
   loading: boolean;
   onPick: (id: string) => void;
+  onContactCreated: (c: ContactOpt) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [creating, setCreating] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const selected = contacts.find((c) => c.id === contactId) ?? null;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return contacts;
-    return contacts.filter((c) => {
-      const inName = c.name.toLowerCase().includes(q);
-      const inPhone = (c.phone ?? "").toLowerCase().includes(q);
-      return inName || inPhone;
-    });
+    return contacts.filter((c) => c.name.toLowerCase().includes(q));
   }, [contacts, query]);
+
+  async function resolveEnter() {
+    const name = query.trim();
+    if (name.length === 0 || creating || loading) return;
+
+    const exact = contacts.find(
+      (c) => c.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+    if (exact) {
+      onPick(exact.id);
+      setOpen(false);
+      setQuery("");
+      setLocalError(null);
+      return;
+    }
+
+    setCreating(true);
+    setLocalError(null);
+    try {
+      const { id } = await createContact({ name });
+      const row: ContactOpt = { id, name, phone: null };
+      onContactCreated(row);
+      onPick(id);
+      setOpen(false);
+      setQuery("");
+    } catch (e) {
+      setLocalError(
+        e instanceof Error
+          ? e.message
+          : "Não foi possível cadastrar o contato.",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          ref={triggerRef}
           type="button"
           disabled={loading}
           className={cn(
@@ -539,7 +584,7 @@ function ContactPicker({
             {loading
               ? "Carregando…"
               : selected
-                ? `${selected.name}${selected.phone ? ` (${selected.phone})` : ""}`
+                ? selected.name
                 : "Escolha, ou digite para buscar"}
           </span>
           <ChevronDown className="size-3.5 shrink-0 opacity-60" />
@@ -554,32 +599,46 @@ function ContactPicker({
           autoFocus
           placeholder="Buscar contato…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setLocalError(null);
+          }}
+          disabled={creating}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            e.stopPropagation();
+            void resolveEnter();
+          }}
           className="mb-2 h-9"
         />
+        {localError ? (
+          <p className="mb-2 px-0.5 text-[12px] text-destructive">{localError}</p>
+        ) : null}
         <div className="max-h-56 space-y-0.5 overflow-y-auto">
-          {filtered.length === 0 ? (
+          {creating ? (
             <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
-              Nenhum contato encontrado.
+              Cadastrando contato…
+            </p>
+          ) : filtered.length === 0 ? (
+            <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
+              Nenhum contato encontrado. Digite o nome e pressione Enter para
+              cadastrar.
             </p>
           ) : (
             filtered.map((c) => (
               <button
                 key={c.id}
                 type="button"
-                className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                className="flex w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
                 onClick={() => {
                   onPick(c.id);
                   setOpen(false);
                   setQuery("");
+                  setLocalError(null);
                 }}
               >
                 <span className="min-w-0 truncate">{c.name}</span>
-                {c.phone ? (
-                  <span className="shrink-0 text-[12px] text-muted-foreground">
-                    {c.phone}
-                  </span>
-                ) : null}
               </button>
             ))
           )}

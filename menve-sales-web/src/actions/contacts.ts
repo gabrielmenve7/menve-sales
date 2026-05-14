@@ -16,9 +16,11 @@ const contactSchema = z.object({
   campaignSourceId: z.string().optional(),
 });
 
-export async function createContact(input: z.infer<typeof contactSchema>) {
+export async function createContact(
+  input: z.infer<typeof contactSchema>,
+): Promise<{ id: string }> {
   const data = contactSchema.parse(input);
-  await apiServer("/contacts", {
+  const res = await apiServer<{ id: string }>("/contacts", {
     method: "POST",
     json: {
       name: data.name,
@@ -33,6 +35,8 @@ export async function createContact(input: z.infer<typeof contactSchema>) {
     },
   });
   revalidatePath("/contacts");
+  revalidatePath("/pipeline", "page");
+  return res;
 }
 
 export async function deleteContact(id: string) {

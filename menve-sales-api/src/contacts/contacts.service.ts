@@ -192,7 +192,7 @@ export class ContactsService {
 
   async create(tenantId: string, input: unknown) {
     const data = contactSchema.parse(input);
-    await this.prisma.contact.create({
+    const contact = await this.prisma.contact.create({
       data: {
         tenantId,
         name: data.name,
@@ -205,7 +205,9 @@ export class ContactsService {
         utmCampaign: data.utmCampaign || null,
         campaignSourceId: data.campaignSourceId || null,
       },
+      select: { id: true },
     });
+    return contact;
   }
 
   async delete(tenantId: string, id: string) {
