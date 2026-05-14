@@ -12,6 +12,7 @@ import {
   ListChecks,
   ListFilter,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   SlidersHorizontal,
@@ -138,6 +139,7 @@ function PipelineViewBody({
   );
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const [automationMenuOpen, setAutomationMenuOpen] = useState(false);
+  const [pipelineRefreshing, setPipelineRefreshing] = useState(false);
   const [automationDialogMode, setAutomationDialogMode] = useState<
     "create" | "manage"
   >("create");
@@ -589,6 +591,32 @@ function PipelineViewBody({
                 </div>
               </PopoverContent>
             </Popover>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
+              aria-label="Atualizar funil e leads"
+              title="Atualizar"
+              disabled={pipelineRefreshing}
+              onClick={() => {
+                void (async () => {
+                  setPipelineRefreshing(true);
+                  try {
+                    await refreshActiveAutomationCount();
+                    await router.refresh();
+                  } finally {
+                    setPipelineRefreshing(false);
+                  }
+                })();
+              }}
+            >
+              <RefreshCw
+                className={`size-[18px] ${pipelineRefreshing ? "animate-spin" : ""}`}
+                strokeWidth={2}
+                aria-hidden
+              />
+            </Button>
             <Button
               type="button"
               variant="outline"
