@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   ChevronsRight,
   Inbox,
-  Kanban,
+  Trello,
   LayoutGrid,
   Package,
   Settings2,
@@ -88,11 +88,11 @@ export function Sidebar({
         <Link
           href="/pipeline"
           prefetch={true}
-          title={collapsed ? "Pipelines" : undefined}
+          title={collapsed ? "Funil de vendas" : undefined}
           className={linkClass(pathname === "/pipeline" || pathname.startsWith("/pipeline/"))}
         >
-          <Kanban className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Pipelines</span> : "Pipelines"}
+          <Trello className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
+          {collapsed ? <span className="sr-only">Funil de vendas</span> : "Funil de vendas"}
         </Link>
 
         <Link
