@@ -55,36 +55,6 @@ function relativeShort(iso: Date | string): string {
   return "agora";
 }
 
-function dealOriginLine(deal: DealRow): string | null {
-  const sourceTag =
-    deal.contact.campaignSource?.name ?? deal.contact.utmSource ?? null;
-  const originParts: string[] = [];
-  const seen = new Set<string>();
-  if (sourceTag?.trim()) {
-    const s = sourceTag.trim();
-    seen.add(s);
-    originParts.push(s);
-  }
-  for (const dt of deal.dealTags ?? []) {
-    const n = dt.tag.name.trim();
-    if (n && !seen.has(n)) {
-      seen.add(n);
-      originParts.push(n);
-    }
-  }
-  for (const ct of deal.contact.contactTags ?? []) {
-    const n = ct.tag.name.trim();
-    if (n && !seen.has(n)) {
-      seen.add(n);
-      originParts.push(n);
-    }
-  }
-  if (originParts.length === 0) return null;
-  const head = originParts.slice(0, 2).join(" ");
-  const extra = originParts.length - 2;
-  return extra > 0 ? `${head} +${extra}` : head;
-}
-
 function formatDealCurrency(value: number): string {
   return value.toLocaleString("pt-BR", {
     style: "currency",
@@ -94,7 +64,6 @@ function formatDealCurrency(value: number): string {
 
 /** Só visual — usado no DragOverlay (fora da coluna com overflow). */
 function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
-  const originLine = dealOriginLine(deal);
   const displayValue =
     deal.value != null && Number.isFinite(Number(deal.value))
       ? Number(deal.value)
@@ -121,14 +90,11 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
         <p className="mt-5 text-[12.5px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
           {formatDealCurrency(displayValue)}
         </p>
-        <div className="mt-2.5 flex items-center justify-between gap-2 text-[10px] font-normal leading-none text-muted-foreground">
-          <span className="min-w-0 truncate">{originLine ?? "—"}</span>
-          <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
-            <span className="flex size-6 items-center justify-center text-foreground/80">
-              <WhatsAppLogo className="size-3.5" />
-            </span>
-            <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
+        <div className="mt-2.5 flex items-center justify-end gap-1.5 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
+          <span className="flex size-6 items-center justify-center text-foreground/80">
+            <WhatsAppLogo className="size-3.5" />
           </span>
+          <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
         </div>
       </div>
     </div>
@@ -249,8 +215,6 @@ function DealCard({
     onPointerDown?: React.PointerEventHandler<HTMLDivElement>;
   } & Record<string, unknown>;
   const { onPointerDown: dndPointerDown, ...listenersRest } = listenerMap;
-
-  const originLine = dealOriginLine(deal);
 
   const displayValue =
     deal.value != null && Number.isFinite(Number(deal.value))
@@ -486,22 +450,19 @@ function DealCard({
         </p>
 
         {!renaming ? (
-          <div className="mt-2.5 flex items-center justify-between gap-2 text-[10px] font-normal leading-none text-muted-foreground">
-            <span className="min-w-0 truncate">{originLine ?? "—"}</span>
-            <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
-              <Link
-                prefetch
-                href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
-                onClick={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-                className="flex size-6 items-center justify-center rounded-md text-foreground/75 outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                title="Abrir conversa no Inbox"
-                aria-label={`WhatsApp: abrir conversa com ${deal.contact.name} no Inbox`}
-              >
-                <WhatsAppLogo className="size-3.5" />
-              </Link>
-              <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
-            </span>
+          <div className="mt-2.5 flex items-center justify-end gap-1.5 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
+            <Link
+              prefetch
+              href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="flex size-6 items-center justify-center rounded-md text-foreground/75 outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              title="Abrir conversa no Inbox"
+              aria-label={`WhatsApp: abrir conversa com ${deal.contact.name} no Inbox`}
+            >
+              <WhatsAppLogo className="size-3.5" />
+            </Link>
+            <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
           </div>
         ) : null}
       </div>
