@@ -8,8 +8,8 @@
  * Testar a URL pública da API (ex.: Railway), sem alterar o .env:
  *   VALIDATE_AUTH_BRIDGE_BASE=https://sua-api.example.com node menve-sales-api/scripts/validate-auth-bridge.mjs
  *
- * Testar produção via rota /api/_diag/auth-bridge do Next (revela INTERNAL_API_URL real):
- *   DIAG_SITE_URL=https://mnvsales.vercel.app DIAG_KEY=<INTERNAL_API_KEY> \
+ * Testar produção via rota /api/diag-auth-bridge do Next (revela INTERNAL_API_URL real):
+ *   DIAG_SITE_URL=https://crm.menvedigital.com.br DIAG_KEY=<INTERNAL_API_KEY> \
  *     node menve-sales-api/scripts/validate-auth-bridge.mjs
  */
 import fs from "node:fs";
@@ -177,8 +177,8 @@ try {
 const diagSite = process.env.DIAG_SITE_URL?.trim();
 const diagKey = process.env.DIAG_KEY?.trim();
 if (diagSite && diagKey) {
-  const url = `${diagSite.replace(/\/$/, "")}/api/_diag/auth-bridge`;
-  console.log("\n=== Diagnóstico remoto (via Next /api/_diag/auth-bridge) ===");
+  const url = `${diagSite.replace(/\/$/, "")}/api/diag-auth-bridge`;
+  console.log("\n=== Diagnóstico remoto (via Next /api/diag-auth-bridge) ===");
   console.log("URL:", url);
   try {
     const r = await fetch(url, {

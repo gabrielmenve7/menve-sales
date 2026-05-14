@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * Não devolve segredos; só host/path da URL, contagem de caracteres e status HTTP.
  *
  * Uso:
- *   curl -X POST -H "x-diag-key: <INTERNAL_API_KEY>" https://<seu-site>/api/_diag/auth-bridge
+ *   curl -X POST -H "x-diag-key: <INTERNAL_API_KEY>" https://<seu-site>/api/diag-auth-bridge
  */
 function maskUrl(value: string | undefined): {
   configured: boolean;

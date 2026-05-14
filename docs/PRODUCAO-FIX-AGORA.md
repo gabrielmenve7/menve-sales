@@ -4,6 +4,26 @@ Este documento descreve o que **precisa estar configurado** em cada serviço (Ve
 
 > **Fluxo do login**: browser → `POST /api/auth/callback/credentials` (Next/Vercel) → `POST ${INTERNAL_API_URL}/auth/login` (server-side, Vercel → Railway) → Postgres (Neon) via Prisma.
 
+## ❗ Causa raiz do incidente atual (13/05/2026)
+
+A `INTERNAL_API_URL` do projeto **`menve-sales`** na Vercel (que serve `crm.menvedigital.com.br`) aponta para:
+
+```
+INTERNAL_API_URL=https://menve-sales-production.up.railway.app
+```
+
+Essa URL retorna **HTTP 404** com o payload:
+
+```json
+{"status":"error","code":404,"message":"Application not found","request_id":"..."}
+```
+
+Esse é o erro padrão da Railway quando o **serviço não existe** (foi removido, renomeado ou está sem deploy). Por isso o login mostra “HTTP 404 /auth/login” e o `/api/health` do Next também retorna esse JSON.
+
+**Ação obrigatória**: re-deployar a API Nest na Railway (ou em outro host) e atualizar `INTERNAL_API_URL` na Vercel.
+
+Em paralelo: existem **vários projetos Vercel duplicados** ligados ao mesmo repositório (`mnvsales`, `sales`, `menvesales`, `comercial`, `menve-sales`). O único que está rodando bem é **`menve-sales`** com domínio principal **`crm.menvedigital.com.br`**. Recomenda-se **arquivar/excluir os outros 4 projetos** na Vercel para não gerar deploy duplicado e confusão (cada push tenta 5 builds simultâneos).
+
 ---
 
 ## 0. Diagnóstico rápido
@@ -13,7 +33,7 @@ Depois do redeploy desta versão, chame a rota de diagnóstico do próprio site 
 ```bash
 curl -sS -X POST \
   -H "x-diag-key: <SEU_INTERNAL_API_KEY>" \
-  https://mnvsales.vercel.app/api/_diag/auth-bridge | jq
+  https://crm.menvedigital.com.br/api/diag-auth-bridge | jq
 ```
 
 A resposta mostra:
@@ -54,7 +74,7 @@ No projeto da API:
 | `JWT_SECRET` | **Obrigatório em produção.** Gere com `openssl rand -base64 48`. Sem ele, a API agora **não sobe** (commit `213a2485`). |
 | `INTERNAL_API_KEY` | Igual à Vercel. Gere com `openssl rand -base64 32`. |
 | `NODE_ENV` | `production` |
-| `CORS_ORIGIN` | `https://mnvsales.vercel.app` (ou domínios separados por vírgula) |
+| `CORS_ORIGIN` | `https://crm.menvedigital.com.br` (ou domínios separados por vírgula) |
 | `PUBLIC_APP_URL` | URL pública da API (a própria do Railway) |
 | `USE_WORKSPACE_MEMBERSHIP` | `true` se já fez backfill; `false` caso contrário |
 
@@ -82,13 +102,13 @@ Em **Project → Settings → Environment Variables** (Production e Preview):
 | `INTERNAL_API_KEY` | **Mesmo** valor do Railway |
 | `DATABASE_URL` | URL Neon **com pooler** |
 | `DIRECT_URL` | URL Neon **sem pooler** |
-| `NEXTAUTH_URL` | `https://mnvsales.vercel.app` (ou seu domínio) |
+| `NEXTAUTH_URL` | `https://crm.menvedigital.com.br` (ou seu domínio) |
 | `NEXTAUTH_SECRET` | Igual ao usado hoje (ou regenere com `openssl rand -base64 32`) |
 | `NEXT_PUBLIC_APP_URL` | mesma do `NEXTAUTH_URL` |
 
 ⚠️ Erros comuns a evitar:
 - **NÃO** colocar `/api` no fim do `INTERNAL_API_URL`. O código já adiciona `/auth/login`. Se colocar `/api`, vira `/api/auth/login`, que **não existe** na API (Nest não usa global prefix) — daí o 404 que você está vendo na tela.
-- **NÃO** apontar `INTERNAL_API_URL` para o próprio site (`https://mnvsales.vercel.app`) — isso causa loop / 404.
+- **NÃO** apontar `INTERNAL_API_URL` para o próprio site (`https://crm.menvedigital.com.br`) — isso causa loop / 404.
 - Sem `INTERNAL_API_URL`, o Next em produção tenta `http://localhost:4000` e falha.
 
 Após salvar, faça **Redeploy** (botão Redeploy no último deploy de Production).
@@ -122,21 +142,21 @@ Se forem diferentes, todas as ações server-to-server (cadastro, settings) queb
 
 2. **Health-check via Next** (Vercel):
    ```bash
-   curl -i https://mnvsales.vercel.app/api/health
+   curl -i https://crm.menvedigital.com.br/api/health
    ```
    → `200` com `db:"up"`.
 
 3. **Diagnóstico da ponte** (precisa do `INTERNAL_API_KEY`):
    ```bash
    curl -sS -X POST -H "x-diag-key: <KEY>" \
-     https://mnvsales.vercel.app/api/_diag/auth-bridge | jq
+     https://crm.menvedigital.com.br/api/diag-auth-bridge | jq
    ```
    - `env.INTERNAL_API_URL.origin` → deve ser o host do Railway.
    - `env.INTERNAL_API_URL.pathname` → deve ser `""` (vazio).
    - `probes[2].status` → `401` (login com senha inválida = sucesso da ponte).
    - `verdict` → vazio ou só mensagens informativas.
 
-4. **Login real** em `https://mnvsales.vercel.app/login`.
+4. **Login real** em `https://crm.menvedigital.com.br/login`.
 
 ---
 
