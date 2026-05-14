@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createContact,
   listContactsForPipeline,
@@ -15,11 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { Pipeline, Stage } from "@prisma/client";
 import { ProductPicker } from "./deal-products-block";
@@ -34,13 +29,6 @@ type ProductRow = {
   quantityRaw: string;
   unitPriceRaw: string;
 };
-
-const PRIORITY_OPTIONS: { value: string; label: string; probability: number }[] =
-  [
-    { value: "high", label: "Alta", probability: 0.75 },
-    { value: "medium", label: "Média", probability: 0.5 },
-    { value: "low", label: "Baixa", probability: 0.25 },
-  ];
 
 function uid(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -99,8 +87,7 @@ export function PipelineNewDealDialog({
 
   /** Estado do form. */
   const [selectedStageId, setSelectedStageId] = useState<string>(stageId);
-  const [contactId, setContactId] = useState<string>("");
-  const [priority, setPriority] = useState<string>("");
+  const [contactName, setContactName] = useState<string>("");
   const [observation, setObservation] = useState<string>("");
   const [productRows, setProductRows] = useState<ProductRow[]>([
     emptyProductRow(),
@@ -113,8 +100,7 @@ export function PipelineNewDealDialog({
   useEffect(() => {
     if (!open) return;
     setSelectedStageId(stageId);
-    setContactId("");
-    setPriority("");
+    setContactName("");
     setObservation("");
     setProductRows([emptyProductRow()]);
     setError(null);
@@ -181,19 +167,15 @@ export function PipelineNewDealDialog({
     if (loading) return;
     setError(null);
 
-    if (!contactId) {
-      setError("Selecione um contato.");
+    const nameTrim = contactName.trim();
+    if (!nameTrim) {
+      setError("Informe o nome do contato.");
       return;
     }
     if (!selectedStageId) {
       setError("Selecione o status.");
       return;
     }
-
-    const contact = contacts.find((c) => c.id === contactId);
-    const title = (contact?.name ?? "").trim() || "Nova oportunidade";
-    const probability = PRIORITY_OPTIONS.find((p) => p.value === priority)
-      ?.probability;
 
     const items = productRows
       .map((r) => ({
@@ -209,13 +191,26 @@ export function PipelineNewDealDialog({
 
     setLoading(true);
     try {
+      let contactId = contacts.find(
+        (c) => c.name.trim().toLowerCase() === nameTrim.toLowerCase(),
+      )?.id;
+      if (!contactId) {
+        const created = await createContact({ name: nameTrim });
+        contactId = created.id;
+        setContacts((prev) =>
+          [...prev, { id: created.id, name: nameTrim, phone: null }].sort(
+            (a, b) =>
+              a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }),
+          ),
+        );
+      }
+
       await createDeal({
         contactId,
         pipelineId: pipeline.id,
         stageId: selectedStageId,
-        title,
+        title: nameTrim,
         value: items.length > 0 ? productsTotal : undefined,
-        probability: probability ?? null,
         observation: observation.trim() || undefined,
         items: items.length > 0 ? items : undefined,
       });
@@ -255,7 +250,7 @@ export function PipelineNewDealDialog({
                     name="stageId"
                     value={selectedStageId}
                     onChange={(e) => setSelectedStageId(e.target.value)}
-                    className="h-9 w-full max-w-[14rem] rounded-md border border-input bg-card px-3 text-sm shadow-sm outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-sm outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {pipeline.stages.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -265,40 +260,23 @@ export function PipelineNewDealDialog({
                   </select>
                 </Field>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Contato">
-                    <ContactPicker
-                      contactId={contactId}
-                      contacts={contacts}
-                      loading={contactsLoading}
-                      onPick={(id) => setContactId(id)}
-                      onContactCreated={(c) =>
-                        setContacts((prev) =>
-                          [...prev, c].sort((a, b) =>
-                            a.name.localeCompare(b.name, "pt-BR", {
-                              sensitivity: "base",
-                            }),
-                          ),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="Prioridade">
-                    <select
-                      name="priority"
-                      value={priority}
-                      onChange={(e) => setPriority(e.target.value)}
-                      className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-sm outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <option value="">—</option>
-                      {PRIORITY_OPTIONS.map((p) => (
-                        <option key={p.value} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
+                <Field label="Contato">
+                  <ContactNameTypeahead
+                    value={contactName}
+                    onChange={setContactName}
+                    contacts={contacts}
+                    loading={contactsLoading}
+                    onContactCreated={(c) =>
+                      setContacts((prev) =>
+                        [...prev, c].sort((a, b) =>
+                          a.name.localeCompare(b.name, "pt-BR", {
+                            sensitivity: "base",
+                          }),
+                        ),
+                      )
+                    }
+                  />
+                </Field>
 
                 <Field label="Observação">
                   <textarea
@@ -440,7 +418,7 @@ export function PipelineNewDealDialog({
             </Button>
             <Button
               type="submit"
-              disabled={loading || contactsLoading || !contactId}
+              disabled={loading || contactsLoading || !contactName.trim()}
               className="gap-1.5"
             >
               <Plus className="size-3.5" strokeWidth={2} />
@@ -503,44 +481,65 @@ function Field({
   );
 }
 
-function ContactPicker({
-  contactId,
+/** Campo só texto: sugere nomes parecidos enquanto digita; Enter confirma sugestão ou cadastra. */
+function ContactNameTypeahead({
+  value,
+  onChange,
   contacts,
   loading,
-  onPick,
   onContactCreated,
 }: {
-  contactId: string;
+  value: string;
+  onChange: (v: string) => void;
   contacts: ContactOpt[];
   loading: boolean;
-  onPick: (id: string) => void;
   onContactCreated: (c: ContactOpt) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [focused, setFocused] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
   const [creating, setCreating] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const selected = contacts.find((c) => c.id === contactId) ?? null;
-
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return contacts;
+    const q = value.trim().toLowerCase();
+    if (!q) return [];
     return contacts.filter((c) => c.name.toLowerCase().includes(q));
-  }, [contacts, query]);
+  }, [contacts, value]);
 
-  async function resolveEnter() {
-    const name = query.trim();
+  const showList = focused && !loading && value.trim().length > 0;
+
+  useEffect(() => {
+    setActiveIdx(-1);
+  }, [value]);
+
+  useEffect(() => {
+    if (!focused) return;
+    function onDocMouseDown(ev: MouseEvent) {
+      if (!wrapRef.current?.contains(ev.target as Node)) {
+        setFocused(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [focused]);
+
+  function pick(c: ContactOpt) {
+    onChange(c.name);
+    setFocused(false);
+    setActiveIdx(-1);
+    setLocalError(null);
+  }
+
+  async function commitFreeText() {
+    const name = value.trim();
     if (name.length === 0 || creating || loading) return;
 
     const exact = contacts.find(
       (c) => c.name.trim().toLowerCase() === name.toLowerCase(),
     );
     if (exact) {
-      onPick(exact.id);
-      setOpen(false);
-      setQuery("");
-      setLocalError(null);
+      pick(exact);
       return;
     }
 
@@ -548,11 +547,10 @@ function ContactPicker({
     setLocalError(null);
     try {
       const { id } = await createContact({ name });
-      const row: ContactOpt = { id, name, phone: null };
-      onContactCreated(row);
-      onPick(id);
-      setOpen(false);
-      setQuery("");
+      onContactCreated({ id, name, phone: null });
+      onChange(name);
+      setFocused(false);
+      setActiveIdx(-1);
     } catch (e) {
       setLocalError(
         e instanceof Error
@@ -565,86 +563,89 @@ function ContactPicker({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={loading}
-          className={cn(
-            "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-left text-sm shadow-sm outline-none transition-colors",
-            "hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
-          )}
-        >
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate",
-              !selected && "italic text-muted-foreground",
-            )}
-          >
-            {loading
-              ? "Carregando…"
-              : selected
-                ? selected.name
-                : "Escolha, ou digite para buscar"}
-          </span>
-          <ChevronDown className="size-3.5 shrink-0 opacity-60" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-[var(--radix-popover-trigger-width)] p-2"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
-        <Input
-          autoFocus
-          placeholder="Buscar contato…"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setLocalError(null);
-          }}
-          disabled={creating}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter") return;
+    <div ref={wrapRef} className="relative">
+      <Input
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setLocalError(null);
+        }}
+        onFocus={() => setFocused(true)}
+        disabled={loading || creating}
+        placeholder="Digite o nome do contato…"
+        autoComplete="off"
+        aria-autocomplete="list"
+        aria-expanded={showList}
+        className="h-9 w-full"
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") {
+            if (!showList || filtered.length === 0) return;
             e.preventDefault();
-            e.stopPropagation();
-            void resolveEnter();
-          }}
-          className="mb-2 h-9"
-        />
-        {localError ? (
-          <p className="mb-2 px-0.5 text-[12px] text-destructive">{localError}</p>
-        ) : null}
-        <div className="max-h-56 space-y-0.5 overflow-y-auto">
+            setActiveIdx((i) =>
+              i < 0 ? 0 : Math.min(i + 1, filtered.length - 1),
+            );
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            if (!showList || filtered.length === 0) return;
+            e.preventDefault();
+            setActiveIdx((i) => (i <= 0 ? 0 : i - 1));
+            return;
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            setFocused(false);
+            setActiveIdx(-1);
+            return;
+          }
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (showList && filtered.length > 0) {
+            const idx = activeIdx >= 0 ? activeIdx : 0;
+            pick(filtered[idx]);
+            return;
+          }
+          void commitFreeText();
+        }}
+      />
+      {localError ? (
+        <p className="mt-1 text-[12px] text-destructive">{localError}</p>
+      ) : null}
+      {showList ? (
+        <ul
+          className="absolute left-0 right-0 top-full z-[60] mt-1 max-h-48 overflow-auto rounded-md border border-border/60 bg-popover py-1 text-popover-foreground shadow-md"
+          role="listbox"
+        >
           {creating ? (
-            <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
+            <li className="px-3 py-2 text-[12px] text-muted-foreground">
               Cadastrando contato…
-            </p>
+            </li>
           ) : filtered.length === 0 ? (
-            <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
-              Nenhum contato encontrado. Digite o nome e pressione Enter para
-              cadastrar.
-            </p>
+            <li className="px-3 py-2 text-[12px] text-muted-foreground">
+              Nenhum nome parecido. Enter cadastra &quot;{value.trim()}&quot; como
+              novo contato.
+            </li>
           ) : (
-            filtered.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className="flex w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-                onClick={() => {
-                  onPick(c.id);
-                  setOpen(false);
-                  setQuery("");
-                  setLocalError(null);
-                }}
-              >
-                <span className="min-w-0 truncate">{c.name}</span>
-              </button>
+            filtered.map((c, i) => (
+              <li key={c.id} role="option" aria-selected={i === activeIdx}>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex w-full px-3 py-2 text-left text-sm transition-colors",
+                    i === activeIdx ? "bg-muted" : "hover:bg-muted/70",
+                  )}
+                  onMouseDown={(ev) => ev.preventDefault()}
+                  onClick={() => pick(c)}
+                >
+                  <span className="min-w-0 truncate">{c.name}</span>
+                </button>
+              </li>
             ))
           )}
-        </div>
-      </PopoverContent>
-    </Popover>
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
