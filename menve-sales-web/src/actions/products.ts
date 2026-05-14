@@ -4,6 +4,20 @@ import { apiServer } from "@/lib/api-server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+export type ProductOption = {
+  id: string;
+  name: string;
+  price: number;
+};
+
+/** Lista produtos do tenant ativo (para selects em outras telas, ex.: bloco Produtos do deal). */
+export async function listProducts(): Promise<ProductOption[]> {
+  const rows = await apiServer<
+    { id: string; name: string; price: number }[]
+  >("/products");
+  return rows.map((r) => ({ id: r.id, name: r.name, price: Number(r.price) }));
+}
+
 const productSchema = z.object({
   name: z.string().min(1).max(200),
   price: z.number().finite().min(0),

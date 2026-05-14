@@ -118,7 +118,7 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
             </p>
           ) : null}
         </div>
-        <p className="mt-5 text-[15px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
+        <p className="mt-5 text-[15px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
           {formatDealCurrency(displayValue)}
         </p>
         <div className="mt-2.5 flex items-center justify-between gap-2 text-[12px] font-normal leading-none text-muted-foreground">
@@ -481,7 +481,7 @@ function DealCard({
             )}
           </div>
 
-        <p className="mt-5 text-[15px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
+        <p className="mt-5 text-[15px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
           {formatDealCurrency(displayValue)}
         </p>
 

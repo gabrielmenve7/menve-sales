@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
 } from "@nestjs/common";
 import { DealsService } from "./deals.service";
 import { ReqUser } from "../common/req-user.decorator";
@@ -30,6 +31,20 @@ export class DealsController {
   @Get(":id")
   getOne(@ReqUser() u: RequestUser, @Param("id") id: string) {
     return this.deals.getById(u.tenantId, id);
+  }
+
+  @Get(":id/items")
+  listItems(@ReqUser() u: RequestUser, @Param("id") id: string) {
+    return this.deals.listItems(u.tenantId, id);
+  }
+
+  @Put(":id/items")
+  replaceItems(
+    @ReqUser() u: RequestUser,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    return this.deals.replaceItems(u.tenantId, id, body);
   }
 
   @Patch(":id/stage")

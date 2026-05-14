@@ -91,6 +91,7 @@ import {
   storedPhoneFromNational,
 } from "@/lib/phone-br";
 import { cn } from "@/lib/utils";
+import { DealProductsBlock } from "./deal-products-block";
 import type { DealRow } from "./pipeline-types";
 
 export type DealActivityRow = {
@@ -1317,6 +1318,22 @@ export function PipelineDealDetailDialog({
                 </p>
               )}
             </section>
+
+            <DealProductsBlock
+              dealId={d.id}
+              onSaved={(total) => {
+                setDealValueLocal(
+                  total > 0
+                    ? total
+                        .toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                    : "",
+                );
+                void afterRemoteChange();
+              }}
+            />
 
             {d.title ? (
               <p className="text-xs text-muted-foreground">

@@ -85,6 +85,44 @@ export async function getDealDetail(dealId: string) {
   return apiServer<unknown>(`/deals/${dealId}`);
 }
 
+export type DealItemRow = {
+  id: string;
+  productId: string | null;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+};
+
+export async function getDealItems(dealId: string): Promise<DealItemRow[]> {
+  return apiServer<DealItemRow[]>(`/deals/${dealId}/items`);
+}
+
+const dealItemInputSchema = z.object({
+  productId: z.string().min(1).nullable().optional(),
+  productName: z.string().min(1).max(200),
+  quantity: z.number().finite().min(0).max(1e9),
+  unitPrice: z.number().finite().min(0).max(1e11),
+});
+
+const replaceDealItemsSchema = z.object({
+  items: z.array(dealItemInputSchema).max(200),
+});
+
+/**
+ * Substitui todos os itens (produtos) do deal e atualiza `Deal.value` com a soma.
+ * Server action sem `revalidatePath` agressivo: o front faz `router.refresh()` quando precisa.
+ */
+export async function replaceDealItems(
+  dealId: string,
+  input: z.infer<typeof replaceDealItemsSchema>,
+) {
+  const data = replaceDealItemsSchema.parse(input);
+  return apiServer<{ ok: true; total: number }>(`/deals/${dealId}/items`, {
+    method: "PUT",
+    json: data,
+  });
+}
+
 const activitySchema = z.object({
   dealId: z.string(),
   contactId: z.string(),

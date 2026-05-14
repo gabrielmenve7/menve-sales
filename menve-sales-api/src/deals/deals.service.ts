@@ -36,6 +36,18 @@ const patchDealSchema = z.object({
   title: z.string().min(1).max(500).optional(),
 });
 
+const dealItemSchema = z.object({
+  /** Opcional para suportar item “avulso” não vinculado a `Product`. */
+  productId: z.string().min(1).nullable().optional(),
+  productName: z.string().min(1).max(200),
+  quantity: z.number().finite().min(0).max(1e9),
+  unitPrice: z.number().finite().min(0).max(1e11),
+});
+
+const replaceDealItemsSchema = z.object({
+  items: z.array(dealItemSchema).max(200),
+});
+
 /** Metadado para o front renderizar ícones/pílulas (prefixo em `Activity.description`). */
 const MENVE_ACTIVITY_META_PREFIX = "__MENVE_META__:";
 
@@ -671,6 +683,90 @@ export class DealsService {
       }),
     ]);
     return { ok: true as const };
+  }
+
+  /**
+   * Lista os itens (produtos) de uma oportunidade. Recalcula o total ao listar para
+   * manter `Deal.value` consistente se algum item foi alterado fora do CRUD.
+   */
+  async listItems(tenantId: string, dealId: string) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, tenantId },
+      select: { id: true },
+    });
+    if (!deal) throw new NotFoundException();
+    const items = await this.prisma.dealItem.findMany({
+      where: { tenantId, dealId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+    return items.map((it) => ({
+      id: it.id,
+      productId: it.productId,
+      productName: it.productName,
+      quantity: Number(it.quantity),
+      unitPrice: Number(it.unitPrice),
+      sortOrder: it.sortOrder,
+    }));
+  }
+
+  /**
+   * Substitui todos os itens do deal por `input.items` (estratégia mais simples para o front
+   * que envia o estado completo do bloco “Produtos”). Atualiza `Deal.value` com a soma.
+   */
+  async replaceItems(tenantId: string, dealId: string, input: unknown) {
+    const data = replaceDealItemsSchema.parse(input);
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, tenantId },
+      select: { id: true },
+    });
+    if (!deal) throw new NotFoundException();
+
+    const productIds = Array.from(
+      new Set(
+        data.items
+          .map((it) => it.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    const validProductIds = new Set<string>();
+    if (productIds.length > 0) {
+      const found = await this.prisma.product.findMany({
+        where: { tenantId, id: { in: productIds } },
+        select: { id: true },
+      });
+      for (const p of found) validProductIds.add(p.id);
+    }
+
+    const total = data.items.reduce(
+      (acc, it) => acc + it.quantity * it.unitPrice,
+      0,
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.dealItem.deleteMany({ where: { tenantId, dealId } }),
+      ...data.items.map((it, idx) =>
+        this.prisma.dealItem.create({
+          data: {
+            tenantId,
+            dealId,
+            productId:
+              it.productId && validProductIds.has(it.productId)
+                ? it.productId
+                : null,
+            productName: it.productName.trim(),
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            sortOrder: idx,
+          },
+        }),
+      ),
+      this.prisma.deal.update({
+        where: { id: dealId },
+        data: { value: data.items.length > 0 ? total : null },
+      }),
+    ]);
+
+    return { ok: true as const, total };
   }
 
   /**
