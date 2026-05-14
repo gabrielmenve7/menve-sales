@@ -11,7 +11,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import type { CustomField, Pipeline, Stage } from "@prisma/client";
+import type { CustomField, Pipeline, Stage, Tag } from "@prisma/client";
 import { MoreVertical, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -62,8 +62,77 @@ function formatDealCurrency(value: number): string {
   });
 }
 
+function previewTagPillClass(hex: string | null | undefined) {
+  if (!hex || !/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+    return "border-border/60 bg-muted/50 text-foreground";
+  }
+  return "border-transparent text-foreground";
+}
+
+/** Tags do deal + do contato, sem duplicar por `tag.id` (mesma regra do detalhe). */
+function mergeDealPreviewTags(deal: DealRow): Tag[] {
+  const seen = new Set<string>();
+  const out: Tag[] = [];
+  for (const dt of deal.dealTags ?? []) {
+    const t = dt?.tag;
+    if (!t || seen.has(t.id)) continue;
+    seen.add(t.id);
+    out.push(t);
+  }
+  for (const ct of deal.contact.contactTags ?? []) {
+    const t = ct?.tag;
+    if (!t || seen.has(t.id)) continue;
+    seen.add(t.id);
+    out.push(t);
+  }
+  out.sort((a, b) =>
+    a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }),
+  );
+  return out;
+}
+
+function DealCardPreviewTags({ tags }: { tags: Tag[] }) {
+  if (tags.length === 0) return null;
+  const maxVisible = 2;
+  const visible = tags.slice(0, maxVisible);
+  const rest = tags.length - visible.length;
+  return (
+    <div className="flex min-w-0 max-w-[9.5rem] shrink items-center justify-end gap-0.5 overflow-hidden">
+      {visible.map((tag) => (
+        <span
+          key={tag.id}
+          title={tag.name}
+          className={cn(
+            "inline-flex max-w-[4.75rem] shrink-0 truncate rounded-md border px-1 py-px text-[9px] font-semibold leading-tight",
+            previewTagPillClass(tag.color),
+          )}
+          style={
+            tag.color && /^#[0-9A-Fa-f]{6}$/.test(tag.color)
+              ? { backgroundColor: `${tag.color}33` }
+              : undefined
+          }
+        >
+          {tag.name}
+        </span>
+      ))}
+      {rest > 0 ? (
+        <span
+          className="shrink-0 text-[9px] font-medium tabular-nums text-muted-foreground"
+          title={tags
+            .slice(maxVisible)
+            .map((t) => t.name)
+            .join(", ")}
+        >
+          +{rest}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 /** Só visual — usado no DragOverlay (fora da coluna com overflow). */
 function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
+  const previewTags = mergeDealPreviewTags(deal);
   const displayValue =
     deal.value != null && Number.isFinite(Number(deal.value))
       ? Number(deal.value)
@@ -92,6 +161,7 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
             {formatDealCurrency(displayValue)}
           </p>
           <div className="flex shrink-0 items-center gap-1 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
+            <DealCardPreviewTags tags={previewTags} />
             <span className="flex size-6 items-center justify-center text-foreground/80">
               <WhatsAppLogo className="size-3.5" />
             </span>
@@ -222,6 +292,11 @@ function DealCard({
     deal.value != null && Number.isFinite(Number(deal.value))
       ? Number(deal.value)
       : 0;
+
+  const previewTags = useMemo(() => mergeDealPreviewTags(deal), [
+    deal.dealTags,
+    deal.contact.contactTags,
+  ]);
 
   function onCardKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
@@ -453,6 +528,7 @@ function DealCard({
           </p>
           {!renaming ? (
             <div className="flex shrink-0 items-center gap-1 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
+              <DealCardPreviewTags tags={previewTags} />
               <Link
                 prefetch
                 href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
