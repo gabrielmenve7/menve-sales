@@ -236,17 +236,17 @@ export function buildDefaultSalesBoardLayout(pipelineId: string): LayoutJson {
   });
 
   widgets.push({
-    id: "seed_bar_top_products",
+    id: "seed_bar_open_value_by_stage",
     type: "BAR",
-    title: "Produtos mais vendidos (R$)",
+    title: "Valor em aberto por etapa (R$)",
     grid: { x: 6, y: yCursor, w: 6, h: 6 },
     querySpec: {
       source: "DEALS",
       pipelineId,
-      dimension: "BY_PRODUCT",
+      dimension: "BY_STAGE",
       dataMeasure: "MONEY",
       aggregation: "SUM",
-      ...baseFiltersWonAll,
+      ...baseFiltersOpen,
     },
     barChart: {
       showAverageLine: false,

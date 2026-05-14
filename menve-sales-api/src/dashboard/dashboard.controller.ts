@@ -46,6 +46,14 @@ export class DashboardController {
     return this.boards.create(u.tenantId, u.userId, body?.name);
   }
 
+  @Post("boards/seed-default")
+  seedDefaultBoard(
+    @ReqUser() u: RequestUser,
+    @Body() body: { force?: boolean; onlyIfEmpty?: boolean },
+  ) {
+    return this.boards.seedDefault(u.tenantId, u.userId, body);
+  }
+
   @Patch("boards/:id")
   updateBoard(
     @ReqUser() u: RequestUser,

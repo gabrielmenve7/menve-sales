@@ -240,6 +240,9 @@ export function newWidgetId() {
   return `w_${Math.random().toString(36).slice(2, 12)}_${Date.now().toString(36)}`;
 }
 
+/** Nome canónico do painel seed de vendas (alinhado a `DEFAULT_SALES_BOARD_NAME` na API). */
+export const DEFAULT_SALES_DASHBOARD_BOARD_NAME = "Vendas — Visão geral";
+
 /** Formata valor do cartão métrica conforme medida / campo custom. */
 export function formatDashboardScalar(
   spec: WidgetQuerySpec,

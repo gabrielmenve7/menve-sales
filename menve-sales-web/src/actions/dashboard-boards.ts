@@ -41,3 +41,18 @@ export async function duplicateDashboardBoard(id: string): Promise<DashboardBoar
   revalidatePath("/dashboard");
   return b;
 }
+
+export async function seedDefaultDashboardBoard(opts?: {
+  force?: boolean;
+  onlyIfEmpty?: boolean;
+}): Promise<DashboardBoardDto | null> {
+  const b = await apiServer<DashboardBoardDto | null>(
+    "/dashboard/boards/seed-default",
+    {
+      method: "POST",
+      json: opts ?? {},
+    },
+  );
+  revalidatePath("/dashboard");
+  return b;
+}
