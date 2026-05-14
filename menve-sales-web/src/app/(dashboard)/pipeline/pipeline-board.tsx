@@ -530,7 +530,7 @@ function StageColumn({
       ref={setNodeRef}
       style={columnSurfaceStyle()}
       className={cn(
-        "flex h-full min-h-0 w-[min(100vw-2rem,18.75rem)] shrink-0 flex-col overflow-visible rounded-2xl border border-transparent dark:border-border/40",
+        "flex h-full min-h-0 w-[min(100vw-2rem,18.75rem)] shrink-0 flex-col overflow-visible rounded-[0.7rem] border border-transparent dark:border-border/40",
         isOver &&
           "ring-2 ring-foreground/12 ring-offset-2 ring-offset-background",
       )}
