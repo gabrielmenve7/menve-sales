@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getDealItems,
   replaceDealItems,
@@ -83,12 +83,12 @@ export function DealProductsBlock({
 }) {
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [baselineKey, setBaselineKey] = useState<string>("");
-  const lastLoadedDealRef = useRef<string | null>(null);
 
   function rowsSignature(list: Row[]): string {
     return JSON.stringify(
@@ -103,28 +103,46 @@ export function DealProductsBlock({
 
   useEffect(() => {
     if (!dealId) return;
-    if (lastLoadedDealRef.current === dealId) return;
-    lastLoadedDealRef.current = dealId;
+    let cancelled = false;
     setLoading(true);
+    setCatalogLoading(true);
     setError(null);
     void (async () => {
       try {
-        const [items, prods] = await Promise.all([
-          getDealItems(dealId),
-          listProducts(),
-        ]);
-        const initial = items.length > 0 ? items.map(rowFromServer) : [emptyRow()];
+        const items = await getDealItems(dealId);
+        if (cancelled) return;
+        const initial =
+          items.length > 0 ? items.map(rowFromServer) : [emptyRow()];
         setRows(initial);
-        setProducts(prods);
         setBaselineKey(rowsSignature(initial));
+        setLoading(false);
+
+        void listProducts()
+          .then((prods) => {
+            if (cancelled) return;
+            setProducts(prods);
+          })
+          .catch((e) => {
+            if (cancelled) return;
+            console.error("[deal-products] listProducts:", e);
+            setProducts([]);
+          })
+          .finally(() => {
+            if (cancelled) return;
+            setCatalogLoading(false);
+          });
       } catch (e) {
+        if (cancelled) return;
         setError(
           e instanceof Error ? e.message : "Não foi possível carregar produtos.",
         );
-      } finally {
         setLoading(false);
+        setCatalogLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [dealId]);
 
   const total = useMemo(() => {
@@ -240,6 +258,7 @@ export function DealProductsBlock({
                       <ProductPicker
                         value={r.productName}
                         products={products}
+                        catalogLoading={catalogLoading}
                         onPick={(p) => pickProduct(r.key, p)}
                         onTextChange={(name) =>
                           patchRow(r.key, { productId: null, productName: name })
@@ -326,11 +345,14 @@ export function DealProductsBlock({
 export function ProductPicker({
   value,
   products,
+  catalogLoading = false,
   onPick,
   onTextChange,
 }: {
   value: string;
   products: ProductOption[];
+  /** Catálogo ainda a carregar (lista de produtos do tenant). */
+  catalogLoading?: boolean;
   onPick: (p: ProductOption) => void;
   onTextChange: (text: string) => void;
 }) {
@@ -377,7 +399,11 @@ export function ProductPicker({
           className="mb-2 h-9"
         />
         <div className="max-h-56 space-y-0.5 overflow-y-auto">
-          {filtered.length === 0 ? (
+          {catalogLoading && products.length === 0 ? (
+            <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
+              Carregando catálogo…
+            </p>
+          ) : filtered.length === 0 ? (
             <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
               Nenhum produto encontrado.
             </p>

@@ -37,7 +37,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import type { PointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { patchContact } from "@/actions/contacts";
 import { updateCustomField, updateDealCustomData } from "@/actions/custom-fields";
@@ -325,6 +325,12 @@ type DealDetailLayoutMode = "central" | "lateral" | "fullscreen";
 const sectionLabelClass =
   "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground";
 
+const DETAIL_SPLIT_LS_KEY = "menve-deal-panel-split-left";
+/** ~54% à esquerda (≈ +20% vs 0.9fr/1.1fr); direita complementa; arraste persiste. */
+const DETAIL_SPLIT_DEFAULT = 0.54;
+const DETAIL_SPLIT_MIN = 0.28;
+const DETAIL_SPLIT_MAX = 0.72;
+
 /** Duplica a origem da campanha do contato (linha com ícone de globo no card). */
 const REDUNDANT_DEAL_ORIGIN_FIELD_KEYS = new Set(["origem", "origin"]);
 
@@ -408,6 +414,14 @@ export function PipelineDealDetailDialog({
   const latestDealIdRef = useRef(initial?.id);
   latestDealIdRef.current = initial?.id;
 
+  const splitGridRef = useRef<HTMLDivElement>(null);
+  const splitDraggingRef = useRef(false);
+  const splitPointerIdRef = useRef<number | null>(null);
+  const splitDragStartRef = useRef({ x: 0, share: DETAIL_SPLIT_DEFAULT });
+
+  const [splitLeftShare, setSplitLeftShare] = useState(DETAIL_SPLIT_DEFAULT);
+  const [layoutWide, setLayoutWide] = useState(false);
+
   const [renamingLead, setRenamingLead] = useState(false);
   const [renameLeadNameDraft, setRenameLeadNameDraft] = useState("");
   const [renameLeadBusy, setRenameLeadBusy] = useState(false);
@@ -424,6 +438,86 @@ export function PipelineDealDetailDialog({
   useEffect(() => {
     if (isEmbedded) setDealCardLayout("lateral");
   }, [isEmbedded]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(DETAIL_SPLIT_LS_KEY);
+      if (raw != null) {
+        const n = Number(raw);
+        if (Number.isFinite(n)) {
+          setSplitLeftShare(
+            Math.min(DETAIL_SPLIT_MAX, Math.max(DETAIL_SPLIT_MIN, n)),
+          );
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setLayoutWide(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(DETAIL_SPLIT_LS_KEY, String(splitLeftShare));
+    } catch {
+      /* ignore */
+    }
+  }, [splitLeftShare]);
+
+  const endSplitDrag = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    if (!splitDraggingRef.current) return;
+    splitDraggingRef.current = false;
+    splitPointerIdRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+  }, []);
+
+  const onSplitPointerDown = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      if (dealCardLayout === "lateral" || !layoutWide) return;
+      splitDragStartRef.current = { x: e.clientX, share: splitLeftShare };
+      splitDraggingRef.current = true;
+      splitPointerIdRef.current = e.pointerId;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    },
+    [dealCardLayout, layoutWide, splitLeftShare],
+  );
+
+  const onSplitPointerMove = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    if (
+      !splitDraggingRef.current ||
+      e.pointerId !== splitPointerIdRef.current
+    )
+      return;
+    const grid = splitGridRef.current;
+    if (!grid) return;
+    const rect = grid.getBoundingClientRect();
+    const w = rect.width;
+    if (w < 80) return;
+    const sep = 10;
+    const movable = w - sep;
+    const { x: startX, share: startShare } = splitDragStartRef.current;
+    const dx = e.clientX - startX;
+    const nextShare = Math.min(
+      DETAIL_SPLIT_MAX,
+      Math.max(DETAIL_SPLIT_MIN, startShare + dx / movable),
+    );
+    setSplitLeftShare(nextShare);
+  }, []);
 
   const reload = useCallback(async (opts?: { silent?: boolean }) => {
     if (!initial?.id) return;
@@ -903,11 +997,19 @@ export function PipelineDealDetailDialog({
             ) : null}
 
             <div
+              ref={splitGridRef}
               className={cn(
                 dealCardLayout === "lateral"
                   ? "flex flex-col gap-6"
-                  : "grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start lg:gap-x-8",
+                  : "grid grid-cols-1 gap-0 lg:items-start lg:gap-x-0",
               )}
+              style={
+                dealCardLayout !== "lateral" && layoutWide
+                  ? {
+                      gridTemplateColumns: `minmax(0,${splitLeftShare}fr) 10px minmax(0,${1 - splitLeftShare}fr)`,
+                    }
+                  : undefined
+              }
             >
             <div
               className={cn(
@@ -1343,12 +1445,26 @@ export function PipelineDealDetailDialog({
             ) : null}
             </div>
 
+            {dealCardLayout !== "lateral" && layoutWide ? (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Redimensionar colunas do painel"
+                title="Arrastar para ajustar largura"
+                className="hidden w-2.5 shrink-0 touch-none select-none self-stretch lg:block lg:cursor-col-resize lg:bg-border/25 lg:hover:bg-border/50"
+                onPointerDown={onSplitPointerDown}
+                onPointerMove={onSplitPointerMove}
+                onPointerUp={endSplitDrag}
+                onPointerCancel={endSplitDrag}
+              />
+            ) : null}
+
             <div
               className={cn(
                 "min-w-0 space-y-6",
                 lateral && "border-t border-border/50 pt-6",
                 dealCardLayout !== "lateral" &&
-                  "max-lg:mt-8 max-lg:border-t max-lg:border-border/50 max-lg:pt-8 lg:border-l lg:border-border/60 lg:pl-8",
+                  "max-lg:mt-8 max-lg:border-t max-lg:border-border/50 max-lg:pt-8 lg:pl-3",
               )}
             >
             <section className="space-y-2">
