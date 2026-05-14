@@ -56,6 +56,7 @@ import {
 import { PipelineAutomationsDialog } from "@/components/pipeline-automations/pipeline-automations-dialog";
 import { PipelineBoard } from "./pipeline-board";
 import { PipelineListView } from "./pipeline-list-view";
+import { PipelineNewDealDialog } from "./pipeline-new-deal";
 import {
   createEmptyFilterGroup,
   createEmptyFilterRow,
@@ -144,6 +145,7 @@ function PipelineViewBody({
     number | null
   >(null);
   const [search, setSearch] = useState("");
+  const [newDealOpen, setNewDealOpen] = useState(false);
 
   const refreshActiveAutomationCount = useCallback(async () => {
     try {
@@ -524,7 +526,7 @@ function PipelineViewBody({
             </span>
           </div>
         </div>
-        <div className="flex w-full gap-2 lg:w-auto lg:max-w-md lg:shrink-0">
+        <div className="flex w-full gap-2 lg:w-auto lg:max-w-2xl lg:shrink-0">
           <div className="flex shrink-0 items-center gap-2">
             <Popover open={automationMenuOpen} onOpenChange={setAutomationMenuOpen}>
               <PopoverTrigger asChild>
@@ -757,6 +759,23 @@ function PipelineViewBody({
               className="h-11 rounded-xl border-border/50 bg-background pl-10 text-[14px] shadow-sm placeholder:text-muted-foreground/70"
             />
           </div>
+          {sortedPipelineStages[0] ? (
+            <Button
+              type="button"
+              onClick={() => setNewDealOpen(true)}
+              className="h-11 shrink-0 gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm"
+              aria-label="Adicionar novo lead"
+              title="Adicionar novo lead"
+            >
+              <span
+                className="flex size-5 items-center justify-center rounded-full border border-primary-solid-fg/60"
+                aria-hidden
+              >
+                <Plus className="size-3.5" strokeWidth={2.5} />
+              </span>
+              <span className="hidden sm:inline">Adicionar</span>
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -891,6 +910,15 @@ function PipelineViewBody({
         tenantTags={tenantTags}
         tenantMembers={tenantMembers}
       />
+
+      {sortedPipelineStages[0] ? (
+        <PipelineNewDealDialog
+          open={newDealOpen}
+          onOpenChange={setNewDealOpen}
+          pipeline={activePipeline}
+          stageId={sortedPipelineStages[0].id}
+        />
+      ) : null}
     </div>
   );
 }
