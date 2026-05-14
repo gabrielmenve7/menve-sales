@@ -1,8 +1,12 @@
+import type { ProductCollectionRow } from "@/actions/product-collections";
 import { apiServer } from "@/lib/api-server";
 import { ProductsClient, type ProductRow } from "./products-client";
 
 export default async function ProdutosPage() {
-  const products = await apiServer<ProductRow[]>("/products");
+  const [products, collections] = await Promise.all([
+    apiServer<ProductRow[]>("/products"),
+    apiServer<ProductCollectionRow[]>("/product-collections"),
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
@@ -14,7 +18,10 @@ export default async function ProdutosPage() {
           </p>
         </div>
       </div>
-      <ProductsClient initialProducts={products} />
+      <ProductsClient
+        initialProducts={products}
+        initialCollections={collections}
+      />
     </div>
   );
 }

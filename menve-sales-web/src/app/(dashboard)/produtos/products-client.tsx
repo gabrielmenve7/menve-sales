@@ -1,8 +1,11 @@
 "use client";
 
-import { ChevronRight, Package, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import type { ProductCollectionRow } from "@/actions/product-collections";
+import {
+  createProductCollection,
+  deleteProductCollection,
+  updateProductCollection,
+} from "@/actions/product-collections";
 import {
   createProduct,
   deleteProduct,
@@ -19,14 +22,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ChevronRight, Layers, Package, Plus, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 
 export type ProductRow = {
   id: string;
   name: string;
   price: number;
+  collection: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 };
+
+const selectTriggerClass =
+  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 " +
+  "disabled:cursor-not-allowed disabled:opacity-50";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -56,19 +68,44 @@ function defaultPriceInput(value: number): string {
 
 export function ProductsClient({
   initialProducts,
+  initialCollections,
 }: {
   initialProducts: ProductRow[];
+  initialCollections: ProductCollectionRow[];
 }) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ProductRow | null>(null);
   const [name, setName] = useState("");
   const [priceText, setPriceText] = useState("0,00");
+  const [collectionId, setCollectionId] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const sorted = useMemo(
-    () => [...initialProducts].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
-    [initialProducts],
+  const [newCollectionOpen, setNewCollectionOpen] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState("");
+
+  const [manageCollectionsOpen, setManageCollectionsOpen] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState("");
+
+  const sorted = useMemo(() => {
+    const copy = [...initialProducts];
+    copy.sort((a, b) => {
+      const ac = a.collection?.name ?? "\uffff";
+      const bc = b.collection?.name ?? "\uffff";
+      const byCollection = ac.localeCompare(bc, "pt-BR");
+      if (byCollection !== 0) return byCollection;
+      return a.name.localeCompare(b.name, "pt-BR");
+    });
+    return copy;
+  }, [initialProducts]);
+
+  const sortedCollections = useMemo(
+    () =>
+      [...initialCollections].sort((a, b) =>
+        a.name.localeCompare(b.name, "pt-BR"),
+      ),
+    [initialCollections],
   );
 
   const refresh = useCallback(() => {
@@ -79,6 +116,7 @@ export function ProductsClient({
     setEditing(null);
     setName("");
     setPriceText("0,00");
+    setCollectionId("");
     setDialogOpen(true);
   }
 
@@ -86,6 +124,7 @@ export function ProductsClient({
     setEditing(p);
     setName(p.name);
     setPriceText(defaultPriceInput(p.price));
+    setCollectionId(p.collection?.id ?? "");
     setDialogOpen(true);
   }
 
@@ -95,6 +134,7 @@ export function ProductsClient({
     if (price === null) return;
     const trimmedName = name.trim();
     if (!trimmedName) return;
+    const resolvedCollectionId = collectionId ? collectionId : null;
     setBusy(true);
     try {
       if (editing) {
@@ -102,9 +142,14 @@ export function ProductsClient({
           id: editing.id,
           name: trimmedName,
           price,
+          collectionId: resolvedCollectionId,
         });
       } else {
-        await createProduct({ name: trimmedName, price });
+        await createProduct({
+          name: trimmedName,
+          price,
+          collectionId: resolvedCollectionId,
+        });
       }
       setDialogOpen(false);
       refresh();
@@ -132,10 +177,89 @@ export function ProductsClient({
     }
   }
 
+  async function onCreateCollection(e: React.FormEvent) {
+    e.preventDefault();
+    const n = newCollectionName.trim();
+    if (!n) return;
+    setBusy(true);
+    try {
+      await createProductCollection({ name: n });
+      setNewCollectionName("");
+      setNewCollectionOpen(false);
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startRename(c: ProductCollectionRow) {
+    setRenamingId(c.id);
+    setRenameText(c.name);
+  }
+
+  async function saveRename() {
+    if (!renamingId) return;
+    const n = renameText.trim();
+    if (!n) return;
+    setBusy(true);
+    try {
+      await updateProductCollection({ id: renamingId, name: n });
+      setRenamingId(null);
+      setRenameText("");
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDeleteCollection(c: ProductCollectionRow) {
+    if (
+      !globalThis.confirm(
+        `Excluir a coleção "${c.name}"? Os produtos desta coleção ficarão sem coleção.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await deleteProductCollection(c.id);
+      if (renamingId === c.id) {
+        setRenamingId(null);
+        setRenameText("");
+      }
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const showToolbar = sorted.length > 0 || sortedCollections.length > 0;
+
   return (
     <>
-      {sorted.length > 0 ? (
-        <div className="mb-6 flex justify-end">
+      {showToolbar ? (
+        <div className="mb-6 flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5 rounded-lg"
+            onClick={() => setManageCollectionsOpen(true)}
+          >
+            <Layers className="size-4" strokeWidth={2} />
+            Coleções
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5 rounded-lg"
+            onClick={() => {
+              setNewCollectionName("");
+              setNewCollectionOpen(true);
+            }}
+          >
+            <Plus className="size-4" strokeWidth={2} />
+            Coleção
+          </Button>
           <Button
             type="button"
             className="gap-1.5 rounded-lg bg-foreground text-background hover:bg-foreground/90"
@@ -160,15 +284,46 @@ export function ProductsClient({
           </h2>
           <p className="mt-2 max-w-sm text-sm text-muted-foreground">
             Para começar a usar esta ferramenta, crie um novo produto
+            {showToolbar ? (
+              <>
+                {" "}
+                ou use os botões acima para coleções.
+              </>
+            ) : null}
           </p>
-          <Button
-            type="button"
-            className="mt-8 gap-1.5 rounded-lg bg-foreground text-background hover:bg-foreground/90"
-            onClick={openCreate}
-          >
-            <Plus className="size-4" strokeWidth={2} />
-            Produto
-          </Button>
+          {!showToolbar ? (
+            <div className="mt-8 flex flex-wrap justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-1.5 rounded-lg"
+                onClick={() => setManageCollectionsOpen(true)}
+              >
+                <Layers className="size-4" strokeWidth={2} />
+                Coleções
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-1.5 rounded-lg"
+                onClick={() => {
+                  setNewCollectionName("");
+                  setNewCollectionOpen(true);
+                }}
+              >
+                <Plus className="size-4" strokeWidth={2} />
+                Coleção
+              </Button>
+              <Button
+                type="button"
+                className="gap-1.5 rounded-lg bg-foreground text-background hover:bg-foreground/90"
+                onClick={openCreate}
+              >
+                <Plus className="size-4" strokeWidth={2} />
+                Produto
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
@@ -177,6 +332,7 @@ export function ProductsClient({
               <thead>
                 <tr className="border-b border-border/60 bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-3">Nome</th>
+                  <th className="px-4 py-3">Coleção</th>
                   <th className="px-4 py-3">Preço</th>
                   <th className="w-10 px-2 py-3" aria-hidden />
                 </tr>
@@ -201,6 +357,13 @@ export function ProductsClient({
                   >
                     <td className="px-4 py-3 font-medium text-foreground">
                       {p.name}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {p.collection ? (
+                        p.collection.name
+                      ) : (
+                        <span className="text-muted-foreground/70">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground tabular-nums">
                       {formatCurrency(p.price)}
@@ -238,6 +401,26 @@ export function ProductsClient({
                   autoComplete="off"
                   disabled={busy}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="product-collection">Coleção</Label>
+                <select
+                  id="product-collection"
+                  className={selectTriggerClass}
+                  value={collectionId}
+                  onChange={(e) => setCollectionId(e.target.value)}
+                  disabled={busy}
+                >
+                  <option value="">Sem coleção</option>
+                  {sortedCollections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Opcional. Crie coleções pelos botões acima da lista.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="product-price">
@@ -298,6 +481,150 @@ export function ProductsClient({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={newCollectionOpen} onOpenChange={setNewCollectionOpen}>
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border/60 px-4 py-3 text-left sm:px-5 sm:py-4">
+            <DialogTitle className="text-base font-semibold">
+              Nova coleção
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onCreateCollection}>
+            <div className="space-y-4 px-4 py-4 sm:px-5">
+              <div className="space-y-2">
+                <Label htmlFor="new-collection-name">
+                  <span className="text-destructive">*</span> Nome
+                </Label>
+                <Input
+                  id="new-collection-name"
+                  value={newCollectionName}
+                  onChange={(e) => setNewCollectionName(e.target.value)}
+                  placeholder="Ex.: Vestuário formal"
+                  required
+                  autoComplete="off"
+                  disabled={busy}
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 border-t border-border/60 px-4 py-3 sm:px-5 sm:py-4">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setNewCollectionOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={busy}>
+                Criar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={manageCollectionsOpen}
+        onOpenChange={setManageCollectionsOpen}
+      >
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border/60 px-4 py-3 text-left sm:px-5 sm:py-4">
+            <DialogTitle className="text-base font-semibold">
+              Coleções
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[min(360px,50vh)] overflow-y-auto px-4 py-3 sm:px-5">
+            {sortedCollections.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhuma coleção ainda. Use &quot;+ Coleção&quot; para criar.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {sortedCollections.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex flex-wrap items-center gap-2 py-3 first:pt-0"
+                  >
+                    {renamingId === c.id ? (
+                      <>
+                        <Input
+                          className="min-w-0 flex-1"
+                          value={renameText}
+                          onChange={(e) => setRenameText(e.target.value)}
+                          disabled={busy}
+                          autoComplete="off"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void saveRename()}
+                        >
+                          Salvar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            setRenamingId(null);
+                            setRenameText("");
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="min-w-0 flex-1 font-medium text-foreground">
+                          {c.name}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 gap-1"
+                          disabled={busy}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRename(c);
+                          }}
+                        >
+                          <Pencil className="size-3.5" />
+                          Renomear
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={busy}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void onDeleteCollection(c);
+                          }}
+                        >
+                          Excluir
+                        </Button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <DialogFooter className="border-t border-border/60 px-4 py-3 sm:px-5 sm:py-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setManageCollectionsOpen(false)}
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
