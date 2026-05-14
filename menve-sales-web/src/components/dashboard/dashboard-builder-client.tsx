@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,9 +21,11 @@ import {
   createDashboardBoard,
   deleteDashboardBoard,
   duplicateDashboardBoard,
+  seedDefaultDashboardBoard,
   updateDashboardBoard,
 } from "@/actions/dashboard-boards";
 import { queryDashboardWidgetsBulk } from "@/actions/dashboard-widgets";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,6 +57,7 @@ import type {
   WidgetType,
 } from "@/lib/dashboard-builder-types";
 import {
+  DEFAULT_SALES_DASHBOARD_BOARD_NAME,
   defaultBarWidgetQueryAndChart,
   defaultQuerySpec,
   newWidgetId,
@@ -309,6 +313,14 @@ export function DashboardBuilderClient({
     setActiveId(vm.id);
   }
 
+  async function handleSeedDefaultBoard() {
+    const b = await seedDefaultDashboardBoard({ force: true });
+    if (!b) return;
+    const vm = toVm(b);
+    setBoards((prev) => [vm, ...prev]);
+    setActiveId(vm.id);
+  }
+
   async function handleDuplicateBoard() {
     if (!activeId) return;
     const b = await duplicateDashboardBoard(activeId);
@@ -367,16 +379,38 @@ export function DashboardBuilderClient({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
+            {activeBoard?.name === DEFAULT_SALES_DASHBOARD_BOARD_NAME ? (
+              <Badge variant="secondary" className="font-normal">
+                Painel padrão de vendas
+              </Badge>
+            ) : null}
+          </div>
           <p className="text-sm text-muted-foreground">
-            Painéis em branco: adicione cartões, dados do funil e organize como quiser.
+            O modelo &quot;Vendas — Visão geral&quot; traz KPIs e gráficos do pipeline;
+            você pode editar, adicionar cartões ou criar painéis em branco.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={handleCreateBoard}>
-            <Plus className="mr-1 size-4" />
-            Novo painel
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm">
+                <Plus className="mr-1 size-4" />
+                Novo painel
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void handleCreateBoard()}>
+                <LayoutGrid className="mr-2 size-4" />
+                Painel em branco
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void handleSeedDefaultBoard()}>
+                <Sparkles className="mr-2 size-4" />
+                Painel padrão de vendas
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {activeId ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -411,12 +445,22 @@ export function DashboardBuilderClient({
         <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-muted/20 px-6 py-16 text-center">
           <LayoutGrid className="mb-3 size-10 text-muted-foreground" />
           <p className="mb-4 max-w-sm text-sm text-muted-foreground">
-            Você ainda não tem painéis. Crie o primeiro e monte seu dashboard com
-            quantos cartões precisar.
+            Você ainda não tem painéis. Comece pelo modelo padrão de vendas
+            (KPIs prontos) ou monte do zero.
           </p>
-          <Button type="button" onClick={() => void handleCreateBoard()}>
-            Criar primeiro painel
-          </Button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button type="button" onClick={() => void handleSeedDefaultBoard()}>
+              <Sparkles className="mr-1 size-4" />
+              Usar painel padrão
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleCreateBoard()}
+            >
+              Criar em branco
+            </Button>
+          </div>
         </div>
       ) : (
         <>
