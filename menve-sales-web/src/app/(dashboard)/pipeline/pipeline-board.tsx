@@ -106,22 +106,22 @@ function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
           <LeadAssigneeAvatar assignedTo={deal.assignedTo} />
         </div>
         <div className="min-w-0 space-y-2 pr-8">
-          <p className="text-[14px] font-semibold leading-none text-muted-foreground">
+          <p className="text-[10px] font-semibold leading-none text-muted-foreground">
             Contato
           </p>
-          <p className="truncate text-[15px] font-medium leading-snug text-foreground">
+          <p className="truncate text-[10.5px] font-medium leading-snug text-foreground">
             {deal.contact.name}
           </p>
           {deal.contact.company?.trim() ? (
-            <p className="truncate text-[12px] leading-snug text-muted-foreground">
+            <p className="truncate text-[8.5px] leading-snug text-muted-foreground">
               {deal.contact.company.trim()}
             </p>
           ) : null}
         </div>
-        <p className="mt-5 text-[15px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
+        <p className="mt-5 text-[10.5px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
           {formatDealCurrency(displayValue)}
         </p>
-        <div className="mt-2.5 flex items-center justify-between gap-2 text-[12px] font-normal leading-none text-muted-foreground">
+        <div className="mt-2.5 flex items-center justify-between gap-2 text-[8.5px] font-normal leading-none text-muted-foreground">
           <span className="min-w-0 truncate">{originLine ?? "—"}</span>
           <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
             <span className="flex size-6 items-center justify-center text-foreground/80">
@@ -441,7 +441,7 @@ function DealCard({
           onPointerDown={(e) => renaming && e.stopPropagation()}
           onClick={(e) => renaming && e.stopPropagation()}
         >
-          <p className="text-[14px] font-semibold leading-none text-muted-foreground">
+          <p className="text-[10px] font-semibold leading-none text-muted-foreground">
             Contato
           </p>
           {renaming ? (
@@ -449,7 +449,7 @@ function DealCard({
               ref={renameInputRef}
               disabled={renameBusy}
               placeholder="Nome do lead"
-              className="h-9 border-0 bg-transparent px-0 text-[15px] font-medium shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-9 border-0 bg-transparent px-0 text-[10.5px] font-medium shadow-none outline-none ring-0 focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
               aria-label="Nome do lead"
               value={renameLeadName}
               onChange={(e) => setRenameLeadName(e.target.value)}
@@ -469,11 +469,11 @@ function DealCard({
             />
             ) : (
               <>
-                <p className="truncate text-[15px] font-medium leading-snug text-foreground">
+                <p className="truncate text-[10.5px] font-medium leading-snug text-foreground">
                   {deal.contact.name}
                 </p>
                 {deal.contact.company?.trim() ? (
-                  <p className="truncate text-[12px] leading-snug text-muted-foreground">
+                  <p className="truncate text-[8.5px] leading-snug text-muted-foreground">
                     {deal.contact.company.trim()}
                   </p>
                 ) : null}
@@ -481,12 +481,12 @@ function DealCard({
             )}
           </div>
 
-        <p className="mt-5 text-[15px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
+        <p className="mt-5 text-[10.5px] font-semibold tabular-nums leading-none tracking-tight text-emerald-600 dark:text-emerald-400">
           {formatDealCurrency(displayValue)}
         </p>
 
         {!renaming ? (
-          <div className="mt-2.5 flex items-center justify-between gap-2 text-[12px] font-normal leading-none text-muted-foreground">
+          <div className="mt-2.5 flex items-center justify-between gap-2 text-[8.5px] font-normal leading-none text-muted-foreground">
             <span className="min-w-0 truncate">{originLine ?? "—"}</span>
             <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
               <Link
@@ -539,14 +539,14 @@ function StageColumn({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-[15px] font-bold leading-tight text-foreground">
+              <h3 className="truncate text-[10.5px] font-bold leading-tight text-foreground">
                 {stage.name}
               </h3>
-              <span className="inline-flex min-h-[1.375rem] min-w-[1.375rem] shrink-0 items-center justify-center rounded-md bg-black/[0.06] px-1.5 text-xs font-semibold tabular-nums text-foreground/80 dark:bg-white/10">
+              <span className="inline-flex min-h-[1.375rem] min-w-[1.375rem] shrink-0 items-center justify-center rounded-md bg-black/[0.06] px-1.5 text-[8.5px] font-semibold tabular-nums text-foreground/80 dark:bg-white/10">
                 {deals.length}
               </span>
             </div>
-            <p className="mt-1 text-[13px] tabular-nums leading-snug text-muted-foreground">
+            <p className="mt-1 text-[9px] tabular-nums leading-snug text-muted-foreground">
               {sum.toLocaleString("pt-BR", {
                 style: "currency",
                 currency: "BRL",
@@ -565,7 +565,7 @@ function StageColumn({
           aria-label={`Leads na etapa ${stage.name}`}
         >
           {deals.length === 0 ? (
-            <p className="py-6 text-center text-[13px] text-muted-foreground">
+            <p className="py-6 text-center text-[9px] text-muted-foreground">
               Arraste leads aqui
             </p>
           ) : (

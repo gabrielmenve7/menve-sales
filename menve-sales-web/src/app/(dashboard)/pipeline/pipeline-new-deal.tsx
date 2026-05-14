@@ -192,7 +192,7 @@ export function PipelineColumnNewDealFooterTrigger({
       <span className="flex size-8 items-center justify-center rounded-full border border-border/80 text-foreground">
         <Plus className="size-4" strokeWidth={2} />
       </span>
-      <span className="text-[11px] font-bold uppercase tracking-wide">
+      <span className="text-[7.5px] font-bold uppercase tracking-wide">
         Adicionar
       </span>
     </button>
