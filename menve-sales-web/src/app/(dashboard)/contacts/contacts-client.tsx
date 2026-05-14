@@ -7,29 +7,47 @@ import type {
   Tag,
 } from "@prisma/client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createContact, deleteContact, exportContactsCsv } from "@/actions/contacts";
 import { importContactsCsv } from "@/actions/import-csv";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type Row = Contact & {
   campaignSource: CampaignSource | null;
   contactTags: (ContactTag & { tag: Tag })[];
 };
 
+const textareaClass = cn(
+  "min-h-[200px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm",
+  "ring-offset-background placeholder:text-muted-foreground",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+);
+
 export function ContactsClient({ contacts }: { contacts: Row[] }) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [csvText, setCsvText] = useState("");
+  const [newOpen, setNewOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   async function onExport() {
     setLoading(true);
@@ -52,98 +70,72 @@ export function ContactsClient({ contacts }: { contacts: Row[] }) {
   async function onCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
-    const fd = new FormData(e.currentTarget);
-    await createContact({
-      name: String(fd.get("name") ?? ""),
-      phone: String(fd.get("phone") ?? "") || undefined,
-      email: String(fd.get("email") ?? "") || undefined,
-      company: String(fd.get("company") ?? "") || undefined,
-      utmSource: String(fd.get("utmSource") ?? "") || undefined,
-      utmMedium: String(fd.get("utmMedium") ?? "") || undefined,
-      utmCampaign: String(fd.get("utmCampaign") ?? "") || undefined,
-    });
-    setLoading(false);
-    e.currentTarget.reset();
+    try {
+      const fd = new FormData(e.currentTarget);
+      await createContact({
+        name: String(fd.get("name") ?? ""),
+        phone: String(fd.get("phone") ?? "") || undefined,
+        email: String(fd.get("email") ?? "") || undefined,
+        company: String(fd.get("company") ?? "") || undefined,
+        utmSource: String(fd.get("utmSource") ?? "") || undefined,
+        utmMedium: String(fd.get("utmMedium") ?? "") || undefined,
+        utmCampaign: String(fd.get("utmCampaign") ?? "") || undefined,
+      });
+      e.currentTarget.reset();
+      setNewOpen(false);
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function onImport() {
+    if (!csvText.trim()) return;
     setLoading(true);
-    await importContactsCsv(csvText);
-    setCsvText("");
-    setLoading(false);
+    try {
+      await importContactsCsv(csvText);
+      setCsvText("");
+      setImportOpen(false);
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onDelete(id: string) {
+    setLoading(true);
+    try {
+      await deleteContact(id);
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="space-y-8">
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Novo contato</CardTitle>
-            <CardDescription>Cadastro manual</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onCreate} className="space-y-3">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Nome</Label>
-                <Input id="name" name="name" required />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
-                <div>
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input id="phone" name="phone" placeholder="+5511..." />
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="company">Empresa</Label>
-                <Input id="company" name="company" />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3 sm:gap-2">
-                <div>
-                  <Label htmlFor="utmSource">utm_source</Label>
-                  <Input id="utmSource" name="utmSource" />
-                </div>
-                <div>
-                  <Label htmlFor="utmMedium">utm_medium</Label>
-                  <Input id="utmMedium" name="utmMedium" />
-                </div>
-                <div>
-                  <Label htmlFor="utmCampaign">utm_campaign</Label>
-                  <Input id="utmCampaign" name="utmCampaign" />
-                </div>
-              </div>
-              <Button type="submit" disabled={loading}>
-                Salvar
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Importar CSV</CardTitle>
-            <CardDescription>
-              Cabeçalho: name,nome,phone,telefone,email,company,empresa
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <textarea
-              className="min-h-[160px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-              placeholder="cole o CSV aqui..."
-              value={csvText}
-              onChange={(e) => setCsvText(e.target.value)}
-            />
-            <Button type="button" onClick={onImport} disabled={loading || !csvText}>
-              Importar
-            </Button>
-          </CardContent>
-        </Card>
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
+      <div className="flex flex-col gap-4 border-b border-border/40 pb-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">Contatos</h1>
+          <p className="text-sm text-muted-foreground">
+            Leads e contatos com origem de campanha (UTM).
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+          >
+            Importar CSV
+          </Button>
+          <Button type="button" onClick={() => setNewOpen(true)}>
+            + Novo contato
+          </Button>
+        </div>
       </div>
 
-      <Card>
+      <Card className="min-h-0 flex-1">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>Lista</CardTitle>
           <Button
@@ -151,7 +143,7 @@ export function ContactsClient({ contacts }: { contacts: Row[] }) {
             variant="outline"
             size="sm"
             disabled={loading || contacts.length === 0}
-            onClick={onExport}
+            onClick={() => void onExport()}
           >
             Exportar CSV
           </Button>
@@ -207,7 +199,8 @@ export function ContactsClient({ contacts }: { contacts: Row[] }) {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => deleteContact(c.id)}
+                        disabled={loading}
+                        onClick={() => void onDelete(c.id)}
                       >
                         Excluir
                       </Button>
@@ -219,6 +212,99 @@ export function ContactsClient({ contacts }: { contacts: Row[] }) {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={newOpen} onOpenChange={setNewOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Novo contato</DialogTitle>
+            <DialogDescription>Cadastro manual</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => void onCreate(e)} className="space-y-3">
+            <div className="grid gap-2">
+              <Label htmlFor="contact-name">Nome</Label>
+              <Input id="contact-name" name="name" required />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+              <div>
+                <Label htmlFor="contact-phone">Telefone</Label>
+                <Input id="contact-phone" name="phone" placeholder="+5511..." />
+              </div>
+              <div>
+                <Label htmlFor="contact-email">Email</Label>
+                <Input id="contact-email" name="email" type="email" />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="contact-company">Empresa</Label>
+              <Input id="contact-company" name="company" />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3 sm:gap-2">
+              <div>
+                <Label htmlFor="contact-utmSource">utm_source</Label>
+                <Input id="contact-utmSource" name="utmSource" />
+              </div>
+              <div>
+                <Label htmlFor="contact-utmMedium">utm_medium</Label>
+                <Input id="contact-utmMedium" name="utmMedium" />
+              </div>
+              <div>
+                <Label htmlFor="contact-utmCampaign">utm_campaign</Label>
+                <Input id="contact-utmCampaign" name="utmCampaign" />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setNewOpen(false)}
+                disabled={loading}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={loading}>
+                Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Importar CSV</DialogTitle>
+            <DialogDescription>
+              Cabeçalho: name,nome,phone,telefone,email,company,empresa
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <textarea
+              className={textareaClass}
+              placeholder="cole o CSV aqui..."
+              value={csvText}
+              onChange={(e) => setCsvText(e.target.value)}
+              aria-label="Conteúdo CSV"
+            />
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setImportOpen(false)}
+                disabled={loading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void onImport()}
+                disabled={loading || !csvText.trim()}
+              >
+                Importar
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
