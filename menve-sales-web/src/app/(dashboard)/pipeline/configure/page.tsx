@@ -28,7 +28,7 @@ export default async function PipelineFunnelConfigurePage({
   const backHref = `/pipeline?${backQs.toString()}`;
 
   return (
-    <div className="-m-4 flex min-h-0 flex-1 flex-col md:-m-5">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-3 sm:px-6">
       <FunnelConfigureClient pipelines={pipelines} backHref={backHref} />
     </div>
   );

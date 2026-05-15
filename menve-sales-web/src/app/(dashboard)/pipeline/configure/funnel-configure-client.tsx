@@ -26,13 +26,13 @@ export function FunnelConfigureClient({
   );
 
   return (
-    <div className="mx-auto flex w-full min-h-0 max-w-4xl flex-1 flex-col gap-4 px-0 sm:px-1">
+    <div className="flex w-full min-w-0 flex-col gap-4">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-4">
-        <div className="flex min-w-0 flex-1 items-center gap-1 sm:min-w-[12rem]">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-0">
           <Button
             variant="ghost"
             size="sm"
-            className="shrink-0 -ml-2 gap-1 px-2"
+            className="shrink-0 gap-1 px-2"
             asChild
           >
             <Link href={backHref}>
@@ -62,7 +62,7 @@ export function FunnelConfigureClient({
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+      <div className="min-w-0 pb-2">
         <SettingsPipelineStages
           ref={stagesRef}
           pipelines={pipelines}
