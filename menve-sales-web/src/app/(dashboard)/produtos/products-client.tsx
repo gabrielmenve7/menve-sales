@@ -22,7 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Layers, Package, Plus, Pencil } from "lucide-react";
+import { ChevronRight, Layers, Package, Plus, Pencil, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
@@ -88,6 +88,8 @@ export function ProductsClient({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
 
+  const [searchQuery, setSearchQuery] = useState("");
+
   const sorted = useMemo(() => {
     const copy = [...initialProducts];
     copy.sort((a, b) => {
@@ -99,6 +101,19 @@ export function ProductsClient({
     });
     return copy;
   }, [initialProducts]);
+
+  const filteredProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((p) => {
+      if (p.name.toLowerCase().includes(q)) return true;
+      if ((p.collection?.name ?? "").toLowerCase().includes(q)) return true;
+      if (formatCurrency(p.price).toLowerCase().includes(q)) return true;
+      const raw = String(p.price);
+      if (raw.includes(q)) return true;
+      return false;
+    });
+  }, [sorted, searchQuery]);
 
   const sortedCollections = useMemo(
     () =>
@@ -327,18 +342,52 @@ export function ProductsClient({
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+          <div className="border-b border-border/50">
+            <label
+              htmlFor="products-search"
+              className="flex cursor-text items-center gap-3 px-4 py-2.5 sm:px-5"
+            >
+              <Search
+                className="size-4 shrink-0 text-muted-foreground/70"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <input
+                id="products-search"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Pesquisar e filtrar"
+                autoComplete="off"
+                className="min-w-0 flex-1 border-0 bg-transparent py-1 text-sm text-foreground outline-none ring-0 placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                aria-label="Pesquisar e filtrar produtos"
+              />
+            </label>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[320px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/50 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-3">Nome</th>
+                  <th className="px-4 py-3 sm:px-5">Produto</th>
                   <th className="px-4 py-3">Coleção</th>
                   <th className="px-4 py-3">Preço</th>
                   <th className="w-10 px-2 py-3" aria-hidden />
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((p) => (
+                {filteredProducts.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-4 py-10 text-center text-sm text-muted-foreground sm:px-5"
+                    >
+                      {searchQuery.trim()
+                        ? `Nenhum produto corresponde a “${searchQuery.trim()}”.`
+                        : "Nenhum produto."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((p) => (
                   <tr
                     key={p.id}
                     className={cn(
@@ -355,7 +404,7 @@ export function ProductsClient({
                     tabIndex={0}
                     role="button"
                   >
-                    <td className="px-4 py-3 font-medium text-foreground">
+                    <td className="px-4 py-3 font-medium text-foreground sm:px-5">
                       {p.name}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
@@ -372,7 +421,8 @@ export function ProductsClient({
                       <ChevronRight className="ml-auto size-4 opacity-60" />
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
