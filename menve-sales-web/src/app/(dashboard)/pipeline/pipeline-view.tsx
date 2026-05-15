@@ -453,7 +453,10 @@ function PipelineViewBody({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex h-11 max-w-full min-w-0 items-center gap-2.5 rounded-xl border border-border/50 bg-background px-3.5 text-left text-[14px] shadow-sm outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className={cn(
+                    "inline-flex h-11 max-w-full min-w-0 items-center gap-2.5 rounded-xl px-3.5 text-left text-[14px] outline-none",
+                    pipelineToolbarControl,
+                  )}
                   aria-label="Selecionar funil de vendas"
                 >
                   <GitBranch
@@ -517,9 +520,12 @@ function PipelineViewBody({
             {canConfigureAutomations ? (
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="h-11 shrink-0 gap-2 rounded-xl border-border/50 px-3.5 text-[14px] shadow-sm"
+                className={cn(
+                  "h-11 shrink-0 gap-2 rounded-xl px-3.5 text-[14px]",
+                  pipelineToolbarControl,
+                )}
                 aria-label="Configurar funis e etapas"
                 title="Funis, etapas e ordem do Kanban"
                 onClick={() => setFunnelSettingsOpen(true)}
@@ -550,9 +556,9 @@ function PipelineViewBody({
               <PopoverTrigger asChild>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="icon"
-                  className="relative h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
+                  className={cn("relative", pipelineToolbarIconBtn)}
                   aria-label={
                     activeAutomationCount != null && activeAutomationCount > 0
                       ? `Automações do funil, ${activeAutomationCount} ativas`
@@ -609,9 +615,9 @@ function PipelineViewBody({
             </Popover>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
+              className={pipelineToolbarIconBtn}
               aria-label="Atualizar funil e leads"
               title="Atualizar"
               disabled={pipelineRefreshing}
@@ -635,9 +641,9 @@ function PipelineViewBody({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
+              className={pipelineToolbarIconBtn}
               aria-label="Abrir lista por etapa"
               title="Lista por etapa"
               onClick={() => setListPanelOpen(true)}
@@ -649,9 +655,9 @@ function PipelineViewBody({
             <PopoverTrigger asChild>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="icon"
-                className="relative h-11 w-11 shrink-0 rounded-xl border-border/50 shadow-sm"
+                className={cn("relative", pipelineToolbarIconBtn)}
                 aria-label="Filtros do pipeline"
               >
                 <SlidersHorizontal className="size-[18px]" strokeWidth={2} />
@@ -800,14 +806,17 @@ function PipelineViewBody({
               placeholder="Buscar leads…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-11 rounded-xl border-border/50 bg-background pl-10 text-[14px] shadow-sm placeholder:text-muted-foreground/70"
+              className={cn(
+                "h-11 rounded-xl border pl-10 text-[14px] shadow-none placeholder:text-muted-foreground/70",
+                pipelineToolbarControl,
+              )}
             />
           </div>
           {sortedPipelineStages[0] ? (
             <Button
               type="button"
               onClick={() => setNewDealOpen(true)}
-              className="h-11 shrink-0 gap-2 rounded-xl px-4 text-[14px] font-semibold shadow-sm"
+              className="h-11 shrink-0 gap-2 rounded-xl border border-transparent bg-primary-solid px-4 text-[14px] font-semibold text-primary-solid-fg shadow-none transition-[border-color,box-shadow] hover:border-primary-solid-fg/35 hover:bg-primary-solid hover:ring-2 hover:ring-primary-solid/25 focus-visible:border-primary-solid-fg/40 focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2"
               aria-label="Adicionar novo lead"
               title="Adicionar novo lead"
             >
