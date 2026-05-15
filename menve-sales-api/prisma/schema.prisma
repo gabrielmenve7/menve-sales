@@ -395,6 +395,12 @@ model Pipeline {
   isDefault Boolean  @default(false)
   sortOrder Int      @default(0)
   color     String?
+  /** Etapa cujo Kanban marca a oportunidade como ganha (alimenta métricas WON). */
+  wonStageId  String?
+  wonStage    Stage?  @relation("PipelineWonStage", fields: [wonStageId], references: [id], onDelete: SetNull)
+  /** Etapa cujo Kanban marca a oportunidade como perdida (alimenta métricas LOST). */
+  lostStageId String?
+  lostStage   Stage?  @relation("PipelineLostStage", fields: [lostStageId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -412,6 +418,8 @@ model Stage {
   probability Float?
   color       String?
   deals       Deal[]
+  pipelinesMarkedWon  Pipeline[] @relation("PipelineWonStage")
+  pipelinesMarkedLost Pipeline[] @relation("PipelineLostStage")
 
   @@unique([pipelineId, sortOrder])
 }

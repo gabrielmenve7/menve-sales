@@ -35,7 +35,6 @@ export async function PipelineMain({
     members,
     campaignSources,
     tenantTags,
-    canConfigureAutomations,
   ] = await Promise.all([
     apiServer<PipelineRow[]>("/pipelines"),
     apiServer<unknown>("/custom-fields?entity=DEAL")
@@ -50,11 +49,12 @@ export async function PipelineMain({
     apiServer<{ id: string; name: string }[]>("/tags").catch(
       () => [] as { id: string; name: string }[],
     ),
-    canConfigureTenant(),
   ]);
 
+  const userCanConfigureTenant = await canConfigureTenant();
+
   if (pipelines.length === 0) {
-    if (!canConfigureAutomations) {
+    if (!userCanConfigureTenant) {
       return (
         <p className="text-sm text-muted-foreground">
           Nenhum funil configurado. Peça a um administrador ou gestor do workspace
@@ -95,7 +95,8 @@ export async function PipelineMain({
       campaignSources={campaignSources}
       tenantTags={tenantTags}
       openAutomationsFromUrl={openAutomationsFromUrl}
-      canConfigureAutomations={canConfigureAutomations}
+      canConfigureAutomations={userCanConfigureTenant}
+      canConfigureTenant={userCanConfigureTenant}
     />
   );
 }

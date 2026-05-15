@@ -20,7 +20,14 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useState,
+} from "react";
 import {
   createPipeline,
   deletePipeline,
@@ -48,6 +55,17 @@ import { Label } from "@/components/ui/label";
 
 type PipelineWithStages = Pipeline & { stages: Stage[] };
 
+export type SettingsPipelineStagesHandle = {
+  save: () => Promise<void>;
+};
+
+export type SettingsPipelineStagesProps = {
+  pipelines: PipelineWithStages[];
+  /** Layout sem cartão (página dedicada de configuração do funil). */
+  bare?: boolean;
+  onEditorMetaChange?: (meta: { dirty: boolean; busy: boolean }) => void;
+};
+
 /** Clone para estado local; JSON evita falha de `structuredClone` no SSR com props do Flight. */
 function clonePipelines(p: PipelineWithStages[]): PipelineWithStages[] {
   return JSON.parse(JSON.stringify(p)) as PipelineWithStages[];
@@ -73,6 +91,8 @@ function pipelinesBaselineJson(pipelines: PipelineWithStages[]): string {
       id: p.id,
       name: p.name,
       color: p.color,
+      wonStageId: p.wonStageId ?? null,
+      lostStageId: p.lostStageId ?? null,
       stages: p.stages.map((s) => ({
         id: s.id,
         name: s.name,
@@ -93,6 +113,8 @@ function isDirty(
     if (!sp) return true;
     if (lp.name !== sp.name) return true;
     if (normColor(lp.color) !== normColor(sp.color)) return true;
+    if ((lp.wonStageId ?? null) !== (sp.wonStageId ?? null)) return true;
+    if ((lp.lostStageId ?? null) !== (sp.lostStageId ?? null)) return true;
     if (lp.stages.length !== sp.stages.length) return true;
     const ssMap = new Map(sp.stages.map((s) => [s.id, s]));
     for (const ls of lp.stages) {
@@ -279,11 +301,13 @@ function PipelineStagesSortableList({
   );
 }
 
-export function SettingsPipelineStages({
-  pipelines: initialPipelines,
-}: {
-  pipelines: PipelineWithStages[];
-}) {
+export const SettingsPipelineStages = forwardRef<
+  SettingsPipelineStagesHandle,
+  SettingsPipelineStagesProps
+>(function SettingsPipelineStages(
+  { pipelines: initialPipelines, bare = false, onEditorMetaChange },
+  ref,
+) {
   const router = useRouter();
   const [localPipelines, setLocalPipelines] = useState(() =>
     clonePipelines(initialPipelines),
@@ -305,12 +329,18 @@ export function SettingsPipelineStages({
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onEditorMetaChange?.({ dirty, busy });
+  }, [dirty, busy, onEditorMetaChange]);
   const [newPipelineName, setNewPipelineName] = useState("");
   const [newPipelineColor, setNewPipelineColor] = useState("");
 
   function patchPipeline(
     pipelineId: string,
-    patch: Partial<Pick<Pipeline, "name" | "color">>,
+    patch: Partial<
+      Pick<Pipeline, "name" | "color" | "wonStageId" | "lostStageId">
+    >,
   ) {
     setLocalPipelines((prev) =>
       prev.map((p) => (p.id === pipelineId ? { ...p, ...patch } : p)),
@@ -335,7 +365,7 @@ export function SettingsPipelineStages({
     );
   }
 
-  async function saveAllEdits() {
+  const saveAllEdits = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
@@ -343,14 +373,21 @@ export function SettingsPipelineStages({
       for (const lp of localPipelines) {
         const sp = serverMap.get(lp.id);
         if (!sp) continue;
-        if (
-          lp.name !== sp.name ||
-          normColor(lp.color) !== normColor(sp.color)
-        ) {
+        const nameChanged = lp.name !== sp.name;
+        const colorChanged = normColor(lp.color) !== normColor(sp.color);
+        const wonChanged =
+          (lp.wonStageId ?? null) !== (sp.wonStageId ?? null);
+        const lostChanged =
+          (lp.lostStageId ?? null) !== (sp.lostStageId ?? null);
+        if (nameChanged || colorChanged || wonChanged || lostChanged) {
           await updatePipeline({
             id: lp.id,
-            name: lp.name.trim(),
-            color: normColor(lp.color) || null,
+            ...(nameChanged ? { name: lp.name.trim() } : {}),
+            ...(colorChanged
+              ? { color: normColor(lp.color) || null }
+              : {}),
+            ...(wonChanged ? { wonStageId: lp.wonStageId ?? null } : {}),
+            ...(lostChanged ? { lostStageId: lp.lostStageId ?? null } : {}),
           });
         }
         const ssMap = new Map(sp.stages.map((s) => [s.id, s]));
@@ -379,7 +416,15 @@ export function SettingsPipelineStages({
     } finally {
       setBusy(false);
     }
-  }
+  }, [localPipelines, initialPipelines, router]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      save: () => saveAllEdits(),
+    }),
+    [saveAllEdits],
+  );
 
   async function onCreatePipeline(e: React.FormEvent) {
     e.preventDefault();
@@ -425,6 +470,106 @@ export function SettingsPipelineStages({
     const next = [...localPipelines];
     [next[index], next[j]] = [next[j], next[index]];
     void persistPipelineOrder(next);
+  }
+
+  if (bare) {
+    return (
+      <div className="space-y-8">
+        {error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : null}
+
+        <form
+          onSubmit={(e) => void onCreatePipeline(e)}
+          className="space-y-3 rounded-xl bg-muted/25 p-4 dark:bg-muted/10"
+        >
+          <p className="text-sm font-medium">Novo funil</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="grid gap-1">
+              <Label htmlFor="pl-name">Nome</Label>
+              <Input
+                id="pl-name"
+                value={newPipelineName}
+                onChange={(e) => setNewPipelineName(e.target.value)}
+                placeholder="Ex: Vendas B2B"
+                className="min-w-[200px]"
+              />
+            </div>
+            <div className="grid min-w-[11rem] gap-1">
+              <Label htmlFor="pl-color">Cor (opcional)</Label>
+              <HexColorField
+                id="pl-color"
+                value={newPipelineColor}
+                onChange={setNewPipelineColor}
+                disabled={busy}
+                placeholder="#171717"
+              />
+            </div>
+            <Button type="submit" disabled={busy || !newPipelineName.trim()}>
+              Criar funil
+            </Button>
+          </div>
+        </form>
+
+        {localPipelines.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nenhum funil. Crie acima.
+          </p>
+        ) : (
+          <>
+            <div className="space-y-6">
+              {localPipelines.map((p, i) => (
+                <PipelineBlock
+                  key={p.id}
+                  pipeline={p}
+                  disabled={busy}
+                  canUp={i > 0}
+                  canDown={i < localPipelines.length - 1}
+                  onMoveUp={() => movePipeline(i, -1)}
+                  onMoveDown={() => movePipeline(i, 1)}
+                  onError={setError}
+                  setBusy={setBusy}
+                  onRefresh={() => router.refresh()}
+                  onPatchPipeline={patchPipeline}
+                  onPatchStage={patchStage}
+                  showGlobalSave={i === 0}
+                  hideGlobalSaveButton
+                  dirty={dirty}
+                  onSaveAll={() => void saveAllEdits()}
+                  onPersistStageOrder={async (pipelineId, nextStages) => {
+                    setLocalPipelines((prev) =>
+                      prev.map((pl) =>
+                        pl.id === pipelineId
+                          ? { ...pl, stages: nextStages }
+                          : pl,
+                      ),
+                    );
+                    setBusy(true);
+                    setError(null);
+                    try {
+                      await reorderStages({
+                        pipelineId,
+                        orderedStageIds: nextStages.map((s) => s.id),
+                      });
+                      router.refresh();
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : "Erro ao reordenar etapas",
+                      );
+                      setLocalPipelines(clonePipelines(initialPipelines));
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -533,7 +678,9 @@ export function SettingsPipelineStages({
       </CardContent>
     </Card>
   );
-}
+});
+
+SettingsPipelineStages.displayName = "SettingsPipelineStages";
 
 function PipelineBlock({
   pipeline,
@@ -548,6 +695,7 @@ function PipelineBlock({
   onPatchPipeline,
   onPatchStage,
   showGlobalSave,
+  hideGlobalSaveButton = false,
   dirty,
   onSaveAll,
   onPersistStageOrder,
@@ -563,7 +711,9 @@ function PipelineBlock({
   onRefresh: () => void;
   onPatchPipeline: (
     pipelineId: string,
-    patch: Partial<Pick<Pipeline, "name" | "color">>,
+    patch: Partial<
+      Pick<Pipeline, "name" | "color" | "wonStageId" | "lostStageId">
+    >,
   ) => void;
   onPatchStage: (
     pipelineId: string,
@@ -571,6 +721,7 @@ function PipelineBlock({
     patch: Partial<Pick<Stage, "name" | "probability" | "color">>,
   ) => void;
   showGlobalSave: boolean;
+  hideGlobalSaveButton?: boolean;
   dirty: boolean;
   onSaveAll: () => void;
   onPersistStageOrder: (
@@ -721,7 +872,7 @@ function PipelineBlock({
           >
             Excluir funil
           </Button>
-          {showGlobalSave ? (
+          {showGlobalSave && !hideGlobalSaveButton ? (
             <Button
               type="button"
               size="sm"
@@ -732,6 +883,68 @@ function PipelineBlock({
               Salvar alterações
             </Button>
           ) : null}
+        </div>
+      </div>
+
+      <div className="mb-4 space-y-3 rounded-lg border border-border/40 bg-background/50 p-3 dark:bg-background/25">
+        <p className="text-sm font-medium">Status especiais (ganho / perda)</p>
+        <p className="text-xs text-muted-foreground">
+          Ao mover um lead no Kanban para a etapa indicada, a oportunidade passa
+          a contar como ganha ou perdida no dashboard.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-1">
+            <Label className="text-xs" htmlFor={`won-${pipeline.id}`}>
+              Etapa de ganho
+            </Label>
+            <select
+              id={`won-${pipeline.id}`}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              value={pipeline.wonStageId ?? ""}
+              disabled={disabled}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                onPatchPipeline(pipeline.id, {
+                  wonStageId: v === "" ? null : v,
+                });
+              }}
+            >
+              <option value="">Nenhuma</option>
+              {[...pipeline.stages]
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="grid gap-1">
+            <Label className="text-xs" htmlFor={`lost-${pipeline.id}`}>
+              Etapa de perda
+            </Label>
+            <select
+              id={`lost-${pipeline.id}`}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              value={pipeline.lostStageId ?? ""}
+              disabled={disabled}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                onPatchPipeline(pipeline.id, {
+                  lostStageId: v === "" ? null : v,
+                });
+              }}
+            >
+              <option value="">Nenhuma</option>
+              {[...pipeline.stages]
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
       </div>
 

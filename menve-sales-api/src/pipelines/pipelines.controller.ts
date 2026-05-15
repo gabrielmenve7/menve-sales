@@ -51,7 +51,13 @@ export class PipelinesController {
   update(
     @ReqUser() u: RequestUser,
     @Param("id") id: string,
-    @Body() body: { name?: string; color?: string | null },
+    @Body()
+    body: {
+      name?: string;
+      color?: string | null;
+      wonStageId?: string | null;
+      lostStageId?: string | null;
+    },
   ) {
     return this.pipelines.updatePipeline(u, { id, ...body });
   }

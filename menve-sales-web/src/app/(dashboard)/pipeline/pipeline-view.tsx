@@ -57,7 +57,6 @@ import {
 } from "@/lib/pipeline-ui-tokens";
 import { cn } from "@/lib/utils";
 import { PipelineAutomationsDialog } from "@/components/pipeline-automations/pipeline-automations-dialog";
-import { SettingsPipelineStages } from "../settings/settings-pipeline-stages";
 import { PipelineBoard } from "./pipeline-board";
 import { PipelineListView } from "./pipeline-list-view";
 import { PipelineNewDealDialog } from "./pipeline-new-deal";
@@ -113,6 +112,7 @@ function PipelineViewBody({
   tenantTags = [],
   openAutomationsFromUrl = false,
   canConfigureAutomations,
+  canConfigureTenant,
 }: {
   pipelines: (Pipeline & { stages: Stage[] })[];
   activePipeline: Pipeline & { stages: Stage[] };
@@ -130,6 +130,8 @@ function PipelineViewBody({
   /** Abre o modal de automações uma vez (ex.: link com `?tab=automations`). */
   openAutomationsFromUrl?: boolean;
   canConfigureAutomations?: boolean;
+  /** Funis, etapas e status de ganho/perda (OWNER/ADMIN/MANAGER). */
+  canConfigureTenant?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -151,7 +153,6 @@ function PipelineViewBody({
   >(null);
   const [search, setSearch] = useState("");
   const [newDealOpen, setNewDealOpen] = useState(false);
-  const [funnelSettingsOpen, setFunnelSettingsOpen] = useState(false);
 
   const refreshActiveAutomationCount = useCallback(async () => {
     try {
@@ -224,14 +225,6 @@ function PipelineViewBody({
     () =>
       [...activePipeline.stages].sort((a, b) => a.sortOrder - b.sortOrder),
     [activePipeline.stages],
-  );
-
-  const pipelinesConfigKey = useMemo(
-    () =>
-      pipelines
-        .map((p) => `${p.id}:${p.stages.map((s) => s.id).join(",")}`)
-        .join("|"),
-    [pipelines],
   );
 
   const listVisibleStageIds = useMemo(() => {
@@ -520,7 +513,7 @@ function PipelineViewBody({
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            {canConfigureAutomations ? (
+            {canConfigureTenant ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -529,9 +522,13 @@ function PipelineViewBody({
                   "h-11 shrink-0 gap-2 rounded-xl px-3.5 text-[14px]",
                   pipelineToolbarControl,
                 )}
-                aria-label="Configurar funis e etapas"
-                title="Funis, etapas e ordem do Kanban"
-                onClick={() => setFunnelSettingsOpen(true)}
+                aria-label="Configurar funil de vendas"
+                title="Funis, etapas, ganho/perda e ordem do Kanban"
+                onClick={() => {
+                  router.push(
+                    `/pipeline/configure?pipelineId=${encodeURIComponent(activePipeline.id)}`,
+                  );
+                }}
               >
                 <Settings className="size-[18px]" strokeWidth={1.75} />
                 <span className="hidden sm:inline">Configurar</span>
@@ -947,24 +944,6 @@ function PipelineViewBody({
               tenantTags={tenantTags}
               toolbarDock="inline"
               visibleStageIds={listVisibleStageIds}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={funnelSettingsOpen} onOpenChange={setFunnelSettingsOpen}>
-        <DialogContent className="flex max-h-[min(92vh,52rem)] w-[calc(100vw-1.5rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
-          <DialogHeader className="shrink-0 space-y-1.5 border-b border-border/50 px-5 py-4 text-left sm:px-6">
-            <DialogTitle>Configurar funil de vendas</DialogTitle>
-            <DialogDescription className="text-pretty">
-              Funis, etapas, cores e ordem do Kanban. As alterações valem para todo o
-              workspace.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
-            <SettingsPipelineStages
-              key={pipelinesConfigKey}
-              pipelines={pipelines}
             />
           </div>
         </DialogContent>

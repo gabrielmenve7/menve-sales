@@ -167,20 +167,73 @@ export class PipelinesService {
     });
   }
 
+  private async assertStageBelongsToPipeline(
+    stageId: string,
+    pipelineId: string,
+  ) {
+    const s = await this.prisma.stage.findFirst({
+      where: { id: stageId, pipelineId },
+      select: { id: true },
+    });
+    if (!s) {
+      throw new BadRequestException(
+        "Etapa de ganho/perda deve pertencer a este funil.",
+      );
+    }
+  }
+
   async updatePipeline(
     u: RequestUser,
-    input: { id: string; name?: string; color?: string | null },
+    input: {
+      id: string;
+      name?: string;
+      color?: string | null;
+      wonStageId?: string | null;
+      lostStageId?: string | null;
+    },
   ) {
     assertCanConfigureTenant(u.role);
     const tenantId = u.tenantId;
     await this.assertPipelineInTenant(input.id, tenantId);
     const color =
       input.color !== undefined ? parseOptionalHexU(input.color) : undefined;
+
+    const hasOutcome =
+      input.wonStageId !== undefined || input.lostStageId !== undefined;
+    if (hasOutcome) {
+      const current = await this.prisma.pipeline.findFirst({
+        where: { id: input.id, tenantId },
+        select: { wonStageId: true, lostStageId: true },
+      });
+      const nextWon =
+        input.wonStageId !== undefined
+          ? input.wonStageId
+          : current?.wonStageId ?? null;
+      const nextLost =
+        input.lostStageId !== undefined
+          ? input.lostStageId
+          : current?.lostStageId ?? null;
+      if (nextWon && nextLost && nextWon === nextLost) {
+        throw new BadRequestException(
+          "A mesma etapa não pode ser ganho e perda ao mesmo tempo.",
+        );
+      }
+      if (nextWon) await this.assertStageBelongsToPipeline(nextWon, input.id);
+      if (nextLost)
+        await this.assertStageBelongsToPipeline(nextLost, input.id);
+    }
+
     await this.prisma.pipeline.update({
       where: { id: input.id },
       data: {
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
         ...(color !== undefined ? { color } : {}),
+        ...(input.wonStageId !== undefined
+          ? { wonStageId: input.wonStageId }
+          : {}),
+        ...(input.lostStageId !== undefined
+          ? { lostStageId: input.lostStageId }
+          : {}),
       },
     });
   }
@@ -353,6 +406,14 @@ export class PipelinesService {
     const targetStageId = siblings[0]!.id;
 
     await this.prisma.$transaction(async (tx) => {
+      await tx.pipeline.updateMany({
+        where: { wonStageId: stageId },
+        data: { wonStageId: null },
+      });
+      await tx.pipeline.updateMany({
+        where: { lostStageId: stageId },
+        data: { lostStageId: null },
+      });
       await tx.deal.updateMany({
         where: { stageId },
         data: { stageId: targetStageId },

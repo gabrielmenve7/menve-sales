@@ -6,7 +6,12 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import { ActivityType, CustomFieldEntity, type Prisma } from "@prisma/client";
+import {
+  ActivityType,
+  CustomFieldEntity,
+  DealStatus,
+  type Prisma,
+} from "@prisma/client";
 import { z } from "zod";
 import { coerceCustomFieldValue } from "../custom-fields/custom-field-coerce";
 import {
@@ -463,7 +468,16 @@ export class DealsService {
   ) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, tenantId },
-      include: { pipeline: { include: { stages: true } } },
+      include: {
+        pipeline: {
+          select: {
+            id: true,
+            wonStageId: true,
+            lostStageId: true,
+            stages: true,
+          },
+        },
+      },
     });
     if (!deal) throw new BadRequestException("Deal não encontrado");
     const newStage = deal.pipeline.stages.find((s) => s.id === stageId);
@@ -476,10 +490,35 @@ export class DealsService {
     const fromName = oldStage?.name ?? "—";
     const title = `Movido de ${fromName} para ${newStage.name}`;
 
+    const wonId = deal.pipeline.wonStageId;
+    const lostId = deal.pipeline.lostStageId;
+    const prevStatus = deal.status;
+    let nextStatus: DealStatus = deal.status;
+    let nextLostReason: string | null | undefined;
+
+    if (wonId && stageId === wonId) {
+      nextStatus = DealStatus.WON;
+      nextLostReason = null;
+    } else if (lostId && stageId === lostId) {
+      nextStatus = DealStatus.LOST;
+      const lr = deal.lostReason?.trim();
+      nextLostReason =
+        lr && lr.length >= 2 ? lr : "Perdido (etapa do funil)";
+    } else if (prevStatus === DealStatus.WON || prevStatus === DealStatus.LOST) {
+      nextStatus = DealStatus.OPEN;
+      nextLostReason = null;
+    }
+
+    const dealUpdate: Prisma.DealUncheckedUpdateInput = {
+      stageId,
+      ...(nextStatus !== deal.status ? { status: nextStatus } : {}),
+      ...(nextLostReason !== undefined ? { lostReason: nextLostReason } : {}),
+    };
+
     await this.prisma.$transaction([
       this.prisma.deal.update({
         where: { id: dealId },
-        data: { stageId },
+        data: dealUpdate,
       }),
       this.prisma.activity.create({
         data: {
@@ -520,6 +559,40 @@ export class DealsService {
         });
       } catch {
         /* automação não deve falhar a requisição do usuário */
+      }
+      if (
+        nextStatus === DealStatus.WON &&
+        prevStatus !== DealStatus.WON &&
+        parentDepth < PIPELINE_AUTOMATION_MAX_DEPTH
+      ) {
+        try {
+          await this.pipelineAutomationEngine.afterDealMarkedWon({
+            tenantId,
+            actorUserId,
+            dealId,
+            pipelineId: deal.pipelineId,
+            depth: parentDepth,
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+      if (
+        nextStatus === DealStatus.LOST &&
+        prevStatus !== DealStatus.LOST &&
+        parentDepth < PIPELINE_AUTOMATION_MAX_DEPTH
+      ) {
+        try {
+          await this.pipelineAutomationEngine.afterDealMarkedLost({
+            tenantId,
+            actorUserId,
+            dealId,
+            pipelineId: deal.pipelineId,
+            depth: parentDepth,
+          });
+        } catch {
+          /* ignore */
+        }
       }
     }
     return { ok: true as const };

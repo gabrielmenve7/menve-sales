@@ -5,7 +5,12 @@ import { assertCanConfigureTenant } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-const CRM_PATHS = ["/pipeline", "/dashboard", "/settings"] as const;
+const CRM_PATHS = [
+  "/pipeline",
+  "/pipeline/configure",
+  "/dashboard",
+  "/settings",
+] as const;
 
 function revalidateCrm() {
   for (const p of CRM_PATHS) {
@@ -32,6 +37,8 @@ const updatePipelineSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(128).optional(),
   color: z.string().max(16).optional().nullable(),
+  wonStageId: z.string().min(1).nullable().optional(),
+  lostStageId: z.string().min(1).nullable().optional(),
 });
 
 export async function updatePipeline(input: z.infer<typeof updatePipelineSchema>) {
@@ -42,6 +49,12 @@ export async function updatePipeline(input: z.infer<typeof updatePipelineSchema>
     json: {
       ...(data.name !== undefined ? { name: data.name.trim() } : {}),
       ...(data.color !== undefined ? { color: data.color } : {}),
+      ...(data.wonStageId !== undefined
+        ? { wonStageId: data.wonStageId }
+        : {}),
+      ...(data.lostStageId !== undefined
+        ? { lostStageId: data.lostStageId }
+        : {}),
     },
   });
   revalidateCrm();
