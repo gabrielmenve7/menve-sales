@@ -848,17 +848,28 @@ export class DashboardQueryService {
 
     if (spec.timelineStart?.trim()) {
       const startKey = spec.timelineStart.trim();
-      const monthEndYmd = endOfMonthYmd(startKey);
       const todayBr = todayYmdBrazil();
-      const endKey =
-        spec.fillTimelineMonth === true
-          ? monthEndYmd
-          : minYmd(todayBr, monthEndYmd);
-      dateKeys = enumerateYmdInclusive(startKey, endKey);
-      if (dateKeys.length === 0) {
-        dateKeys = [];
+      const timelineEndTrim = spec.timelineEnd?.trim();
+      if (timelineEndTrim) {
+        const endKey = minYmd(timelineEndTrim, todayBr);
+        if (startKey > endKey) {
+          dateKeys = [];
+        } else {
+          dateKeys = enumerateYmdInclusive(startKey, endKey);
+        }
+        sinceForCreatedFilter = startOfDayUtc(startKey);
+      } else {
+        const monthEndYmd = endOfMonthYmd(startKey);
+        const endKey =
+          spec.fillTimelineMonth === true
+            ? monthEndYmd
+            : minYmd(todayBr, monthEndYmd);
+        dateKeys = enumerateYmdInclusive(startKey, endKey);
+        if (dateKeys.length === 0) {
+          dateKeys = [];
+        }
+        sinceForCreatedFilter = startOfDayUtc(startKey);
       }
-      sinceForCreatedFilter = startOfDayUtc(startKey);
     } else {
       const days = Math.min(366, Math.max(1, spec.days ?? 30));
       const todayBr = todayYmdBrazil();
@@ -867,6 +878,10 @@ export class DashboardQueryService {
         dateKeys.push(addCalendarDaysIso(todayBr, -i));
       }
       sinceForCreatedFilter = startOfDayUtc(dateKeys[0] ?? todayBr);
+    }
+
+    if (dateKeys.length === 0) {
+      return { kind: "series", series: [] };
     }
 
     const firstKey = dateKeys[0] ?? todayYmdBrazil();

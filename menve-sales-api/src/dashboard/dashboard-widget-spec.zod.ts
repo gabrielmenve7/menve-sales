@@ -1,5 +1,6 @@
 import { DealStatus } from "@prisma/client";
 import { z } from "zod";
+import { countYmdRangeDaysInclusive } from "../common/calendar-brazil.util";
 import { WIDGET_FILTER_ROLLING_DATE_PRESETS } from "./dashboard-custom-date-preset.util";
 
 const dealStatusEnum = z.enum(["OPEN", "WON", "LOST", "ARCHIVED"]);
@@ -73,6 +74,12 @@ export const widgetQuerySpecInputSchema = z.object({
    */
   fillTimelineMonth: z.boolean().optional(),
   /**
+   * Com BY_DAY + timelineStart: fim fixo da série (YYYY-MM-DD), inclusive.
+   * Quando definido, o eixo lista todos os dias entre `timelineStart` e `timelineEnd`
+   * (útil para intervalo personalizado). Ignora o recorte “até o fim do mês” de `fillTimelineMonth`.
+   */
+  timelineEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /**
    * Com BY_DAY: agrupar por esta chave de campo DATE em `customData` (YYYY-MM-DD ou ISO).
    * Se omitido, mantém o comportamento anterior (bucket pela data de criação do deal).
    */
@@ -134,6 +141,7 @@ export type ResolvedWidgetQuerySpec = {
     | null;
   days?: number;
   timelineStart?: string;
+  timelineEnd?: string;
   fillTimelineMonth?: boolean;
   timelineBucketFieldKey?: string;
   byDayAnchor?: "CREATED_AT" | "UPDATED_AT";
@@ -218,6 +226,7 @@ export function resolveWidgetQuerySpec(
     dimension: dim,
     days: input.days,
     timelineStart: input.timelineStart?.trim() || undefined,
+    timelineEnd: input.timelineEnd?.trim() || undefined,
     fillTimelineMonth: input.fillTimelineMonth === true ? true : undefined,
     timelineBucketFieldKey:
       dim === "BY_DAY" && timelineBucketTrim ? timelineBucketTrim : undefined,
@@ -292,6 +301,30 @@ export const widgetQuerySpecSchema = widgetQuerySpecInputSchema.superRefine(
           code: z.ZodIssueCode.custom,
           message: "Meta / atingimento usa medida Valor (R$)",
           path: ["dataMeasure"],
+        });
+      }
+    }
+
+    const ts = val.timelineStart?.trim();
+    const te = val.timelineEnd?.trim();
+    if (te) {
+      if (!ts) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "timelineEnd exige timelineStart",
+          path: ["timelineEnd"],
+        });
+      } else if (te < ts) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "timelineEnd não pode ser anterior a timelineStart",
+          path: ["timelineEnd"],
+        });
+      } else if (countYmdRangeDaysInclusive(ts, te) > 500) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Intervalo na linha do tempo excede 500 dias",
+          path: ["timelineEnd"],
         });
       }
     }

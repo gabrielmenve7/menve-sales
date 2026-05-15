@@ -43,15 +43,35 @@ export function minYmd(a: string, b: string): string {
 }
 
 /** Lista inclusiva de YYYY-MM-DD de `from` até `to` (lexicográfico = cronológico para ISO). */
-export function enumerateYmdInclusive(from: string, to: string): string[] {
+export function enumerateYmdInclusive(
+  from: string,
+  to: string,
+  maxDays = 500,
+): string[] {
   const out: string[] = [];
   let cur = from;
   while (cur <= to) {
     out.push(cur);
     cur = addCalendarDaysIso(cur, 1);
-    if (out.length > 366) break;
+    if (out.length > maxDays) break;
   }
   return out;
+}
+
+/** Conta dias inclusivos entre `from` e `to` (ISO); retorna `maxExclusive` se exceder o limite. */
+export function countYmdRangeDaysInclusive(
+  from: string,
+  to: string,
+  maxExclusive = 501,
+): number {
+  let n = 0;
+  let cur = from;
+  while (cur <= to) {
+    n++;
+    if (n >= maxExclusive) return maxExclusive;
+    cur = addCalendarDaysIso(cur, 1);
+  }
+  return n;
 }
 
 const pad2 = (n: number) => String(n).padStart(2, "0");

@@ -43,9 +43,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DashboardGlobalDateRangePicker } from "@/components/dashboard/dashboard-global-date-range-picker";
 import { DashboardWidgetConfigDialog, widgetTypeLabel } from "@/components/dashboard/dashboard-widget-config-dialog";
 import { DashboardWidgetRenderer } from "@/components/dashboard/dashboard-widget-renderer";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
+import {
+  buildWidgetQuerySpecsWithGlobalRange,
+  defaultDashboardDateRangeState,
+  type DashboardDateRangeState,
+} from "@/lib/dashboard-global-date-range";
 import type {
   DashboardBoardDto,
   DealCustomFieldDef,
@@ -54,6 +60,7 @@ import type {
   PipelineListItem,
   TagListItem,
   WidgetDataResult,
+  WidgetQuerySpec,
   WidgetType,
 } from "@/lib/dashboard-builder-types";
 import {
@@ -128,6 +135,9 @@ export function DashboardBuilderClient({
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [dateRangeState, setDateRangeState] = useState<DashboardDateRangeState>(
+    () => defaultDashboardDateRangeState(),
+  );
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeBoard = useMemo(
@@ -159,12 +169,18 @@ export function DashboardBuilderClient({
     [activeId, persistLayout],
   );
 
-  const specsKey = useMemo(() => {
-    if (!activeBoard) return "";
-    return JSON.stringify(
-      activeBoard.layout.widgets.map((w) => w.querySpec),
+  const globalQuery = useMemo(() => {
+    if (!activeBoard || activeBoard.layout.widgets.length === 0) {
+      return {
+        specs: [] as WidgetQuerySpec[],
+        specsKey: "",
+      };
+    }
+    return buildWidgetQuerySpecsWithGlobalRange(
+      activeBoard.layout.widgets,
+      dateRangeState,
     );
-  }, [activeBoard]);
+  }, [activeBoard, dateRangeState]);
 
   useEffect(() => {
     if (!activeBoard || activeBoard.layout.widgets.length === 0) {
@@ -176,7 +192,7 @@ export function DashboardBuilderClient({
     if (
       initialWidgetBundle &&
       initialWidgetBundle.boardId === activeBoard.id &&
-      initialWidgetBundle.specsKey === specsKey &&
+      initialWidgetBundle.specsKey === globalQuery.specsKey &&
       initialWidgetBundle.rows.length === activeBoard.layout.widgets.length
     ) {
       const map: Record<string, WidgetDataResult | null> = {};
@@ -194,8 +210,7 @@ export function DashboardBuilderClient({
     setLoadErr(null);
     void (async () => {
       try {
-        const specs = activeBoard.layout.widgets.map((w) => w.querySpec);
-        const rows = await queryDashboardWidgetsBulk(specs);
+        const rows = await queryDashboardWidgetsBulk(globalQuery.specs);
         if (cancelled) return;
         const map: Record<string, WidgetDataResult | null> = {};
         activeBoard.layout.widgets.forEach((w, i) => {
@@ -214,7 +229,13 @@ export function DashboardBuilderClient({
     return () => {
       cancelled = true;
     };
-  }, [activeBoard?.id, specsKey, activeBoard, initialWidgetBundle]);
+  }, [
+    activeBoard?.id,
+    globalQuery.specsKey,
+    globalQuery.specs,
+    activeBoard,
+    initialWidgetBundle,
+  ]);
 
   const onLayoutChange = useCallback(
     (layout: Layout) => {
@@ -403,6 +424,12 @@ export function DashboardBuilderClient({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {activeBoard && activeBoard.layout.widgets.length > 0 ? (
+            <DashboardGlobalDateRangePicker
+              value={dateRangeState}
+              onChange={setDateRangeState}
+            />
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" variant="outline" size="sm">

@@ -10,6 +10,10 @@ import {
   type TagListItem,
   type WidgetDataResult,
 } from "@/lib/dashboard-builder-types";
+import {
+  buildWidgetQuerySpecsWithGlobalRange,
+  defaultDashboardDateRangeState,
+} from "@/lib/dashboard-global-date-range";
 
 /** Resposta de `GET /pipelines` (inclui etapas para cores nos gráficos). */
 type PipelineFromApi = {
@@ -55,9 +59,12 @@ export default async function DashboardPage() {
       const firstBoard = boards[0];
       if (firstBoard) {
         const layout = parseLayoutJson(firstBoard.layoutJson);
-        const specs = layout.widgets.map((w) => w.querySpec);
+        const state = defaultDashboardDateRangeState();
+        const { specs, specsKey } = buildWidgetQuerySpecsWithGlobalRange(
+          layout.widgets,
+          state,
+        );
         if (specs.length > 0) {
-          const specsKey = JSON.stringify(specs);
           const rows = await queryDashboardWidgetsBulk(specs);
           initialWidgetBundle = { boardId: firstBoard.id, specsKey, rows };
         }

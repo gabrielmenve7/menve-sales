@@ -120,6 +120,11 @@ export type WidgetQuerySpec = {
    */
   fillTimelineMonth?: boolean;
   /**
+   * Com BY_DAY + timelineStart: fim fixo da série (YYYY-MM-DD), inclusive.
+   * Usado para intervalo personalizado no eixo (alinhado à API).
+   */
+  timelineEnd?: string;
+  /**
    * BY_DAY: agrupar por este campo Data do deal (customData). Vazio = data de criação do deal.
    */
   timelineBucketFieldKey?: string;
