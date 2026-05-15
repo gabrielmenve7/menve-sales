@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ChevronsRight,
-  Inbox,
+  MessageCircle,
   Trello,
   LayoutGrid,
   Package,
@@ -78,11 +78,15 @@ export function Sidebar({
         <Link
           href="/inbox"
           prefetch={true}
-          title={collapsed ? "Inbox" : undefined}
+          title={collapsed ? "WhatsApp" : undefined}
           className={linkClass(isInboxRoute)}
         >
-          <Inbox className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Inbox</span> : "Inbox"}
+          <MessageCircle
+            className="size-[18px] shrink-0 text-current opacity-95"
+            strokeWidth={1.35}
+            aria-hidden
+          />
+          {collapsed ? <span className="sr-only">WhatsApp</span> : "WhatsApp"}
         </Link>
 
         <Link

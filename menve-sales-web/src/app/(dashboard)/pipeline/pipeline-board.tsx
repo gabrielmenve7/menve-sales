@@ -535,8 +535,8 @@ function DealCard({
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
                 className="flex size-6 items-center justify-center rounded-md text-foreground/75 outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                title="Abrir conversa no Inbox"
-                aria-label={`WhatsApp: abrir conversa com ${deal.contact.name} no Inbox`}
+              title="Abrir conversa no WhatsApp"
+              aria-label={`Abrir conversa com ${deal.contact.name} no WhatsApp`}
               >
                 <WhatsAppLogo className="size-3.5" />
               </Link>

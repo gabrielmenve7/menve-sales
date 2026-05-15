@@ -107,7 +107,7 @@ export function InboxStatusFilterMenu({
           variant="outline"
           size="icon"
           className="relative shrink-0"
-          aria-label="Filtros do Inbox"
+          aria-label="Filtros do WhatsApp"
         >
           <SlidersHorizontal className="size-4" />
           {hasActiveFilters ? (
