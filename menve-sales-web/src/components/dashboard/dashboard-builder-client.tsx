@@ -578,6 +578,7 @@ export function DashboardBuilderClient({
                             loading={loadingData && !loadErr}
                             error={null}
                             dealCustomFields={dealCustomFields}
+                            pipelines={pipelines}
                           />
                         </div>
                       </div>

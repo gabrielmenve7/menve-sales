@@ -23,7 +23,7 @@ export function DashboardKpiCard({
   return (
     <Card
       className={cn(
-        "overflow-hidden border border-border/60 border-l-4 border-l-emerald-500 shadow-sm dark:border-l-emerald-400",
+        "overflow-hidden border border-border/60 shadow-sm dark:border-border/50",
         className,
       )}
     >
@@ -31,7 +31,7 @@ export function DashboardKpiCard({
         <CardTitle className="text-[13px] font-medium text-muted-foreground">
           {label}
         </CardTitle>
-        <div className="rounded-md bg-emerald-500/12 p-1.5 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200">
+        <div className="rounded-md bg-muted/70 p-1.5 text-muted-foreground dark:bg-muted/50">
           <Icon className="size-4" strokeWidth={1.75} />
         </div>
       </CardHeader>

@@ -176,10 +176,21 @@ export type DashboardBoardDto = {
   updatedAt: string;
 };
 
+export type PipelineStageColor = {
+  id: string;
+  name: string;
+  color: string | null;
+};
+
 export type PipelineListItem = {
   id: string;
   name: string;
   isDefault: boolean;
+  /** Cor do funil (#RRGGBB); usada nos gráficos quando não há etapa ganha. */
+  color?: string | null;
+  wonStageId?: string | null;
+  lostStageId?: string | null;
+  stages?: PipelineStageColor[];
 };
 
 export type TagListItem = { id: string; name: string };

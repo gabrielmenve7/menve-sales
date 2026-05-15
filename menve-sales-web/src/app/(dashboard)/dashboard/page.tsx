@@ -11,14 +11,23 @@ import {
   type WidgetDataResult,
 } from "@/lib/dashboard-builder-types";
 
-type PipelineRow = { id: string; name: string; isDefault: boolean };
+/** Resposta de `GET /pipelines` (inclui etapas para cores nos gráficos). */
+type PipelineFromApi = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  color?: string | null;
+  wonStageId?: string | null;
+  lostStageId?: string | null;
+  stages?: { id: string; name: string; color?: string | null }[];
+};
 
 export default async function DashboardPage() {
   try {
     const [boards, pipelines, tags, dealCustomFields, tenantMembers] =
       await Promise.all([
         apiServer<DashboardBoardDto[]>("/dashboard/boards"),
-        apiServer<PipelineRow[]>("/pipelines"),
+        apiServer<PipelineFromApi[]>("/pipelines"),
         apiServer<TagListItem[]>("/tags"),
         apiServer<DealCustomFieldDef[]>("/custom-fields?entity=DEAL"),
         apiServer<TenantMemberOption[]>("/settings/members").catch(() => []),
@@ -27,6 +36,14 @@ export default async function DashboardPage() {
       id: p.id,
       name: p.name,
       isDefault: p.isDefault,
+      color: p.color ?? null,
+      wonStageId: p.wonStageId ?? null,
+      lostStageId: p.lostStageId ?? null,
+      stages: (p.stages ?? []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        color: s.color ?? null,
+      })),
     }));
 
     let initialWidgetBundle: {

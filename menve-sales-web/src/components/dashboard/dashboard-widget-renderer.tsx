@@ -19,7 +19,10 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CHART_BAR_SEQUENCE, CHART_LINE_STROKE } from "@/lib/chart-colors";
+import {
+  dashboardChartSegmentFill,
+  dashboardWonAccentFill,
+} from "@/lib/dashboard-chart-funnel-colors";
 import { cn } from "@/lib/utils";
 import {
   customFieldByKey,
@@ -29,6 +32,7 @@ import {
   type BarXGroupBy,
   type DealCustomFieldDef,
   type LayoutWidget,
+  type PipelineListItem,
   type WidgetDataResult,
 } from "@/lib/dashboard-builder-types";
 
@@ -84,46 +88,13 @@ function metricIconForSpec(spec: LayoutWidget["querySpec"]) {
   return Target;
 }
 
-/** Acento por tipo de medida (KPIs mais legíveis e semânticos). */
-function metricAccentForSpec(spec: LayoutWidget["querySpec"]): {
-  card: string;
-  icon: string;
-} {
-  const dm =
-    spec.dataMeasure ??
-    (spec.measure === "SUM_VALUE"
-      ? "MONEY"
-      : spec.measure === "COUNT"
-        ? "QUANTITY"
-        : "QUANTITY");
-  if (dm === "AVG_CYCLE_DAYS") {
-    return {
-      card: "border-l-4 border-l-amber-500 dark:border-l-amber-400",
-      icon: "bg-amber-500/12 text-amber-900 dark:bg-amber-400/15 dark:text-amber-100",
-    };
-  }
-  if (dm === "MONEY") {
-    return {
-      card: "border-l-4 border-l-emerald-500 dark:border-l-emerald-400",
-      icon: "bg-emerald-500/12 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200",
-    };
-  }
-  if (dm === "CUSTOM_NUMBER") {
-    return {
-      card: "border-l-4 border-l-violet-500 dark:border-l-violet-400",
-      icon: "bg-violet-500/12 text-violet-700 dark:bg-violet-400/15 dark:text-violet-200",
-    };
-  }
-  return {
-    card: "border-l-4 border-l-sky-500 dark:border-l-sky-400",
-    icon: "bg-sky-500/12 text-sky-800 dark:bg-sky-400/15 dark:text-sky-100",
-  };
+/** Ícone do KPI: neutro (cores só nos gráficos). */
+function metricIconSurfaceClass(): string {
+  return "bg-muted/70 text-muted-foreground dark:bg-muted/50";
 }
 
-const chartCardBarFrame =
-  "border border-border/60 border-t-4 border-t-teal-500 bg-card/95 shadow-sm dark:border-t-teal-400";
-const chartCardPieFrame =
-  "border border-border/60 border-t-4 border-t-violet-600 bg-card/95 shadow-sm dark:border-t-violet-400";
+const chartCardNeutralFrame =
+  "border border-border/60 bg-card shadow-sm dark:bg-card";
 
 function rollupBarSeries(
   series: { label: string; value: number }[],
@@ -159,12 +130,14 @@ export function DashboardWidgetRenderer({
   loading,
   error,
   dealCustomFields,
+  pipelines,
 }: {
   widget: LayoutWidget;
   data: WidgetDataResult | null;
   loading: boolean;
   error: string | null;
   dealCustomFields: DealCustomFieldDef[];
+  pipelines: PipelineListItem[];
 }) {
   const cfMap = useMemo(
     () => customFieldByKey(dealCustomFields),
@@ -180,12 +153,11 @@ export function DashboardWidgetRenderer({
 
   if (loading) {
     if (widget.type === "METRIC") {
-      const accent = metricAccentForSpec(widget.querySpec);
+      const iconSurface = metricIconSurfaceClass();
       return (
         <Card
           className={cn(
             "flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm",
-            accent.card,
           )}
         >
           <CardHeader className="drag-handle cursor-grab space-y-0 px-5 pb-0 pt-5">
@@ -202,8 +174,7 @@ export function DashboardWidgetRenderer({
         </Card>
       );
     }
-    const chartFrame =
-      widget.type === "BAR" ? chartCardBarFrame : chartCardPieFrame;
+    const chartFrame = chartCardNeutralFrame;
     return (
       <Card
         className={cn(
@@ -225,7 +196,7 @@ export function DashboardWidgetRenderer({
 
   if (error) {
     return (
-      <Card className="flex h-full flex-col overflow-hidden rounded-xl border border-destructive/35 border-l-4 border-l-destructive bg-card/95 shadow-sm">
+      <Card className="flex h-full flex-col overflow-hidden rounded-xl border border-destructive/30 bg-card shadow-sm">
         <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             {title}
@@ -240,14 +211,9 @@ export function DashboardWidgetRenderer({
 
   if (!data) {
     const emptyFrame =
-      widget.type === "BAR"
-        ? chartCardBarFrame
-        : widget.type === "METRIC"
-          ? cn(
-              "border border-border/60 shadow-sm",
-              metricAccentForSpec(widget.querySpec).card,
-            )
-          : chartCardPieFrame;
+      widget.type === "BAR" || widget.type === "PIE" || widget.type === "DONUT"
+        ? chartCardNeutralFrame
+        : "border border-border/60 bg-card shadow-sm";
     return (
       <Card
         className={cn(
@@ -269,7 +235,7 @@ export function DashboardWidgetRenderer({
 
   if (widget.type === "METRIC" && data.kind === "scalar") {
     const Icon = metricIconForSpec(widget.querySpec);
-    const accent = metricAccentForSpec(widget.querySpec);
+    const iconSurface = metricIconSurfaceClass();
     const formatted = formatDashboardScalar(
       widget.querySpec,
       data.value,
@@ -282,7 +248,6 @@ export function DashboardWidgetRenderer({
       <Card
         className={cn(
           "flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm",
-          accent.card,
         )}
       >
         <CardHeader className="drag-handle cursor-grab space-y-0 px-5 pb-0 pt-5">
@@ -293,7 +258,7 @@ export function DashboardWidgetRenderer({
             <div
               className={cn(
                 "flex size-9 shrink-0 items-center justify-center rounded-lg",
-                accent.icon,
+                iconSurface,
               )}
               aria-hidden
             >
@@ -357,6 +322,10 @@ export function DashboardWidgetRenderer({
         ? Math.min(100, Math.round((segmentDone / gaugeTarget) * 100))
         : null;
 
+    const pipelineId = widget.querySpec.pipelineId;
+    const dim = widget.querySpec.dimension;
+    const wonAccentFill = dashboardWonAccentFill(pipelines, pipelineId);
+
     if (widget.type === "BAR" && barCfg) {
       return (
         <BarChartCardBody
@@ -366,6 +335,10 @@ export function DashboardWidgetRenderer({
           barAvg={barAvg}
           formatBarValue={formatBarValue}
           dimensionIsDay={dimensionIsDay}
+          pipelines={pipelines}
+          pipelineId={pipelineId}
+          dimension={dim}
+          wonAccentFill={wonAccentFill}
         />
       );
     }
@@ -377,7 +350,7 @@ export function DashboardWidgetRenderer({
       <Card
         className={cn(
           "flex h-full flex-col overflow-hidden rounded-xl",
-          chartCardPieFrame,
+          chartCardNeutralFrame,
         )}
       >
         <CardHeader className="drag-handle cursor-grab pb-1 pt-3">
@@ -407,10 +380,16 @@ export function DashboardWidgetRenderer({
                   }
                   paddingAngle={1}
                 >
-                  {chartData.map((_, i) => (
+                  {chartData.map((row, i) => (
                     <Cell
                       key={i}
-                      fill={CHART_BAR_SEQUENCE[i % CHART_BAR_SEQUENCE.length]}
+                      fill={dashboardChartSegmentFill({
+                        pipelines,
+                        pipelineId: widget.querySpec.pipelineId,
+                        dimension: widget.querySpec.dimension,
+                        segmentLabel: row.name,
+                        seriesIndex: i,
+                      })}
                     />
                   ))}
                 </Pie>
@@ -443,7 +422,7 @@ export function DashboardWidgetRenderer({
   }
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 border-t-4 border-t-amber-500/70 bg-card/95 shadow-sm dark:border-t-amber-400/80">
+    <Card className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
       <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
         <CardTitle className="text-xs font-medium text-muted-foreground">
           {title}
@@ -463,6 +442,10 @@ type BarChartCardBodyProps = {
   barAvg: number;
   formatBarValue: (v: number) => string;
   dimensionIsDay: boolean;
+  pipelines: PipelineListItem[];
+  pipelineId: string;
+  dimension: LayoutWidget["querySpec"]["dimension"];
+  wonAccentFill: string;
 };
 
 function BarChartCardBody({
@@ -472,6 +455,10 @@ function BarChartCardBody({
   barAvg,
   formatBarValue,
   dimensionIsDay,
+  pipelines,
+  pipelineId,
+  dimension,
+  wonAccentFill,
 }: BarChartCardBodyProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState(0);
@@ -570,7 +557,7 @@ function BarChartCardBody({
     <Card
       className={cn(
         "flex h-full flex-col overflow-hidden rounded-xl",
-        chartCardBarFrame,
+        chartCardNeutralFrame,
       )}
     >
       <CardHeader className="drag-handle cursor-grab pb-1 pt-3">
@@ -604,12 +591,12 @@ function BarChartCardBody({
                   >
                     <stop
                       offset="0%"
-                      stopColor={CHART_LINE_STROKE}
+                      stopColor={wonAccentFill}
                       stopOpacity={0.32}
                     />
                     <stop
                       offset="100%"
-                      stopColor={CHART_LINE_STROKE}
+                      stopColor={wonAccentFill}
                       stopOpacity={0.04}
                     />
                   </linearGradient>
@@ -659,7 +646,7 @@ function BarChartCardBody({
                   type="monotone"
                   dataKey="value"
                   name={title}
-                  stroke={CHART_LINE_STROKE}
+                  stroke={wonAccentFill}
                   strokeWidth={2.25}
                   fill={`url(#${areaFillGradientId})`}
                   dot={false}
@@ -725,10 +712,16 @@ function BarChartCardBody({
                   maxBarSize={maxBarSize}
                   radius={[4, 4, 0, 0]}
                 >
-                  {chartData.map((_, i) => (
+                  {chartData.map((row, i) => (
                     <Cell
                       key={i}
-                      fill={CHART_BAR_SEQUENCE[i % CHART_BAR_SEQUENCE.length]}
+                      fill={dashboardChartSegmentFill({
+                        pipelines,
+                        pipelineId,
+                        dimension,
+                        segmentLabel: row.name,
+                        seriesIndex: i,
+                      })}
                     />
                   ))}
                 </Bar>
