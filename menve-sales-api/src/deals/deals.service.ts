@@ -688,23 +688,30 @@ export class DealsService {
       });
     }
 
-    if (this.pipelineAutomationEngine) {
-      try {
-        const contact = await this.prisma.contact.findFirst({
-          where: { id: deal.contactId, tenantId },
-          select: { campaignSourceId: true },
-        });
-        await this.pipelineAutomationEngine.afterDealCreated({
-          tenantId,
-          actorUserId,
-          dealId: deal.id,
-          pipelineId: deal.pipelineId,
-          campaignSourceId: contact?.campaignSourceId ?? null,
-          depth: 0,
-        });
-      } catch {
-        /* ignore */
-      }
+    /** Não bloquear a resposta HTTP: automações podem levar vários segundos (regras em série). */
+    const engine = this.pipelineAutomationEngine;
+    if (engine) {
+      const dealIdHook = deal.id;
+      const pipelineIdHook = deal.pipelineId;
+      const contactIdHook = deal.contactId;
+      void (async () => {
+        try {
+          const contact = await this.prisma.contact.findFirst({
+            where: { id: contactIdHook, tenantId },
+            select: { campaignSourceId: true },
+          });
+          await engine.afterDealCreated({
+            tenantId,
+            actorUserId,
+            dealId: dealIdHook,
+            pipelineId: pipelineIdHook,
+            campaignSourceId: contact?.campaignSourceId ?? null,
+            depth: 0,
+          });
+        } catch {
+          /* ignore */
+        }
+      })();
     }
 
     return { id: deal.id };

@@ -35,7 +35,7 @@ export async function createContact(
     },
   });
   revalidatePath("/contacts");
-  revalidatePath("/pipeline", "page");
+  /** Pipeline é revalidado ao criar o deal; evitar refetch duplo do RSC ao fluxo “contato + oportunidade”. */
   return res;
 }
 
