@@ -10,10 +10,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Check,
   ChevronsUpDown,
-  CircleSlash,
   GitBranch,
   Info,
-  Layers,
   List,
   ListChecks,
   ListFilter,
@@ -23,7 +21,7 @@ import {
   Settings,
   SlidersHorizontal,
   Trash2,
-  Trophy,
+  X,
   Zap,
 } from "lucide-react";
 import {
@@ -72,12 +70,11 @@ import {
   createEmptyFilterGroup,
   createEmptyFilterRow,
   createInitialFilterGroups,
-  filterDealsByBoardDealStatus,
   filterDealsByGroups,
+  filterDealsByShowClosedOnBoard,
   filterDealsByStageLifecycles,
   PIPELINE_STAGE_LIFECYCLE_ALL,
   rowIsComplete,
-  type PipelineBoardDealFilter,
   type PipelineDatePreset,
   type PipelineFilterFieldId,
   type PipelineFilterGroupState,
@@ -210,8 +207,8 @@ function PipelineViewBody({
   const [lifecycleCategoryAllowed, setLifecycleCategoryAllowed] = useState<
     Set<StageLifecycle>
   >(() => new Set(PIPELINE_STAGE_LIFECYCLE_ALL));
-  const [boardDealFilter, setBoardDealFilter] =
-    useState<PipelineBoardDealFilter>("open_and_won");
+  /** Mostrar cartões ganhos (WON) no Kanban; desligado = só abertos na vista. */
+  const [showClosedOnBoard, setShowClosedOnBoard] = useState(true);
 
   const membersSorted = useMemo(
     () =>
@@ -227,8 +224,8 @@ function PipelineViewBody({
     () =>
       filterGroups.some((g) => g.rows.some((r) => rowIsComplete(r))) ||
       lifecycleCategoryAllowed.size < PIPELINE_STAGE_LIFECYCLE_ALL.length ||
-      boardDealFilter !== "open_and_won",
-    [filterGroups, lifecycleCategoryAllowed, boardDealFilter],
+      !showClosedOnBoard,
+    [filterGroups, lifecycleCategoryAllowed, showClosedOnBoard],
   );
 
   const toggleLifecycleCategory = useCallback((cat: StageLifecycle) => {
@@ -260,8 +257,11 @@ function PipelineViewBody({
 
   const boardStatusFilteredDeals = useMemo(
     () =>
-      filterDealsByBoardDealStatus(lifecycleFilteredDeals, boardDealFilter),
-    [lifecycleFilteredDeals, boardDealFilter],
+      filterDealsByShowClosedOnBoard(
+        lifecycleFilteredDeals,
+        showClosedOnBoard,
+      ),
+    [lifecycleFilteredDeals, showClosedOnBoard],
   );
 
   const preFilteredDeals = boardStatusFilteredDeals;
@@ -387,7 +387,7 @@ function PipelineViewBody({
   function clearFilters() {
     setFilterGroups(createInitialFilterGroups());
     setLifecycleCategoryAllowed(new Set(PIPELINE_STAGE_LIFECYCLE_ALL));
-    setBoardDealFilter("open_and_won");
+    setShowClosedOnBoard(true);
   }
 
   const fmt = (n: number) =>
@@ -709,54 +709,49 @@ function PipelineViewBody({
             >
               <List className="size-[18px]" strokeWidth={2} />
             </Button>
-            <div
-              className="flex max-w-full shrink-0 items-center gap-0.5 rounded-xl border border-border/70 bg-muted/25 p-0.5 dark:bg-muted/15"
-              role="group"
-              aria-label="Situação do lead no funil"
+            <button
+              type="button"
+              onClick={() => setShowClosedOnBoard((v) => !v)}
+              className={cn(
+                "inline-flex h-9 shrink-0 items-center gap-1 rounded-full border px-1.5 outline-none transition-colors",
+                "border-sky-200/90 bg-sky-500/12 hover:bg-sky-500/18",
+                "dark:border-sky-500/40 dark:bg-sky-500/14 dark:hover:bg-sky-500/22",
+              )}
+              aria-pressed={showClosedOnBoard}
+              aria-label={
+                showClosedOnBoard
+                  ? "Negócios ganhos visíveis no funil. Ative para ocultar ganhos."
+                  : "Negócios ganhos ocultos. Ative para mostrar ganhos."
+              }
+              title={
+                showClosedOnBoard
+                  ? "Ocultar negócios ganhos no funil"
+                  : "Mostrar negócios ganhos no funil"
+              }
             >
-              <button
-                type="button"
-                onClick={() => setBoardDealFilter("open_and_won")}
+              <span
                 className={cn(
-                  "inline-flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold outline-none transition-colors",
-                  boardDealFilter === "open_and_won"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
+                  "flex size-7 items-center justify-center rounded-full transition-colors",
+                  showClosedOnBoard
+                    ? "bg-sky-600 text-white shadow-sm dark:bg-sky-500"
+                    : "text-muted-foreground",
                 )}
-                title="Abertos e ganhos no Kanban (padrão)"
+                aria-hidden
               >
-                <Layers className="size-3.5 shrink-0" strokeWidth={2} />
-                <span className="hidden min-[520px]:inline">Abertos + ganhos</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setBoardDealFilter("open_only")}
+                <Check className="size-[15px]" strokeWidth={2.75} />
+              </span>
+              <span
                 className={cn(
-                  "inline-flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold outline-none transition-colors",
-                  boardDealFilter === "open_only"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
+                  "flex size-7 items-center justify-center rounded-full transition-colors",
+                  !showClosedOnBoard
+                    ? "bg-muted text-foreground shadow-sm ring-1 ring-border/80"
+                    : "text-muted-foreground",
                 )}
-                title="Ocultar ganhos no Kanban (só em aberto)"
+                aria-hidden
               >
-                <CircleSlash className="size-3.5 shrink-0" strokeWidth={2} />
-                <span className="hidden min-[520px]:inline">Só abertos</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setBoardDealFilter("won_only")}
-                className={cn(
-                  "inline-flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold outline-none transition-colors",
-                  boardDealFilter === "won_only"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                title="Somente leads ganhos (coluna de ganho)"
-              >
-                <Trophy className="size-3.5 shrink-0" strokeWidth={2} />
-                <span className="hidden min-[520px]:inline">Só ganhos</span>
-              </button>
-            </div>
+                <X className="size-[15px]" strokeWidth={2.25} />
+              </span>
+            </button>
           </div>
           <Popover>
             <PopoverTrigger asChild>

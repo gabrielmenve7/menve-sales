@@ -216,26 +216,18 @@ export function filterDealsByGroups(
   );
 }
 
-/** Situação do negócio no funil (cartões ganhos permanecem na coluna de ganho). */
-export type PipelineBoardDealFilter =
-  | "open_and_won"
-  | "open_only"
-  | "won_only";
-
-export function filterDealsByBoardDealStatus(
+/**
+ * Visibilidade de negócios fechados como ganho (WON) no Kanban.
+ * `true`: abertos + ganhos; `false`: só abertos (ganhos somem da vista).
+ */
+export function filterDealsByShowClosedOnBoard(
   deals: DealRow[],
-  mode: PipelineBoardDealFilter,
+  showClosedDealsOnBoard: boolean,
 ): DealRow[] {
-  switch (mode) {
-    case "open_only":
-      return deals.filter((d) => d.status === "OPEN");
-    case "won_only":
-      return deals.filter((d) => d.status === "WON");
-    default:
-      return deals.filter(
-        (d) => d.status === "OPEN" || d.status === "WON",
-      );
+  if (showClosedDealsOnBoard) {
+    return deals.filter((d) => d.status === "OPEN" || d.status === "WON");
   }
+  return deals.filter((d) => d.status === "OPEN");
 }
 
 /**
