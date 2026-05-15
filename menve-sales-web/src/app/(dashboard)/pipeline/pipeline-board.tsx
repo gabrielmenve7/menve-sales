@@ -647,7 +647,7 @@ function StageColumn({
               Arraste leads aqui
             </p>
           ) : (
-            <div className="flex flex-col gap-3.5 pb-1">
+            <div className="flex flex-col gap-[0.4375rem] pb-1">
               {deals.map((d) => (
                 <DealCard
                   key={d.id}
