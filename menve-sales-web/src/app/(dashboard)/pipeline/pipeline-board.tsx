@@ -149,8 +149,7 @@ function DealCardDragOverlayFace({
       : 0;
   return (
     <div
-      className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),18.75rem)] shrink-0 overflow-hidden rounded-lg border bg-card font-sans shadow-lg ring-2 ring-foreground/10"
-      style={{ borderColor: stageHex }}
+      className="pointer-events-none w-[min(calc(100vw-2rem-1.5rem),18.75rem)] shrink-0 overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-lg ring-2 ring-foreground/10"
     >
       <div className="relative px-4 py-3 font-sans">
         <div className="absolute right-3 top-3 flex justify-end">
@@ -409,12 +408,11 @@ function DealCard({
       tabIndex={0}
       aria-label={`Lead ${deal.contact.name}. Arraste para mover de etapa ou clique para abrir.`}
       className={cn(
-        "group w-full shrink-0 touch-none overflow-hidden rounded-lg border bg-card font-sans shadow-[0_1px_3px_rgba(15,23,42,0.06)] outline-none transition-[box-shadow,opacity] hover:shadow-[0_2px_8px_rgba(15,23,42,0.08)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.45)]",
+        "group w-full shrink-0 touch-none overflow-hidden rounded-lg border border-border/55 bg-card font-sans shadow-[0_1px_3px_rgba(15,23,42,0.06)] outline-none transition-[box-shadow,opacity] hover:shadow-[0_2px_8px_rgba(15,23,42,0.08)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:shadow-[0_1px_3px_rgba(0,0,0,0.35)] dark:hover:shadow-[0_2px_8px_rgba(0,0,0,0.45)]",
         isDragging
           ? "cursor-grabbing opacity-50 shadow-md ring-1 ring-foreground/15"
           : "cursor-grab opacity-100 active:cursor-grabbing",
       )}
-      style={{ borderColor: stageHex }}
       onClick={handleCardClick}
       onKeyDown={(e) => {
         if (renaming || cardMenuOpen) return;
