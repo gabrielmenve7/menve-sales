@@ -20,6 +20,11 @@ export type StageLifecycleRingProps = {
   activeProgress?: number;
   /** Cor da etapa (#RRGGBB) para o anel ativo. */
   accentHex?: string | null;
+  /**
+   * `onAccent`: traços brancos (sobre pílula da cor da etapa).
+   * `default`: contraste em fundo neutro (lista de configurações, etc.).
+   */
+  tone?: "default" | "onAccent";
   size?: number;
   className?: string;
   title?: string;
@@ -32,17 +37,24 @@ export function StageLifecycleRing({
   lifecycle,
   activeProgress = 0.45,
   accentHex,
+  tone = "default",
   size = 20,
   className,
   title,
 }: StageLifecycleRingProps) {
+  const onAccent = tone === "onAccent";
+
   if (lifecycle === "NOT_STARTED") {
     return (
       <svg
         width={size}
         height={size}
         viewBox="0 0 20 20"
-        className={cn("shrink-0 text-muted-foreground/55", className)}
+        className={cn(
+          "shrink-0",
+          !onAccent && "text-muted-foreground/55",
+          className,
+        )}
         aria-hidden={title ? undefined : true}
         aria-label={title}
         role={title ? "img" : undefined}
@@ -52,7 +64,8 @@ export function StageLifecycleRing({
           cy={CY}
           r={R}
           fill="none"
-          stroke="currentColor"
+          stroke={onAccent ? "white" : "currentColor"}
+          strokeOpacity={onAccent ? 0.55 : undefined}
           strokeWidth={2}
           strokeDasharray="2.2 3.2"
         />
@@ -79,8 +92,9 @@ export function StageLifecycleRing({
           cy={CY}
           r={R}
           fill="none"
-          stroke="currentColor"
-          className="text-muted-foreground/35"
+          stroke={onAccent ? "white" : "currentColor"}
+          strokeOpacity={onAccent ? 0.38 : undefined}
+          className={onAccent ? undefined : "text-muted-foreground/35"}
           strokeWidth={2.5}
         />
         <circle
@@ -88,8 +102,11 @@ export function StageLifecycleRing({
           cy={CY}
           r={R}
           fill="none"
-          stroke={accentStroke ?? "currentColor"}
-          className={accentStroke ? undefined : "text-primary"}
+          stroke={onAccent ? "white" : accentStroke ?? "currentColor"}
+          strokeOpacity={onAccent ? 1 : undefined}
+          className={
+            onAccent ? undefined : accentStroke ? undefined : "text-primary"
+          }
           strokeWidth={2.5}
           strokeLinecap="round"
           strokeDasharray={`${dash} ${CIRC}`}

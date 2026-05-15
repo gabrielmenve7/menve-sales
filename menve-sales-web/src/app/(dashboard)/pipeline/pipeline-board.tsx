@@ -614,8 +614,9 @@ function StageColumn({
                   lifecycle={stage.lifecycle}
                   activeProgress={activeProgress}
                   accentHex={stage.color}
+                  tone="onAccent"
                   size={16}
-                  className="shrink-0 [&_svg]:text-current"
+                  className="shrink-0"
                 />
                 <span className="min-w-0 truncate">{stage.name}</span>
               </span>
