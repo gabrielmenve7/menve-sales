@@ -1,6 +1,5 @@
 "use client";
 
-import type { Pipeline, Stage } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -19,7 +18,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SettingsPipelineStages } from "./settings-pipeline-stages";
 
 type TenantInfo = {
   id: string;
@@ -39,11 +37,9 @@ function workspaceInitial(name: string) {
 export function SettingsGeneral({
   tenant,
   canManageWorkspace,
-  pipelines,
 }: {
   tenant: TenantInfo;
   canManageWorkspace: boolean;
-  pipelines: (Pipeline & { stages: Stage[] })[];
 }) {
   const router = useRouter();
   const logoFileRef = useRef<HTMLInputElement>(null);
@@ -341,8 +337,6 @@ export function SettingsGeneral({
           </div>
         </CardContent>
       </Card>
-
-      <SettingsPipelineStages pipelines={pipelines} />
     </div>
   );
 }

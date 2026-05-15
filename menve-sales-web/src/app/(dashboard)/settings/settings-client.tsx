@@ -2,8 +2,6 @@
 
 import type {
   CustomField,
-  Pipeline,
-  Stage,
   Tag,
   WhatsAppConnection,
 } from "@prisma/client";
@@ -51,7 +49,6 @@ export function SettingsClient({
   connections,
   quickReplyCategories,
   webhookBaseUrl,
-  pipelines,
   tags,
   contactCustomFields,
   dealCustomFields,
@@ -63,7 +60,6 @@ export function SettingsClient({
   connections: WhatsAppConnection[];
   quickReplyCategories: QuickReplyCategoryDTO[];
   webhookBaseUrl: string;
-  pipelines: (Pipeline & { stages: Stage[] })[];
   tags: Tag[];
   contactCustomFields: CustomField[];
   dealCustomFields: CustomField[];
@@ -105,11 +101,7 @@ export function SettingsClient({
       </TabsList>
 
       <TabsContent value="general" className="mt-0 min-w-0 flex-1 md:pt-0.5">
-        <SettingsGeneral
-          tenant={tenant}
-          canManageWorkspace={canManageWorkspace}
-          pipelines={pipelines}
-        />
+        <SettingsGeneral tenant={tenant} canManageWorkspace={canManageWorkspace} />
       </TabsContent>
 
       <TabsContent value="campos" className="mt-0 min-w-0 flex-1 md:pt-0.5">

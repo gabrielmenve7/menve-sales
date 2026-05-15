@@ -14,7 +14,6 @@ type SettingsBundle = {
   } | null;
   whatsAppConnections: unknown[];
   quickReplyCategories: unknown[];
-  pipelines: unknown[];
   tags: unknown[];
   customFields: unknown[];
   members: unknown[];
@@ -76,7 +75,6 @@ export default async function SettingsPage({
           connections={data.whatsAppConnections as never}
           quickReplyCategories={data.quickReplyCategories as never}
           webhookBaseUrl={webhookBaseUrl}
-          pipelines={data.pipelines as never}
           tags={data.tags as never}
           contactCustomFields={data.customFields as never}
           dealCustomFields={dealCustomFieldsRaw as never}

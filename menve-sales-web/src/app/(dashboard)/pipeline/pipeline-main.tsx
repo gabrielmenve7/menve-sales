@@ -2,6 +2,7 @@ import type { CustomField, Pipeline, Stage } from "@prisma/client";
 import { apiServer } from "@/lib/api-server";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { canConfigureTenant } from "@/lib/session";
+import { SettingsPipelineStages } from "../settings/settings-pipeline-stages";
 import { PipelineView } from "./pipeline-view";
 
 type PipelineRow = Pipeline & { stages: Stage[] };
@@ -53,10 +54,24 @@ export async function PipelineMain({
   ]);
 
   if (pipelines.length === 0) {
+    if (!canConfigureAutomations) {
+      return (
+        <p className="text-sm text-muted-foreground">
+          Nenhum funil configurado. Peça a um administrador ou gestor do workspace
+          para criar o primeiro funil em{" "}
+          <span className="font-medium text-foreground">Funil de vendas</span> (menu
+          lateral) — utilizadores com permissão verão a opção de criar funis e etapas.
+        </p>
+      );
+    }
     return (
-      <p className="text-sm text-muted-foreground">
-        Nenhum pipeline configurado. Crie um funil em Configurações.
-      </p>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Nenhum funil ainda. Crie o primeiro funil e as etapas do Kanban abaixo; depois
+          as oportunidades aparecerão aqui.
+        </p>
+        <SettingsPipelineStages pipelines={[]} />
+      </div>
     );
   }
 

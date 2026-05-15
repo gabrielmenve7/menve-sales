@@ -146,7 +146,7 @@ export function PesquisaClient({
     if (!pid) {
       setConvertNotice({
         type: "error",
-        text: "Nenhum pipeline configurado. Crie um em Configurações.",
+        text: "Nenhum pipeline configurado. Crie um funil em Funil de vendas (botão Configurar).",
       });
       return;
     }

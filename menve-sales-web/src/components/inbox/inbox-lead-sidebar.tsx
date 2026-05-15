@@ -118,12 +118,12 @@ function CreateLeadDialog({
             ) : null}
             {noPipelines ? (
               <p className="text-sm text-muted-foreground">
-                Nenhum funil configurado. Crie um funil em{" "}
+                Nenhum funil configurado. Quem tiver permissão pode criar o primeiro funil em{" "}
                 <Link
-                  href="/settings"
+                  href="/pipeline"
                   className="font-medium text-primary-solid underline-offset-4 hover:underline"
                 >
-                  Configurações
+                  Funil de vendas
                 </Link>
                 .
               </p>
@@ -288,7 +288,7 @@ export function InboxLeadSidebar({
           title={
             canGoToNextInQueue
               ? queueMeta
-                ? `Próximo na etapa (${queueMeta.position} de ${queueMeta.total}), só leads com telefone no Inbox. No último, volta ao primeiro da fila.`
+                ? `Próximo na etapa (${queueMeta.position} de ${queueMeta.total}), só leads com telefone no WhatsApp. No último, volta ao primeiro da fila.`
                 : "Próximo lead na mesma etapa (com telefone), ordem do quadro"
               : !pipelineDealId
                 ? "Selecione uma oportunidade aberta"
@@ -297,11 +297,11 @@ export function InboxLeadSidebar({
                   : nextInStageError
                     ? "Não foi possível carregar a fila. Atualize a página."
                     : queueMeta && queueMeta.total > 1 && queueMeta.position < 1
-                      ? "Fora da fila com telefone nesta etapa — cadastre telefone ou atualize o Inbox"
+                      ? "Fora da fila com telefone nesta etapa — cadastre telefone ou atualize o WhatsApp"
                       : queueMeta && queueMeta.total === 0
-                        ? "Esta oportunidade não está em aberto no servidor — atualize o Inbox ou confira o funil"
+                        ? "Esta oportunidade não está em aberto no servidor — atualize o WhatsApp ou confira o funil"
                       : queueMeta && queueMeta.total === 1
-                        ? "Só há um lead com telefone nesta etapa neste funil (demais estão sem WhatsApp/Inbox)"
+                        ? "Só há um lead com telefone nesta etapa neste funil (demais estão sem WhatsApp)"
                       : !queueMeta
                         ? "Fila indisponível — confira se a API está atualizada"
                         : "Carregando fila…"
