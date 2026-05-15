@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user/user-avatar";
+import { StageLifecycleRing } from "@/components/pipeline/stage-lifecycle-ring";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
 import { stageSolidPillStyle } from "@/lib/stage-pill-style";
@@ -61,6 +62,27 @@ function formatDealCurrency(value: number): string {
     style: "currency",
     currency: "BRL",
   });
+}
+
+/** Progresso visual (anel “relógio”) entre etapas marcadas como Ativo. */
+function buildActiveLifecycleProgressByStageId(
+  stages: Stage[],
+): Map<string, number> {
+  const activeSorted = [...stages]
+    .filter((s) => s.lifecycle === "ACTIVE")
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const map = new Map<string, number>();
+  if (activeSorted.length === 0) return map;
+  if (activeSorted.length === 1) {
+    map.set(activeSorted[0]!.id, 0.55);
+    return map;
+  }
+  for (let i = 0; i < activeSorted.length; i++) {
+    const s = activeSorted[i]!;
+    const t = i / (activeSorted.length - 1);
+    map.set(s.id, 0.12 + t * 0.73);
+  }
+  return map;
 }
 
 function previewTagPillClass(hex: string | null | undefined) {
@@ -556,11 +578,13 @@ function StageColumn({
   stage,
   deals,
   pipeline,
+  activeProgress,
   onOpenDetail,
 }: {
   stage: Stage;
   deals: DealRow[];
   pipeline: Pipeline & { stages: Stage[] };
+  activeProgress: number;
   onOpenDetail: (d: DealRow) => void;
 }) {
   const [newDealOpen, setNewDealOpen] = useState(false);
@@ -586,9 +610,12 @@ function StageColumn({
                 className="inline-flex max-w-[min(100%,14rem)] items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase leading-none tracking-wide shadow-sm"
                 style={stageSolidPillStyle(stage.color)}
               >
-                <span
-                  className="size-1.5 shrink-0 rounded-full bg-current opacity-95"
-                  aria-hidden
+                <StageLifecycleRing
+                  lifecycle={stage.lifecycle}
+                  activeProgress={activeProgress}
+                  accentHex={stage.color}
+                  size={16}
+                  className="shrink-0 [&_svg]:text-current"
                 />
                 <span className="min-w-0 truncate">{stage.name}</span>
               </span>
@@ -720,6 +747,11 @@ export function PipelineBoard({
     }
     return map;
   }, [pipeline.stages, displayedDeals]);
+
+  const activeLifecycleProgressByStageId = useMemo(
+    () => buildActiveLifecycleProgressByStageId(pipeline.stages),
+    [pipeline.stages],
+  );
 
   useEffect(() => {
     setOptimisticStageByDealId((prev) => {
@@ -884,6 +916,9 @@ export function PipelineBoard({
               stage={stage}
               pipeline={pipeline}
               deals={byStage.get(stage.id) ?? []}
+              activeProgress={
+                activeLifecycleProgressByStageId.get(stage.id) ?? 0.45
+              }
               onOpenDetail={openDetail}
             />
           ))}

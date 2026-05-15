@@ -50,7 +50,11 @@ export class PipelinesService {
 
     const [deals, wonCount, lostCount] = await Promise.all([
       this.prisma.deal.findMany({
-        where: { tenantId, pipelineId, status: "OPEN" },
+        where: {
+          tenantId,
+          pipelineId,
+          OR: [{ status: "OPEN" }, { status: "WON" }],
+        },
         select: {
           id: true,
           tenantId: true,
@@ -99,6 +103,7 @@ export class PipelinesService {
               sortOrder: true,
               probability: true,
               color: true,
+              lifecycle: true,
             },
           },
           dealTags: {
@@ -123,14 +128,17 @@ export class PipelinesService {
     ]);
 
     let openSum = 0;
+    let openCount = 0;
     for (const d of deals) {
+      if (d.status !== "OPEN") continue;
+      openCount += 1;
       if (d.value != null) openSum += Number(d.value);
     }
 
     return {
       deals,
       stats: {
-        openCount: deals.length,
+        openCount,
         openSum,
         wonCount,
         lostCount,
@@ -328,6 +336,7 @@ export class PipelinesService {
       name: string;
       probability?: number | null;
       color?: string | null;
+      lifecycle?: "NOT_STARTED" | "ACTIVE" | "DONE" | "CLOSED";
     },
   ) {
     assertCanConfigureTenant(u.role);
@@ -346,6 +355,7 @@ export class PipelinesService {
         sortOrder: next,
         probability: input.probability ?? null,
         ...(color !== undefined ? { color } : {}),
+        ...(input.lifecycle ? { lifecycle: input.lifecycle } : {}),
       },
     });
   }
@@ -357,6 +367,7 @@ export class PipelinesService {
       name?: string;
       probability?: number | null;
       color?: string | null;
+      lifecycle?: "NOT_STARTED" | "ACTIVE" | "DONE" | "CLOSED";
     },
   ) {
     assertCanConfigureTenant(u.role);
@@ -372,6 +383,7 @@ export class PipelinesService {
           ? { probability: input.probability }
           : {}),
         ...(color !== undefined ? { color } : {}),
+        ...(input.lifecycle !== undefined ? { lifecycle: input.lifecycle } : {}),
       },
     });
   }

@@ -34,6 +34,14 @@ enum DealStatus {
   ARCHIVED
 }
 
+/// Posição do estágio no funil (ícone “relógio” e filtros por categoria).
+enum StageLifecycle {
+  NOT_STARTED
+  ACTIVE
+  DONE
+  CLOSED
+}
+
 enum ActivityType {
   CALL
   EMAIL
@@ -417,6 +425,7 @@ model Stage {
   sortOrder   Int
   probability Float?
   color       String?
+  lifecycle   StageLifecycle @default(ACTIVE)
   deals       Deal[]
   pipelinesMarkedWon  Pipeline[] @relation("PipelineWonStage")
   pipelinesMarkedLost Pipeline[] @relation("PipelineLostStage")

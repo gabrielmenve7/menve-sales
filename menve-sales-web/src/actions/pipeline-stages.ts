@@ -18,6 +18,9 @@ const createSchema = z.object({
   name: z.string().min(1).max(128),
   probability: z.number().min(0).max(100).nullable().optional(),
   color: z.string().max(16).optional().nullable(),
+  lifecycle: z
+    .enum(["NOT_STARTED", "ACTIVE", "DONE", "CLOSED"])
+    .optional(),
 });
 
 export async function createStage(input: z.infer<typeof createSchema>) {
@@ -29,6 +32,7 @@ export async function createStage(input: z.infer<typeof createSchema>) {
       name: data.name.trim(),
       probability: data.probability ?? null,
       color: data.color,
+      ...(data.lifecycle ? { lifecycle: data.lifecycle } : {}),
     },
   });
   revalidateCrm();
@@ -39,6 +43,9 @@ const updateSchema = z.object({
   name: z.string().min(1).max(128).optional(),
   probability: z.number().min(0).max(100).nullable().optional(),
   color: z.string().max(16).optional().nullable(),
+  lifecycle: z
+    .enum(["NOT_STARTED", "ACTIVE", "DONE", "CLOSED"])
+    .optional(),
 });
 
 export async function updateStage(input: z.infer<typeof updateSchema>) {
@@ -50,6 +57,7 @@ export async function updateStage(input: z.infer<typeof updateSchema>) {
       ...(data.name !== undefined ? { name: data.name.trim() } : {}),
       ...(data.probability !== undefined ? { probability: data.probability } : {}),
       ...(data.color !== undefined ? { color: data.color } : {}),
+      ...(data.lifecycle !== undefined ? { lifecycle: data.lifecycle } : {}),
     },
   });
   revalidateCrm();

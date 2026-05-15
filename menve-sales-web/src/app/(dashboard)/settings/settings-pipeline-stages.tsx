@@ -1,6 +1,6 @@
 "use client";
 
-import type { Pipeline, Stage } from "@prisma/client";
+import type { Pipeline, Stage, StageLifecycle } from "@prisma/client";
 import {
   DndContext,
   type DragEndEvent,
@@ -28,6 +28,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { pipelineFieldSelectClass } from "@/lib/pipeline-ui-tokens";
 import {
   createPipeline,
   deletePipeline,
@@ -42,6 +43,7 @@ import {
   updateStage,
 } from "@/actions/pipeline-stages";
 import { HexColorField } from "@/components/settings/hex-color-field";
+import { StageLifecycleRing } from "@/components/pipeline/stage-lifecycle-ring";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -75,6 +77,16 @@ function normColor(c: string | null | undefined): string {
   return (c ?? "").trim();
 }
 
+const STAGE_LIFECYCLE_UI: {
+  value: StageLifecycle;
+  label: string;
+}[] = [
+  { value: "NOT_STARTED", label: "Não iniciado" },
+  { value: "ACTIVE", label: "Ativo" },
+  { value: "DONE", label: "Feito" },
+  { value: "CLOSED", label: "Fechado" },
+];
+
 function probabilityEqual(
   a: number | null | undefined,
   b: number | null | undefined,
@@ -98,6 +110,7 @@ function pipelinesBaselineJson(pipelines: PipelineWithStages[]): string {
         name: s.name,
         probability: s.probability,
         color: s.color,
+        lifecycle: s.lifecycle,
       })),
     })),
   );
@@ -123,6 +136,7 @@ function isDirty(
       if (ls.name !== ss.name) return true;
       if (!probabilityEqual(ls.probability, ss.probability)) return true;
       if (normColor(ls.color) !== normColor(ss.color)) return true;
+      if (ls.lifecycle !== ss.lifecycle) return true;
     }
   }
   return false;
@@ -137,7 +151,9 @@ function SortableStageRow({
   stage: Stage;
   disabled: boolean;
   onPatch: (
-    patch: Partial<Pick<Stage, "name" | "probability" | "color">>,
+    patch: Partial<
+      Pick<Stage, "name" | "probability" | "color" | "lifecycle">
+    >,
   ) => void;
   onDelete: () => void;
 }) {
@@ -184,11 +200,20 @@ function SortableStageRow({
       </div>
       <div className="grid min-w-0 w-full max-w-md gap-1 sm:w-auto">
         <Label className="text-xs">Nome</Label>
-        <Input
-          value={stage.name}
-          onChange={(e) => onPatch({ name: e.target.value })}
-          disabled={disabled}
-        />
+        <div className="flex items-center gap-2">
+          <StageLifecycleRing
+            lifecycle={stage.lifecycle}
+            accentHex={stage.color}
+            size={22}
+            className="shrink-0"
+          />
+          <Input
+            value={stage.name}
+            onChange={(e) => onPatch({ name: e.target.value })}
+            disabled={disabled}
+            className="min-w-0 flex-1"
+          />
+        </div>
       </div>
       <div className="grid w-24 shrink-0 gap-1">
         <Label className="text-xs">Prob. %</Label>
@@ -210,6 +235,24 @@ function SortableStageRow({
           }}
           disabled={disabled}
         />
+      </div>
+      <div className="grid min-w-[10.5rem] max-w-[14rem] shrink-0 gap-1">
+        <Label className="text-xs">Categoria</Label>
+        <select
+          className={pipelineFieldSelectClass}
+          value={stage.lifecycle}
+          disabled={disabled}
+          aria-label="Categoria da etapa no funil"
+          onChange={(e) =>
+            onPatch({ lifecycle: e.target.value as StageLifecycle })
+          }
+        >
+          {STAGE_LIFECYCLE_UI.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="grid min-w-[11rem] max-w-[15rem] shrink-0 gap-1">
         <Label className="text-xs">Cor</Label>
@@ -253,7 +296,9 @@ function PipelineStagesSortableList({
   ) => Promise<void>;
   onPatchStage: (
     stageId: string,
-    patch: Partial<Pick<Stage, "name" | "probability" | "color">>,
+    patch: Partial<
+      Pick<Stage, "name" | "probability" | "color" | "lifecycle">
+    >,
   ) => void;
   onDeleteStage: (id: string) => void;
 }) {
@@ -350,7 +395,9 @@ export const SettingsPipelineStages = forwardRef<
   function patchStage(
     pipelineId: string,
     stageId: string,
-    patch: Partial<Pick<Stage, "name" | "probability" | "color">>,
+    patch: Partial<
+      Pick<Stage, "name" | "probability" | "color" | "lifecycle">
+    >,
   ) {
     setLocalPipelines((prev) =>
       prev.map((p) => {
@@ -397,13 +444,15 @@ export const SettingsPipelineStages = forwardRef<
           if (
             ls.name !== ss.name ||
             !probabilityEqual(ls.probability, ss.probability) ||
-            normColor(ls.color) !== normColor(ss.color)
+            normColor(ls.color) !== normColor(ss.color) ||
+            ls.lifecycle !== ss.lifecycle
           ) {
             await updateStage({
               id: ls.id,
               name: ls.name.trim(),
               probability: ls.probability ?? null,
               color: normColor(ls.color) || null,
+              lifecycle: ls.lifecycle,
             });
           }
         }

@@ -8,7 +8,15 @@ import {
   subDays,
   subMonths,
 } from "date-fns";
+import type { StageLifecycle } from "@prisma/client";
 import type { DealRow } from "./pipeline-types";
+
+export const PIPELINE_STAGE_LIFECYCLE_ALL: readonly StageLifecycle[] = [
+  "NOT_STARTED",
+  "ACTIVE",
+  "DONE",
+  "CLOSED",
+] as const;
 
 export type PipelineDatePreset =
   | "all"
@@ -206,4 +214,39 @@ export function filterDealsByGroups(
   return deals.filter((d) =>
     active.some((g) => g.rows.every((r) => dealMatchesFilterRow(d, r))),
   );
+}
+
+/** Situação do negócio no funil (cartões ganhos permanecem na coluna de ganho). */
+export type PipelineBoardDealFilter =
+  | "open_and_won"
+  | "open_only"
+  | "won_only";
+
+export function filterDealsByBoardDealStatus(
+  deals: DealRow[],
+  mode: PipelineBoardDealFilter,
+): DealRow[] {
+  switch (mode) {
+    case "open_only":
+      return deals.filter((d) => d.status === "OPEN");
+    case "won_only":
+      return deals.filter((d) => d.status === "WON");
+    default:
+      return deals.filter(
+        (d) => d.status === "OPEN" || d.status === "WON",
+      );
+  }
+}
+
+/**
+ * Filtra por categoria da etapa (`Stage.lifecycle`).
+ * `null` ou conjunto com as 4 categorias = sem filtro adicional.
+ */
+export function filterDealsByStageLifecycles(
+  deals: DealRow[],
+  allowed: ReadonlySet<StageLifecycle> | null,
+): DealRow[] {
+  if (!allowed || allowed.size === 0) return [];
+  if (allowed.size >= PIPELINE_STAGE_LIFECYCLE_ALL.length) return deals;
+  return deals.filter((d) => allowed.has(d.stage.lifecycle));
 }

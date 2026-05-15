@@ -81,6 +81,7 @@ export class PipelinesController {
       name?: string;
       probability?: number | null;
       color?: string | null;
+      lifecycle?: "NOT_STARTED" | "ACTIVE" | "DONE" | "CLOSED";
     },
   ) {
     if (!body.name) throw new Error("name required");
@@ -89,6 +90,7 @@ export class PipelinesController {
       name: body.name,
       probability: body.probability,
       color: body.color,
+      lifecycle: body.lifecycle,
     });
   }
 }
@@ -106,6 +108,7 @@ export class StagesController {
       name?: string;
       probability?: number | null;
       color?: string | null;
+      lifecycle?: "NOT_STARTED" | "ACTIVE" | "DONE" | "CLOSED";
     },
   ) {
     return this.pipelines.updateStage(u, { id, ...body });

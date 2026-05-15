@@ -1,12 +1,19 @@
 "use client";
 
-import type { CustomField, Pipeline, Stage } from "@prisma/client";
+import type {
+  CustomField,
+  Pipeline,
+  Stage,
+  StageLifecycle,
+} from "@prisma/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Check,
   ChevronsUpDown,
+  CircleSlash,
   GitBranch,
   Info,
+  Layers,
   List,
   ListChecks,
   ListFilter,
@@ -16,6 +23,7 @@ import {
   Settings,
   SlidersHorizontal,
   Trash2,
+  Trophy,
   Zap,
 } from "lucide-react";
 import {
@@ -64,8 +72,12 @@ import {
   createEmptyFilterGroup,
   createEmptyFilterRow,
   createInitialFilterGroups,
+  filterDealsByBoardDealStatus,
   filterDealsByGroups,
+  filterDealsByStageLifecycles,
+  PIPELINE_STAGE_LIFECYCLE_ALL,
   rowIsComplete,
+  type PipelineBoardDealFilter,
   type PipelineDatePreset,
   type PipelineFilterFieldId,
   type PipelineFilterGroupState,
@@ -80,6 +92,13 @@ const FIELD_LABELS: Record<PipelineFilterFieldId, string> = {
   createdAt: "Data de criação",
   source: "Origem",
   assignee: "Responsável",
+};
+
+const STAGE_LIFECYCLE_LABELS: Record<StageLifecycle, string> = {
+  NOT_STARTED: "Não iniciado",
+  ACTIVE: "Ativo",
+  DONE: "Feito",
+  CLOSED: "Fechado",
 };
 
 function countEnabledAutomationsFromApi(raw: unknown): number {
@@ -188,6 +207,11 @@ function PipelineViewBody({
   const [filterGroups, setFilterGroups] = useState<PipelineFilterGroupState[]>(
     createInitialFilterGroups,
   );
+  const [lifecycleCategoryAllowed, setLifecycleCategoryAllowed] = useState<
+    Set<StageLifecycle>
+  >(() => new Set(PIPELINE_STAGE_LIFECYCLE_ALL));
+  const [boardDealFilter, setBoardDealFilter] =
+    useState<PipelineBoardDealFilter>("open_and_won");
 
   const membersSorted = useMemo(
     () =>
@@ -200,14 +224,47 @@ function PipelineViewBody({
   );
 
   const hasActiveFilters = useMemo(
-    () => filterGroups.some((g) => g.rows.some((r) => rowIsComplete(r))),
-    [filterGroups],
+    () =>
+      filterGroups.some((g) => g.rows.some((r) => rowIsComplete(r))) ||
+      lifecycleCategoryAllowed.size < PIPELINE_STAGE_LIFECYCLE_ALL.length ||
+      boardDealFilter !== "open_and_won",
+    [filterGroups, lifecycleCategoryAllowed, boardDealFilter],
   );
 
-  const preFilteredDeals = useMemo(
+  const toggleLifecycleCategory = useCallback((cat: StageLifecycle) => {
+    setLifecycleCategoryAllowed((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) {
+        if (next.size <= 1) return prev;
+        next.delete(cat);
+      } else {
+        next.add(cat);
+      }
+      return next;
+    });
+  }, []);
+
+  const groupFilteredDeals = useMemo(
     () => filterDealsByGroups(deals, filterGroups),
     [deals, filterGroups],
   );
+
+  const lifecycleFilteredDeals = useMemo(
+    () =>
+      filterDealsByStageLifecycles(
+        groupFilteredDeals,
+        lifecycleCategoryAllowed,
+      ),
+    [groupFilteredDeals, lifecycleCategoryAllowed],
+  );
+
+  const boardStatusFilteredDeals = useMemo(
+    () =>
+      filterDealsByBoardDealStatus(lifecycleFilteredDeals, boardDealFilter),
+    [lifecycleFilteredDeals, boardDealFilter],
+  );
+
+  const preFilteredDeals = boardStatusFilteredDeals;
 
   const filteredDeals = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -329,6 +386,8 @@ function PipelineViewBody({
 
   function clearFilters() {
     setFilterGroups(createInitialFilterGroups());
+    setLifecycleCategoryAllowed(new Set(PIPELINE_STAGE_LIFECYCLE_ALL));
+    setBoardDealFilter("open_and_won");
   }
 
   const fmt = (n: number) =>
@@ -650,6 +709,54 @@ function PipelineViewBody({
             >
               <List className="size-[18px]" strokeWidth={2} />
             </Button>
+            <div
+              className="flex max-w-full shrink-0 items-center gap-0.5 rounded-xl border border-border/70 bg-muted/25 p-0.5 dark:bg-muted/15"
+              role="group"
+              aria-label="Situação do lead no funil"
+            >
+              <button
+                type="button"
+                onClick={() => setBoardDealFilter("open_and_won")}
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold outline-none transition-colors",
+                  boardDealFilter === "open_and_won"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title="Abertos e ganhos no Kanban (padrão)"
+              >
+                <Layers className="size-3.5 shrink-0" strokeWidth={2} />
+                <span className="hidden min-[520px]:inline">Abertos + ganhos</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBoardDealFilter("open_only")}
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold outline-none transition-colors",
+                  boardDealFilter === "open_only"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title="Ocultar ganhos no Kanban (só em aberto)"
+              >
+                <CircleSlash className="size-3.5 shrink-0" strokeWidth={2} />
+                <span className="hidden min-[520px]:inline">Só abertos</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBoardDealFilter("won_only")}
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[11px] font-semibold outline-none transition-colors",
+                  boardDealFilter === "won_only"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title="Somente leads ganhos (coluna de ganho)"
+              >
+                <Trophy className="size-3.5 shrink-0" strokeWidth={2} />
+                <span className="hidden min-[520px]:inline">Só ganhos</span>
+              </button>
+            </div>
           </div>
           <Popover>
             <PopoverTrigger asChild>
@@ -763,6 +870,32 @@ function PipelineViewBody({
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="mb-3 rounded-lg border border-border/60 bg-muted/15 p-3 dark:bg-muted/10">
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  Categoria da etapa
+                </p>
+                <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                  Filtra pelas classes configuradas em cada etapa (não iniciado,
+                  ativo, feito, fechado).
+                </p>
+                <div className="mt-2.5 flex flex-col gap-2">
+                  {PIPELINE_STAGE_LIFECYCLE_ALL.map((cat) => (
+                    <label
+                      key={cat}
+                      className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground"
+                    >
+                      <input
+                        type="checkbox"
+                        className="size-3.5 rounded border-border accent-primary"
+                        checked={lifecycleCategoryAllowed.has(cat)}
+                        onChange={() => toggleLifecycleCategory(cat)}
+                      />
+                      {STAGE_LIFECYCLE_LABELS[cat]}
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div className="flex flex-col gap-2 border-t border-border/40 pt-3">
