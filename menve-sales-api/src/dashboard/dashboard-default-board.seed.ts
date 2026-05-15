@@ -21,7 +21,7 @@ function monthTitlePtBr(ymd: string): string {
  * KPIs do mês por data de atualização (fechamento aproximado em WON),
  * barras de receita ganha no mês civil, gauge de meta.
  *
- * Grid de 12 colunas; linha de KPI h=3; gráficos h=6.
+ * Grid de 12 colunas; linha de KPI h=3; gráficos h=6; rankings h=6.
  */
 export function buildDefaultSalesBoardLayout(pipelineId: string): LayoutJson {
   const todayBr = todayYmdBrazil();
@@ -145,9 +145,42 @@ export function buildDefaultSalesBoardLayout(pipelineId: string): LayoutJson {
       dataMeasure: "MONEY",
       aggregation: "SUM",
       gaugeTargetMoney: DEFAULT_SALES_GOAL_MONEY,
-          ...filterWonUpdatedThisMonth,
+      ...filterWonUpdatedThisMonth,
     },
     donutChart: { variant: "semicircle" },
+  });
+  yCursor += 6;
+
+  widgets.push({
+    id: "seed_rank_products_month",
+    type: "RANKING",
+    title: "Produtos mais vendidos",
+    grid: { x: 0, y: yCursor, w: 6, h: 6 },
+    querySpec: {
+      source: "DEALS",
+      pipelineId,
+      dimension: "BY_PRODUCT_SOLD",
+      rankingLimit: 10,
+      dataMeasure: "QUANTITY",
+      aggregation: "SUM",
+      ...filterWonUpdatedThisMonth,
+    },
+  });
+
+  widgets.push({
+    id: "seed_rank_assignees_month",
+    type: "RANKING",
+    title: "Ranking de vendas por responsável",
+    grid: { x: 6, y: yCursor, w: 6, h: 6 },
+    querySpec: {
+      source: "DEALS",
+      pipelineId,
+      dimension: "BY_ASSIGNEE_RANKED_SALES",
+      rankingLimit: 10,
+      dataMeasure: "QUANTITY",
+      aggregation: "SUM",
+      ...filterWonUpdatedThisMonth,
+    },
   });
   yCursor += 6;
 

@@ -96,6 +96,103 @@ function metricIconSurfaceClass(): string {
 const chartCardNeutralFrame =
   "border border-border/60 bg-card shadow-sm dark:bg-card";
 
+function formatBrl0(n: number) {
+  return n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  });
+}
+
+function formatQtyPt(n: number) {
+  const r = Math.round(n * 100) / 100;
+  return r.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
+function RankingTableCard({
+  title,
+  variant,
+  rows,
+}: {
+  title: string;
+  variant: "product" | "assignee";
+  rows: {
+    rank: number;
+    name: string;
+    primaryValue: number;
+    secondaryValue: number;
+  }[];
+}) {
+  const colPrimary =
+    variant === "product" ? "Quantidade" : "Valor vendido";
+  const colSecondary =
+    variant === "product" ? "Valor (R$)" : "Pedidos";
+
+  return (
+    <Card
+      className={cn(
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl",
+        chartCardNeutralFrame,
+      )}
+    >
+      <CardHeader className="drag-handle shrink-0 cursor-grab pb-1 pt-3">
+        <CardTitle className="text-xs font-medium text-muted-foreground">
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="min-h-0 flex-1 overflow-auto px-2 pb-2 pt-0">
+        {rows.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">
+            Sem dados no período
+          </p>
+        ) : (
+          <table className="w-full border-collapse text-left text-[11px]">
+            <thead>
+              <tr className="border-b border-border/60 text-muted-foreground">
+                <th className="w-8 py-1.5 pr-1 font-medium">#</th>
+                <th className="py-1.5 pr-2 font-medium">
+                  {variant === "product" ? "Produto" : "Responsável"}
+                </th>
+                <th className="w-[28%] py-1.5 pr-1 text-right font-medium tabular-nums">
+                  {colPrimary}
+                </th>
+                <th className="w-[28%] py-1.5 text-right font-medium tabular-nums">
+                  {colSecondary}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr
+                  key={`${r.rank}-${r.name}`}
+                  className="border-b border-border/40 last:border-0"
+                >
+                  <td className="py-1.5 pr-1 tabular-nums text-muted-foreground">
+                    {r.rank}
+                  </td>
+                  <td className="max-w-0 truncate py-1.5 pr-2 font-medium text-foreground">
+                    {r.name}
+                  </td>
+                  <td className="py-1.5 pr-1 text-right tabular-nums text-foreground">
+                    {variant === "product"
+                      ? formatQtyPt(r.primaryValue)
+                      : formatBrl0(r.primaryValue)}
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums text-foreground">
+                    {variant === "product"
+                      ? formatBrl0(r.secondaryValue)
+                      : String(Math.round(r.secondaryValue))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function rollupBarSeries(
   series: { label: string; value: number }[],
   xGroupBy: BarXGroupBy | undefined,
@@ -149,7 +246,9 @@ export function DashboardWidgetRenderer({
       ? "Cálculo"
       : widget.type === "BAR"
         ? "Gráfico de barras"
-        : "Gráfico de pizza");
+        : widget.type === "RANKING"
+          ? "Ranking"
+          : "Gráfico de pizza");
 
   if (loading) {
     if (widget.type === "METRIC") {
@@ -211,7 +310,10 @@ export function DashboardWidgetRenderer({
 
   if (!data) {
     const emptyFrame =
-      widget.type === "BAR" || widget.type === "PIE" || widget.type === "DONUT"
+      widget.type === "BAR" ||
+      widget.type === "PIE" ||
+      widget.type === "DONUT" ||
+      widget.type === "RANKING"
         ? chartCardNeutralFrame
         : "border border-border/60 bg-card shadow-sm";
     return (
@@ -230,6 +332,16 @@ export function DashboardWidgetRenderer({
           Sem dados
         </CardContent>
       </Card>
+    );
+  }
+
+  if (widget.type === "RANKING" && data.kind === "ranking") {
+    return (
+      <RankingTableCard
+        title={title}
+        variant={data.variant}
+        rows={data.rows}
+      />
     );
   }
 

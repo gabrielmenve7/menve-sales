@@ -39,6 +39,8 @@ export type WidgetFilterRowSaved = {
   field: "status" | "tags" | "createdAt" | "updatedAt" | "customField";
   op?: "IS" | "OR";
   statusCodes?: DealStatusCode[];
+  /** Etapas do funil do cartão; combinado com `statusCodes` (AND na query). */
+  stageIds?: string[];
   tagIds?: string[];
   filterTagMatch?: "ALL" | "ANY";
   createdFrom?: string;
@@ -101,6 +103,8 @@ export type WidgetQuerySpec = {
     | "BY_ASSIGNEE"
     | "BY_CUSTOM_VALUE"
     | "BY_GOAL_PROGRESS"
+    | "BY_PRODUCT_SOLD"
+    | "BY_ASSIGNEE_RANKED_SALES"
     | null;
   /** Eixo X por valor de campo (não-Data) em customData. */
   groupByCustomFieldKey?: string;
@@ -126,6 +130,8 @@ export type WidgetQuerySpec = {
   byDayAnchor?: "CREATED_AT" | "UPDATED_AT";
   /** BY_GOAL_PROGRESS: meta em R$ (atingimento). */
   gaugeTargetMoney?: number;
+  /** BY_PRODUCT_SOLD / BY_ASSIGNEE_RANKED_SALES: linhas no ranking. */
+  rankingLimit?: number;
   /** Legado — ainda aceito pela API */
   measure?: "COUNT" | "SUM_VALUE";
   includeClosed?: boolean;
@@ -149,7 +155,7 @@ export type WidgetQuerySpec = {
   filterCustomFields?: { key: string; value: string | number | boolean }[];
 };
 
-export type WidgetType = "METRIC" | "BAR" | "PIE" | "DONUT";
+export type WidgetType = "METRIC" | "BAR" | "PIE" | "DONUT" | "RANKING";
 
 export type LayoutWidget = {
   id: string;
@@ -176,10 +182,18 @@ export type DashboardBoardDto = {
   updatedAt: string;
 };
 
+/** Alinhado ao Prisma `StageLifecycle` (agrupamento visual nos filtros). */
+export type StageLifecycleCode =
+  | "NOT_STARTED"
+  | "ACTIVE"
+  | "DONE"
+  | "CLOSED";
+
 export type PipelineStageColor = {
   id: string;
   name: string;
   color: string | null;
+  lifecycle?: StageLifecycleCode;
 };
 
 export type PipelineListItem = {
@@ -210,7 +224,21 @@ export type WidgetDataSeries = {
   series: { label: string; value: number }[];
 };
 
-export type WidgetDataResult = WidgetDataScalar | WidgetDataSeries;
+export type WidgetDataRanking = {
+  kind: "ranking";
+  variant: "product" | "assignee";
+  rows: {
+    rank: number;
+    name: string;
+    primaryValue: number;
+    secondaryValue: number;
+  }[];
+};
+
+export type WidgetDataResult =
+  | WidgetDataScalar
+  | WidgetDataSeries
+  | WidgetDataRanking;
 
 export function parseLayoutJson(raw: unknown): LayoutJson {
   if (
@@ -222,6 +250,16 @@ export function parseLayoutJson(raw: unknown): LayoutJson {
     return raw as LayoutJson;
   }
   return { schemaVersion: 1, widgets: [] };
+}
+
+function firstDayOfMonthIsoLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function todayIsoLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** Padrão alinhado ao protótipo de configuração do gráfico de barras. */
@@ -254,6 +292,33 @@ export function defaultQuerySpec(
   }
   if (widgetType === "PIE" || widgetType === "DONUT") {
     return { ...base, dimension: "BY_STATUS" };
+  }
+  if (widgetType === "RANKING") {
+    const monthStart = firstDayOfMonthIsoLocal();
+    const today = todayIsoLocal();
+    return {
+      source: "DEALS",
+      pipelineId,
+      dataMeasure: "QUANTITY",
+      aggregation: "SUM",
+      filterStatuses: ["WON"],
+      filterGroups: [
+        {
+          rows: [
+            { field: "status", op: "IS", statusCodes: ["WON"] },
+            {
+              rowJoin: "AND",
+              field: "updatedAt",
+              op: "IS",
+              createdFrom: monthStart,
+              createdTo: today,
+            },
+          ],
+        },
+      ],
+      dimension: "BY_PRODUCT_SOLD",
+      rankingLimit: 10,
+    };
   }
   return base;
 }

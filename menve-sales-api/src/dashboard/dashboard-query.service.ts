@@ -30,6 +30,19 @@ export type SeriesResult = {
   series: { label: string; value: number }[];
 };
 
+export type RankingRow = {
+  rank: number;
+  name: string;
+  primaryValue: number;
+  secondaryValue: number;
+};
+
+export type RankingResult = {
+  kind: "ranking";
+  variant: "product" | "assignee";
+  rows: RankingRow[];
+};
+
 function startOfDayUtc(isoDate: string): Date {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
@@ -111,7 +124,10 @@ function sortSeriesPtBr(
 export class DashboardQueryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async query(tenantId: string, raw: unknown): Promise<ScalarResult | SeriesResult> {
+  async query(
+    tenantId: string,
+    raw: unknown,
+  ): Promise<ScalarResult | SeriesResult | RankingResult> {
     const input = widgetQuerySpecSchema.parse(raw);
     const spec = resolveWidgetQuerySpec(input);
     await this.assertPipeline(tenantId, spec.pipelineId);
@@ -122,7 +138,7 @@ export class DashboardQueryService {
   async queryBulk(
     tenantId: string,
     specs: unknown[],
-  ): Promise<(ScalarResult | SeriesResult)[]> {
+  ): Promise<(ScalarResult | SeriesResult | RankingResult)[]> {
     if (specs.length === 0) return [];
 
     const resolved = specs.map((s) => {
@@ -159,6 +175,12 @@ export class DashboardQueryService {
   ) {
     if (spec.dataMeasure === "AVG_CYCLE_DAYS") return;
     if (spec.dimension === "BY_GOAL_PROGRESS") return;
+    if (
+      spec.dimension === "BY_PRODUCT_SOLD" ||
+      spec.dimension === "BY_ASSIGNEE_RANKED_SALES"
+    ) {
+      return;
+    }
     if (spec.dataMeasure === "CUSTOM_NUMBER" && spec.customFieldKey) {
       const cf = await this.prisma.customField.findFirst({
         where: {
@@ -324,7 +346,12 @@ export class DashboardQueryService {
           row.statusCodes && row.statusCodes.length > 0
             ? row.statusCodes
             : [DealStatus.OPEN];
-        return { status: { in: codes as DealStatus[] } };
+        const stageIds = (row.stageIds ?? []).map((id) => id.trim()).filter(Boolean);
+        const statusPart: Prisma.DealWhereInput = {
+          status: { in: codes as DealStatus[] },
+        };
+        if (stageIds.length === 0) return statusPart;
+        return { AND: [statusPart, { stageId: { in: stageIds } }] };
       }
       case "tags": {
         if (!row.tagIds || row.tagIds.length === 0) return null;
@@ -419,7 +446,7 @@ export class DashboardQueryService {
   private async runQuery(
     tenantId: string,
     spec: ResolvedWidgetQuerySpec,
-  ): Promise<ScalarResult | SeriesResult> {
+  ): Promise<ScalarResult | SeriesResult | RankingResult> {
     const dim = spec.dimension ?? null;
     if (dim == null) {
       return this.scalar(tenantId, spec);
@@ -441,6 +468,12 @@ export class DashboardQueryService {
     }
     if (dim === "BY_GOAL_PROGRESS") {
       return this.goalProgress(tenantId, spec);
+    }
+    if (dim === "BY_PRODUCT_SOLD") {
+      return this.byProductSold(tenantId, spec);
+    }
+    if (dim === "BY_ASSIGNEE_RANKED_SALES") {
+      return this.byAssigneeRankedSales(tenantId, spec);
     }
     throw new BadRequestException("Dimensão inválida");
   }
@@ -683,6 +716,124 @@ export class DashboardQueryService {
         { label: "Restante", value: rest },
       ],
     };
+  }
+
+  /** Linhas de produto em oportunidades filtradas — ranqueia por quantidade, mostra valor (R$) na secundária. */
+  private async byProductSold(
+    tenantId: string,
+    spec: ResolvedWidgetQuerySpec,
+  ): Promise<RankingResult> {
+    const where = this.buildWhere(tenantId, spec);
+    const limit = spec.rankingLimit ?? 10;
+    const dealIds = await this.prisma.deal.findMany({
+      where,
+      select: { id: true },
+      take: 15_000,
+    });
+    if (dealIds.length === 0) {
+      return { kind: "ranking", variant: "product", rows: [] };
+    }
+    const ids = dealIds.map((d) => d.id);
+    const lines = await this.prisma.dealItem.findMany({
+      where: { tenantId, dealId: { in: ids } },
+      select: { productName: true, quantity: true, unitPrice: true },
+    });
+    const map = new Map<string, { qty: number; rev: number }>();
+    for (const r of lines) {
+      const name = (r.productName ?? "").trim() || "(Sem nome)";
+      const q = Number(r.quantity);
+      const p = Number(r.unitPrice);
+      if (!Number.isFinite(q) || !Number.isFinite(p)) continue;
+      const cur = map.get(name) ?? { qty: 0, rev: 0 };
+      cur.qty += q;
+      cur.rev += q * p;
+      map.set(name, cur);
+    }
+    const rows = [...map.entries()]
+      .map(([name, { qty, rev }]) => ({
+        rank: 0,
+        name,
+        primaryValue: qty,
+        secondaryValue: rev,
+      }))
+      .sort(
+        (a, b) =>
+          b.primaryValue - a.primaryValue ||
+          a.name.localeCompare(b.name, "pt-BR"),
+      )
+      .slice(0, limit)
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+    return { kind: "ranking", variant: "product", rows };
+  }
+
+  /** Responsáveis — ranqueia por valor (R$) somado, secundária = nº de pedidos (oportunidades). */
+  private async byAssigneeRankedSales(
+    tenantId: string,
+    spec: ResolvedWidgetQuerySpec,
+  ): Promise<RankingResult> {
+    const where = this.buildWhere(tenantId, spec);
+    const limit = spec.rankingLimit ?? 10;
+    const emptyLabel = "Sem responsável";
+
+    const rows = await this.prisma.deal.groupBy({
+      by: ["assignedToId"],
+      where,
+      _sum: { value: true },
+      _count: { _all: true },
+    });
+
+    const labelBy = new Map<string | null, string>();
+    labelBy.set(null, emptyLabel);
+    const userIds = [
+      ...new Set(
+        rows
+          .map((r) => r.assignedToId)
+          .filter((id): id is string => id != null && id.length > 0),
+      ),
+    ];
+    if (userIds.length > 0) {
+      const users = await this.prisma.user.findMany({
+        where: { tenantId, id: { in: userIds } },
+        select: { id: true, name: true, email: true },
+      });
+      for (const u of users) {
+        const n = u.name?.trim();
+        labelBy.set(u.id, n && n.length > 0 ? n : (u.email ?? u.id));
+      }
+      for (const id of userIds) {
+        if (!labelBy.has(id)) labelBy.set(id, id);
+      }
+    }
+
+    const decorated = rows.map((r) => {
+      const name = labelBy.get(r.assignedToId) ?? emptyLabel;
+      const money = Number(r._sum.value ?? 0);
+      const count = r._count._all;
+      return {
+        name,
+        primaryValue: money,
+        secondaryValue: count,
+        empty: name === emptyLabel,
+      };
+    });
+
+    decorated.sort((a, b) => {
+      if (a.empty !== b.empty) return a.empty ? 1 : -1;
+      if (b.primaryValue !== a.primaryValue) {
+        return b.primaryValue - a.primaryValue;
+      }
+      return a.name.localeCompare(b.name, "pt-BR");
+    });
+
+    const sliced = decorated.slice(0, limit);
+    const out: RankingRow[] = sliced.map((r, i) => ({
+      rank: i + 1,
+      name: r.name,
+      primaryValue: r.primaryValue,
+      secondaryValue: r.secondaryValue,
+    }));
+
+    return { kind: "ranking", variant: "assignee", rows: out };
   }
 
   private async byDay(

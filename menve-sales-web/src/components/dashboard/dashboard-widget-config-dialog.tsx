@@ -78,6 +78,20 @@ const DIMENSION_OPTIONS: {
   { value: "BY_GOAL_PROGRESS", label: "Meta / atingimento (gauge)" },
 ];
 
+const RANKING_DIMENSION_OPTIONS: {
+  value: "BY_PRODUCT_SOLD" | "BY_ASSIGNEE_RANKED_SALES";
+  label: string;
+}[] = [
+  {
+    value: "BY_PRODUCT_SOLD",
+    label: "Produtos (ranqueia por quantidade vendida)",
+  },
+  {
+    value: "BY_ASSIGNEE_RANKED_SALES",
+    label: "Responsáveis (ranqueia por valor vendido)",
+  },
+];
+
 const BAR_X_STAGE = "x:stage";
 const BAR_X_STATUS = "x:status";
 const BAR_X_ASSIGNEE = "x:assignee";
@@ -661,6 +675,7 @@ type DashFilterRow =
       field: "status";
       op: DashFilterOp;
       statusCodes: DealStatusCode[];
+      stageIds: string[];
     }
   | {
       id: string;
@@ -731,7 +746,7 @@ function createDashFilterRowWithId(
 ): DashFilterRow {
   switch (field) {
     case "status":
-      return { id, field: "status", op: "IS", statusCodes: ["OPEN"] };
+      return { id, field: "status", op: "IS", statusCodes: ["OPEN"], stageIds: [] };
     case "tags":
       return { id, field: "tags", op: "IS", tagIds: [] };
     case "createdAt":
@@ -760,6 +775,7 @@ function legacyFlatRowsFromSpec(spec: WidgetQuerySpec): DashFilterRow[] {
       field: "status",
       op: stOp,
       statusCodes: stCodes,
+      stageIds: [],
     },
   ];
   if (spec.filterTagIds && spec.filterTagIds.length > 0) {
@@ -810,6 +826,7 @@ function savedRowToDashRow(
         op: (r.op as DashFilterOp) ?? "IS",
         statusCodes:
           r.statusCodes && r.statusCodes.length > 0 ? r.statusCodes : ["OPEN"],
+        stageIds: r.stageIds?.length ? [...r.stageIds] : [],
       };
     case "tags":
       return {
@@ -902,6 +919,7 @@ function dashRowToSaved(
         field: "status",
         op: row.op,
         statusCodes: row.statusCodes,
+        ...(row.stageIds.length > 0 ? { stageIds: row.stageIds } : {}),
       };
     case "tags":
       return {
@@ -1618,6 +1636,7 @@ export function DashboardWidgetConfigDialog({
   );
   /** BY_GOAL_PROGRESS: meta em R$. */
   const [gaugeTargetMoney, setGaugeTargetMoney] = useState(100_000);
+  const [rankingLimit, setRankingLimit] = useState(10);
   const [donutGaugeShape, setDonutGaugeShape] = useState(false);
   const [timelineBucketFieldKey, setTimelineBucketFieldKey] = useState("");
   /** Eixo X do gráfico em barras (estágio, status, responsável, timeline, campo). */
@@ -1646,9 +1665,18 @@ export function DashboardWidgetConfigDialog({
     );
     setAggregation(s.aggregation ?? "SUM");
     setCustomFieldKey(s.customFieldKey ?? "");
-    setDimension(
-      s.dimension === null || s.dimension === undefined ? "" : s.dimension,
-    );
+    if (widget.type === "RANKING") {
+      const d = s.dimension;
+      if (d === "BY_ASSIGNEE_RANKED_SALES" || d === "BY_PRODUCT_SOLD") {
+        setDimension(d);
+      } else {
+        setDimension("BY_PRODUCT_SOLD");
+      }
+    } else {
+      setDimension(
+        s.dimension === null || s.dimension === undefined ? "" : s.dimension,
+      );
+    }
     setDays(s.days ?? 30);
     setTimelineBucketFieldKey(s.timelineBucketFieldKey ?? "");
     setFilterGroups(specToFilterGroups(s, dealCustomFields));
@@ -1668,6 +1696,11 @@ export function DashboardWidgetConfigDialog({
       typeof s.gaugeTargetMoney === "number" && Number.isFinite(s.gaugeTargetMoney)
         ? s.gaugeTargetMoney
         : 100_000,
+    );
+    setRankingLimit(
+      typeof s.rankingLimit === "number" && Number.isFinite(s.rankingLimit)
+        ? Math.min(30, Math.max(3, Math.floor(s.rankingLimit)))
+        : 10,
     );
     setDonutGaugeShape(widget.donutChart?.variant === "semicircle");
   }, [widget, open, dealCustomFields]);
@@ -1689,6 +1722,7 @@ export function DashboardWidgetConfigDialog({
 
   const isMetric = widget.type === "METRIC";
   const isBar = widget.type === "BAR";
+  const isRanking = widget.type === "RANKING";
 
   function coerceFilterValue(
     key: string,
@@ -1912,6 +1946,7 @@ export function DashboardWidgetConfigDialog({
       delete spec.days;
       delete spec.gaugeTargetMoney;
       delete spec.byDayAnchor;
+      delete spec.rankingLimit;
     } else if (isBar) {
       const x = parseBarXColumnId(barXColumnId);
       spec.dimension = x.dimension;
@@ -1922,6 +1957,7 @@ export function DashboardWidgetConfigDialog({
       delete spec.days;
 
       delete spec.byDayAnchor;
+      delete spec.rankingLimit;
       if (x.dimension === "BY_CUSTOM_VALUE" && x.groupByCustomFieldKey) {
         spec.groupByCustomFieldKey = x.groupByCustomFieldKey;
       }
@@ -1948,6 +1984,21 @@ export function DashboardWidgetConfigDialog({
           spec.days = Math.min(366, Math.max(1, barCustomDays));
         }
       }
+    } else if (isRanking) {
+      spec.dimension =
+        dimension === "BY_ASSIGNEE_RANKED_SALES"
+          ? "BY_ASSIGNEE_RANKED_SALES"
+          : "BY_PRODUCT_SOLD";
+      spec.rankingLimit = Math.min(30, Math.max(3, Math.floor(rankingLimit)));
+      spec.dataMeasure = "QUANTITY";
+      spec.aggregation = "SUM";
+      delete spec.timelineStart;
+      delete spec.fillTimelineMonth;
+      delete spec.timelineBucketFieldKey;
+      delete spec.byDayAnchor;
+      delete spec.gaugeTargetMoney;
+      delete spec.days;
+      delete spec.groupByCustomFieldKey;
     } else {
       spec.dimension = (dimension || "BY_STAGE") as NonNullable<
         WidgetQuerySpec["dimension"]
@@ -1958,6 +2009,7 @@ export function DashboardWidgetConfigDialog({
       delete spec.byDayAnchor;
       delete spec.gaugeTargetMoney;
       delete spec.days;
+      delete spec.rankingLimit;
       if (spec.dimension === "BY_GOAL_PROGRESS") {
         spec.gaugeTargetMoney = Math.max(1, Math.floor(gaugeTargetMoney));
         spec.dataMeasure = "MONEY";
@@ -2285,6 +2337,64 @@ export function DashboardWidgetConfigDialog({
                       ))}
                     </select>
                   </div>
+                  {isRanking ? (
+                    <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
+                      <Label htmlFor="dw-ranking-type" className="text-foreground">
+                        Tipo de ranking
+                      </Label>
+                      <select
+                        id="dw-ranking-type"
+                        className={panel.control}
+                        value={
+                          dimension === "BY_ASSIGNEE_RANKED_SALES"
+                            ? "BY_ASSIGNEE_RANKED_SALES"
+                            : "BY_PRODUCT_SOLD"
+                        }
+                        onChange={(e) =>
+                          setDimension(
+                            e.target.value as
+                              | "BY_PRODUCT_SOLD"
+                              | "BY_ASSIGNEE_RANKED_SALES",
+                          )
+                        }
+                      >
+                        {RANKING_DIMENSION_OPTIONS.map((o) => (
+                          <option
+                            key={o.value}
+                            value={o.value}
+                            className="bg-popover text-popover-foreground"
+                          >
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      <Label htmlFor="dw-ranking-limit" className="text-foreground">
+                        Linhas no ranking
+                      </Label>
+                      <Input
+                        id="dw-ranking-limit"
+                        type="number"
+                        min={3}
+                        max={30}
+                        value={rankingLimit}
+                        onChange={(e) =>
+                          setRankingLimit(
+                            Math.min(
+                              30,
+                              Math.max(3, Math.floor(Number(e.target.value) || 10)),
+                            ),
+                          )
+                        }
+                        className={panel.control}
+                      />
+                      <p className={panel.muted}>
+                        Produtos: ordena por quantidade vendida (mostra também o
+                        valor em R$). Responsáveis: ordena por valor vendido
+                        (mostra também o número de pedidos).
+                      </p>
+                    </div>
+                  ) : (
+                    <>
                   <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
                     <Label htmlFor="dw-data-measure" className="text-foreground">
                       Dados
@@ -2391,7 +2501,9 @@ export function DashboardWidgetConfigDialog({
                       ) : null}
                     </div>
                   ) : null}
-                  {!isMetric ? (
+                    </>
+                  )}
+                  {!isMetric && !isRanking ? (
                     <>
                       <div
                         className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}
@@ -2414,7 +2526,11 @@ export function DashboardWidgetConfigDialog({
                             }
                           }}
                         >
-                          {DIMENSION_OPTIONS.map((o) => (
+                          {DIMENSION_OPTIONS.filter(
+                            (o) =>
+                              o.value !== "BY_PRODUCT_SOLD" &&
+                              o.value !== "BY_ASSIGNEE_RANKED_SALES",
+                          ).map((o) => (
                             <option
                               key={o.value}
                               value={o.value}
@@ -2919,6 +3035,8 @@ export function widgetTypeLabel(t: WidgetType): string {
       return "Gráfico de pizza";
     case "DONUT":
       return "Gráfico em anel";
+    case "RANKING":
+      return "Ranking (tabela)";
     default:
       return t;
   }

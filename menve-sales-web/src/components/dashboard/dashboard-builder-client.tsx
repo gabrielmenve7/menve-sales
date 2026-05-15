@@ -251,12 +251,19 @@ export function DashboardBuilderClient({
               grid,
               ...defaultBarWidgetQueryAndChart(pid),
             }
-          : {
-              id,
-              type,
-              querySpec: defaultQuerySpec(pid, type),
-              grid,
-            };
+          : type === "RANKING"
+            ? {
+                id,
+                type: "RANKING",
+                grid,
+                querySpec: defaultQuerySpec(pid, "RANKING"),
+              }
+            : {
+                id,
+                type,
+                querySpec: defaultQuerySpec(pid, type),
+                grid,
+              };
       setLayoutForActive((prev) => ({
         ...prev,
         widgets: [...prev.widgets, w],
@@ -497,7 +504,7 @@ export function DashboardBuilderClient({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     {(
-                      ["METRIC", "BAR", "PIE", "DONUT"] as WidgetType[]
+                      ["METRIC", "BAR", "PIE", "DONUT", "RANKING"] as WidgetType[]
                     ).map((t) => (
                       <DropdownMenuItem key={t} onClick={() => addWidget(t)}>
                         {widgetTypeLabel(t)}

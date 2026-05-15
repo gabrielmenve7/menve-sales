@@ -14,6 +14,7 @@ const widgetFilterRowSchema = z.object({
   field: z.enum(["status", "tags", "createdAt", "updatedAt", "customField"]),
   op: z.enum(["IS", "OR"]).optional(),
   statusCodes: z.array(dealStatusEnum).max(4).optional(),
+  stageIds: z.array(z.string()).max(48).optional(),
   tagIds: z.array(z.string()).max(32).optional(),
   filterTagMatch: z.enum(["ALL", "ANY"]).optional(),
   createdFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -53,6 +54,8 @@ export const widgetQuerySpecInputSchema = z.object({
       "BY_ASSIGNEE",
       "BY_CUSTOM_VALUE",
       "BY_GOAL_PROGRESS",
+      "BY_PRODUCT_SOLD",
+      "BY_ASSIGNEE_RANKED_SALES",
     ])
     .optional()
     .nullable(),
@@ -81,6 +84,8 @@ export const widgetQuerySpecInputSchema = z.object({
   byDayAnchor: z.enum(["CREATED_AT", "UPDATED_AT"]).optional(),
   /** Com BY_GOAL_PROGRESS: meta em R$ (série = realizado vs falta). */
   gaugeTargetMoney: z.number().finite().min(0).optional(),
+  /** Com BY_PRODUCT_SOLD / BY_ASSIGNEE_RANKED_SALES: quantidade de linhas no ranking. */
+  rankingLimit: z.number().int().min(3).max(30).optional(),
 
   /** Legado */
   measure: z.enum(["COUNT", "SUM_VALUE"]).optional(),
@@ -124,6 +129,8 @@ export type ResolvedWidgetQuerySpec = {
     | "BY_ASSIGNEE"
     | "BY_CUSTOM_VALUE"
     | "BY_GOAL_PROGRESS"
+    | "BY_PRODUCT_SOLD"
+    | "BY_ASSIGNEE_RANKED_SALES"
     | null;
   days?: number;
   timelineStart?: string;
@@ -131,6 +138,7 @@ export type ResolvedWidgetQuerySpec = {
   timelineBucketFieldKey?: string;
   byDayAnchor?: "CREATED_AT" | "UPDATED_AT";
   gaugeTargetMoney?: number;
+  rankingLimit?: number;
   /** Só com dimension = BY_CUSTOM_VALUE */
   groupByCustomFieldKey?: string;
   dataMeasure: "QUANTITY" | "MONEY" | "CUSTOM_NUMBER" | "AVG_CYCLE_DAYS";
@@ -197,6 +205,10 @@ export function resolveWidgetQuerySpec(
     dataMeasure = "MONEY";
     aggregation = "SUM";
   }
+  if (dim === "BY_PRODUCT_SOLD" || dim === "BY_ASSIGNEE_RANKED_SALES") {
+    dataMeasure = "QUANTITY";
+    aggregation = "SUM";
+  }
   const timelineBucketTrim = input.timelineBucketFieldKey?.trim();
   const groupByTrim = input.groupByCustomFieldKey?.trim();
 
@@ -219,6 +231,11 @@ export function resolveWidgetQuerySpec(
       typeof input.gaugeTargetMoney === "number" &&
       Number.isFinite(input.gaugeTargetMoney)
         ? input.gaugeTargetMoney
+        : undefined,
+    rankingLimit:
+      typeof input.rankingLimit === "number" &&
+      Number.isFinite(input.rankingLimit)
+        ? Math.min(30, Math.max(3, Math.floor(input.rankingLimit)))
         : undefined,
     dataMeasure,
     aggregation,
