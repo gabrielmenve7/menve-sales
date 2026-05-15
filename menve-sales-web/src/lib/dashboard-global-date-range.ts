@@ -38,7 +38,7 @@ export const DASHBOARD_DATE_PRESET_LABELS: Record<DashboardDatePresetId, string>
     LAST_12_MONTHS: "Últimos 12 meses",
   };
 
-export const DEFAULT_DASHBOARD_DATE_PRESET: DashboardDatePresetId = "LAST_30";
+export const DEFAULT_DASHBOARD_DATE_PRESET: DashboardDatePresetId = "THIS_MONTH";
 
 export function defaultDashboardDateRangeState(): DashboardDateRangeState {
   return { mode: "preset", preset: DEFAULT_DASHBOARD_DATE_PRESET };
