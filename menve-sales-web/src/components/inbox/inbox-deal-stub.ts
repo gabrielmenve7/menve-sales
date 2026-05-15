@@ -36,6 +36,8 @@ export function inboxOpenDealToDealRow(
       sortOrder: 0,
       probability: null,
       color: open.stage.color,
+      /** Inbox não envia lifecycle; deals abertos assumem etapa ativa. */
+      lifecycle: "ACTIVE",
     },
     dealTags: [],
     assignedTo: null,
