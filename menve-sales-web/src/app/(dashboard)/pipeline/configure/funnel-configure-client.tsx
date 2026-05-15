@@ -26,9 +26,9 @@ export function FunnelConfigureClient({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="mx-auto flex w-full min-h-0 max-w-4xl flex-1 flex-col gap-4 px-0 sm:px-1">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-4">
-        <div className="flex min-w-0 flex-1 items-center gap-1">
+        <div className="flex min-w-0 flex-1 items-center gap-1 sm:min-w-[12rem]">
           <Button
             variant="ghost"
             size="sm"
@@ -44,7 +44,7 @@ export function FunnelConfigureClient({
             <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">
               Configuração do funil
             </h1>
-            <p className="truncate text-xs text-muted-foreground sm:text-sm">
+            <p className="max-w-xl text-pretty text-xs text-muted-foreground sm:text-sm">
               Etapas do Kanban e status de ganho/perda para as métricas.
             </p>
           </div>

@@ -182,7 +182,7 @@ function SortableStageRow({
           <GripVertical className="size-4" strokeWidth={2} />
         </button>
       </div>
-      <div className="grid min-w-[140px] flex-1 gap-1">
+      <div className="grid min-w-0 w-full max-w-md gap-1 sm:w-auto">
         <Label className="text-xs">Nome</Label>
         <Input
           value={stage.name}
@@ -190,7 +190,7 @@ function SortableStageRow({
           disabled={disabled}
         />
       </div>
-      <div className="grid w-24 gap-1">
+      <div className="grid w-24 shrink-0 gap-1">
         <Label className="text-xs">Prob. %</Label>
         <Input
           type="number"
@@ -211,7 +211,7 @@ function SortableStageRow({
           disabled={disabled}
         />
       </div>
-      <div className="grid min-w-[11rem] max-w-[15rem] gap-1">
+      <div className="grid min-w-[11rem] max-w-[15rem] shrink-0 gap-1">
         <Label className="text-xs">Cor</Label>
         <HexColorField
           value={stage.color ?? ""}
@@ -220,7 +220,7 @@ function SortableStageRow({
           placeholder="#525252"
         />
       </div>
-      <div className="flex flex-wrap items-end gap-1">
+      <div className="flex shrink-0 flex-wrap items-end gap-1">
         <Button
           type="button"
           variant="ghost"
@@ -485,14 +485,13 @@ export const SettingsPipelineStages = forwardRef<
         >
           <p className="text-sm font-medium">Novo funil</p>
           <div className="flex flex-wrap items-end gap-2">
-            <div className="grid gap-1">
+            <div className="grid w-full max-w-md gap-1">
               <Label htmlFor="pl-name">Nome</Label>
               <Input
                 id="pl-name"
                 value={newPipelineName}
                 onChange={(e) => setNewPipelineName(e.target.value)}
                 placeholder="Ex: Vendas B2B"
-                className="min-w-[200px]"
               />
             </div>
             <div className="grid min-w-[11rem] gap-1">
@@ -593,14 +592,13 @@ export const SettingsPipelineStages = forwardRef<
         >
           <p className="text-sm font-medium">Novo funil</p>
           <div className="flex flex-wrap items-end gap-2">
-            <div className="grid gap-1">
+            <div className="grid w-full max-w-md gap-1">
               <Label htmlFor="pl-name">Nome</Label>
               <Input
                 id="pl-name"
                 value={newPipelineName}
                 onChange={(e) => setNewPipelineName(e.target.value)}
                 placeholder="Ex: Vendas B2B"
-                className="min-w-[200px]"
               />
             </div>
             <div className="grid min-w-[11rem] gap-1">
@@ -809,7 +807,7 @@ function PipelineBlock({
   return (
     <div className="rounded-xl bg-muted/20 p-4 dark:bg-muted/10">
       <div className="mb-4 flex flex-wrap items-end gap-3 border-b border-border/25 pb-4 dark:border-border/30">
-        <div className="grid min-w-[180px] flex-1 gap-1">
+        <div className="grid w-full max-w-md min-w-0 gap-1">
           <Label className="text-xs">Nome do funil</Label>
           <Input
             value={pipeline.name}
@@ -819,7 +817,7 @@ function PipelineBlock({
             disabled={disabled}
           />
         </div>
-        <div className="grid min-w-[11rem] gap-1">
+        <div className="grid w-full max-w-[11rem] shrink-0 gap-1 sm:w-auto">
           <Label className="text-xs">Cor</Label>
           <HexColorField
             value={pipeline.color ?? ""}
@@ -892,14 +890,14 @@ function PipelineBlock({
           Ao mover um lead no Kanban para a etapa indicada, a oportunidade passa
           a contar como ganha ou perdida no dashboard.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1">
+        <div className="flex max-w-xl flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="grid w-full max-w-sm gap-1">
             <Label className="text-xs" htmlFor={`won-${pipeline.id}`}>
               Etapa de ganho
             </Label>
             <select
               id={`won-${pipeline.id}`}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-9 w-full max-w-sm rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               value={pipeline.wonStageId ?? ""}
               disabled={disabled}
               onChange={(e) => {
@@ -919,13 +917,13 @@ function PipelineBlock({
                 ))}
             </select>
           </div>
-          <div className="grid gap-1">
+          <div className="grid w-full max-w-sm gap-1">
             <Label className="text-xs" htmlFor={`lost-${pipeline.id}`}>
               Etapa de perda
             </Label>
             <select
               id={`lost-${pipeline.id}`}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-9 w-full max-w-sm rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               value={pipeline.lostStageId ?? ""}
               disabled={disabled}
               onChange={(e) => {
@@ -951,13 +949,12 @@ function PipelineBlock({
       <form onSubmit={(e) => void onCreateStage(e)} className="mb-4 space-y-2">
         <p className="text-sm font-medium">Nova etapa neste funil</p>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="grid gap-1">
+          <div className="grid w-full max-w-md gap-1">
             <Label htmlFor={`st-name-${pipeline.id}`}>Nome</Label>
             <Input
               id={`st-name-${pipeline.id}`}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="min-w-[160px]"
             />
           </div>
           <div className="grid gap-1">
