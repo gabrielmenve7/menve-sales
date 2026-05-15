@@ -39,7 +39,7 @@ const donutChartConfigSchema = z
 
 export const layoutWidgetSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(["METRIC", "BAR", "PIE", "DONUT", "RANKING"]),
+  type: z.enum(["METRIC", "BAR", "PIE", "DONUT", "RANKING", "FUNNEL"]),
   title: z.string().max(120).optional(),
   grid: gridSchema,
   querySpec: widgetQuerySpecSchema,

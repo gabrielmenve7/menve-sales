@@ -1,5 +1,41 @@
 import type { LayoutJson } from "./dashboard-layout.zod";
 
+/** Mapeamento inicial de etapas → camadas do funil (Lead → … → Venda). */
+export type FunnelLayerStageIdsSeed = {
+  lead: string[];
+  qualified: string[];
+  proposal: string[];
+  sale: string[];
+};
+
+/**
+ * Parte as etapas do pipeline (em ordem) nas 4 camadas; `wonStageId` vai para "Venda".
+ */
+export function splitStagesIntoDefaultFunnelLayers(
+  stageIdsInOrder: string[],
+  wonStageId: string | null | undefined,
+): FunnelLayerStageIdsSeed | null {
+  if (stageIdsInOrder.length === 0) return null;
+  const won =
+    wonStageId && stageIdsInOrder.includes(wonStageId) ? wonStageId : null;
+  const sale: string[] = won ? [won] : [];
+  const rest = won
+    ? stageIdsInOrder.filter((id) => id !== won)
+    : [...stageIdsInOrder];
+  if (rest.length === 0) {
+    return { lead: [], qualified: [], proposal: [], sale };
+  }
+  const n = rest.length;
+  const a = Math.max(1, Math.ceil(n / 3));
+  const b = Math.max(1, Math.ceil((n - a) / 2));
+  return {
+    lead: rest.slice(0, a),
+    qualified: rest.slice(a, a + b),
+    proposal: rest.slice(a + b),
+    sale,
+  };
+}
+
 /** Meta padrão (R$) para cartão de atingimento — ajustável no cartão depois. */
 export const DEFAULT_SALES_GOAL_MONEY = 100_000;
 
@@ -22,9 +58,12 @@ const filterStatus = (codes: ("WON" | "OPEN" | "LOST")[]) => ({
  * Período é só do filtro global — títulos sem mês/semana/dia.
  *
  * Grid 12 colunas: 7 KPIs na 1ª linha (larguras 2+2+2+2+2+1+1);
- * 2ª linha: barras (6) | produtos (3) | coluna meta + ranking (3).
+ * opcional: funil em camadas; depois barras | produtos | meta + ranking.
  */
-export function buildDefaultSalesBoardLayout(pipelineId: string): LayoutJson {
+export function buildDefaultSalesBoardLayout(
+  pipelineId: string,
+  funnelLayers?: FunnelLayerStageIdsSeed | null,
+): LayoutJson {
   const won = filterStatus(["WON"]);
   const open = filterStatus(["OPEN"]);
   const lost = filterStatus(["LOST"]);
@@ -117,7 +156,47 @@ export function buildDefaultSalesBoardLayout(pipelineId: string): LayoutJson {
     xKpi += w;
   }
 
-  const yCharts = 4;
+  const funnelOpenWon = {
+    filterGroups: [
+      {
+        rows: [
+          {
+            field: "status" as const,
+            op: "IS" as const,
+            statusCodes: ["OPEN", "WON"],
+          },
+        ],
+      },
+    ],
+  };
+
+  const hasFunnel =
+    funnelLayers != null &&
+    funnelLayers.lead.length +
+      funnelLayers.qualified.length +
+      funnelLayers.proposal.length +
+      funnelLayers.sale.length >
+      0;
+
+  let yCharts = 4;
+  if (hasFunnel && funnelLayers) {
+    widgets.push({
+      id: "seed_funnel_pipeline",
+      type: "FUNNEL",
+      title: "Funil (Lead → Venda)",
+      grid: { x: 0, y: 4, w: 12, h: 5 },
+      querySpec: {
+        source: "DEALS" as const,
+        pipelineId,
+        dimension: "BY_FUNNEL_LAYERS",
+        dataMeasure: "QUANTITY",
+        aggregation: "SUM",
+        funnelLayerStageIds: funnelLayers,
+        ...funnelOpenWon,
+      } as LayoutJson["widgets"][number]["querySpec"],
+    });
+    yCharts = 9;
+  }
 
   widgets.push({
     id: "seed_bar_revenue_won",

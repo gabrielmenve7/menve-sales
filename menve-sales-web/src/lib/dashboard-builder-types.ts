@@ -93,6 +93,43 @@ export type DonutChartConfig = {
   variant?: "full" | "semicircle";
 };
 
+export type FunnelLayerStageIds = {
+  lead: string[];
+  qualified: string[];
+  proposal: string[];
+  sale: string[];
+};
+
+/**
+ * Sugestão inicial: reparte etapas do pipeline nas 4 camadas; etapa ganha → "Venda".
+ */
+export function defaultFunnelLayerStageIdsFromStages(
+  stageIdsInOrder: string[],
+  wonStageId: string | null | undefined,
+): FunnelLayerStageIds {
+  if (stageIdsInOrder.length === 0) {
+    return { lead: [], qualified: [], proposal: [], sale: [] };
+  }
+  const won =
+    wonStageId && stageIdsInOrder.includes(wonStageId) ? wonStageId : null;
+  const sale: string[] = won ? [won] : [];
+  const rest = won
+    ? stageIdsInOrder.filter((id) => id !== won)
+    : [...stageIdsInOrder];
+  if (rest.length === 0) {
+    return { lead: [], qualified: [], proposal: [], sale };
+  }
+  const n = rest.length;
+  const a = Math.max(1, Math.ceil(n / 3));
+  const b = Math.max(1, Math.ceil((n - a) / 2));
+  return {
+    lead: rest.slice(0, a),
+    qualified: rest.slice(a, a + b),
+    proposal: rest.slice(a + b),
+    sale,
+  };
+}
+
 export type WidgetQuerySpec = {
   source: "DEALS";
   pipelineId: string;
@@ -105,7 +142,10 @@ export type WidgetQuerySpec = {
     | "BY_GOAL_PROGRESS"
     | "BY_PRODUCT_SOLD"
     | "BY_ASSIGNEE_RANKED_SALES"
+    | "BY_FUNNEL_LAYERS"
     | null;
+  /** Com BY_FUNNEL_LAYERS: etapas do pipeline por camada (Lead → Qualificado → Proposta → Venda). */
+  funnelLayerStageIds?: FunnelLayerStageIds;
   /** Eixo X por valor de campo (não-Data) em customData. */
   groupByCustomFieldKey?: string;
   days?: number;
@@ -160,7 +200,7 @@ export type WidgetQuerySpec = {
   filterCustomFields?: { key: string; value: string | number | boolean }[];
 };
 
-export type WidgetType = "METRIC" | "BAR" | "PIE" | "DONUT" | "RANKING";
+export type WidgetType = "METRIC" | "BAR" | "PIE" | "DONUT" | "RANKING" | "FUNNEL";
 
 export type LayoutWidget = {
   id: string;
@@ -240,10 +280,21 @@ export type WidgetDataRanking = {
   }[];
 };
 
+export type WidgetDataFunnel = {
+  kind: "funnel";
+  layers: {
+    key: "lead" | "qualified" | "proposal" | "sale";
+    label: string;
+    value: number;
+    conversionFromPreviousPct: number | null;
+  }[];
+};
+
 export type WidgetDataResult =
   | WidgetDataScalar
   | WidgetDataSeries
-  | WidgetDataRanking;
+  | WidgetDataRanking
+  | WidgetDataFunnel;
 
 export function parseLayoutJson(raw: unknown): LayoutJson {
   if (
@@ -303,6 +354,28 @@ export function defaultQuerySpec(
       ],
       dimension: "BY_PRODUCT_SOLD",
       rankingLimit: 10,
+    };
+  }
+  if (widgetType === "FUNNEL") {
+    return {
+      source: "DEALS",
+      pipelineId,
+      dataMeasure: "QUANTITY",
+      aggregation: "SUM",
+      dimension: "BY_FUNNEL_LAYERS",
+      funnelLayerStageIds: {
+        lead: [],
+        qualified: [],
+        proposal: [],
+        sale: [],
+      },
+      filterGroups: [
+        {
+          rows: [
+            { field: "status", op: "IS", statusCodes: ["OPEN", "WON"] },
+          ],
+        },
+      ],
     };
   }
   return base;

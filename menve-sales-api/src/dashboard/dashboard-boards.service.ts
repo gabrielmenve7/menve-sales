@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import {
   buildDefaultSalesBoardLayout,
   DEFAULT_SALES_BOARD_NAME,
+  splitStagesIntoDefaultFunnelLayers,
 } from "./dashboard-default-board.seed";
 import {
   EMPTY_LAYOUT,
@@ -131,12 +132,21 @@ export class DashboardBoardsService {
 
     const pipeline = await this.prisma.pipeline.findFirst({
       where: { tenantId, isDefault: true },
-      select: { id: true },
+      select: {
+        id: true,
+        wonStageId: true,
+        stages: { orderBy: { sortOrder: "asc" }, select: { id: true } },
+      },
     });
     if (!pipeline) return null;
 
+    const funnelLayers = splitStagesIntoDefaultFunnelLayers(
+      pipeline.stages.map((s) => s.id),
+      pipeline.wonStageId,
+    );
+
     const layout = layoutJsonSchema.parse(
-      buildDefaultSalesBoardLayout(pipeline.id),
+      buildDefaultSalesBoardLayout(pipeline.id, funnelLayers),
     );
 
     if (onlyIfEmpty && !force) {

@@ -43,6 +43,16 @@ const widgetFilterGroupSchema = z.object({
 export type WidgetFilterRowInput = z.infer<typeof widgetFilterRowSchema>;
 export type WidgetFilterGroupInput = z.infer<typeof widgetFilterGroupSchema>;
 
+/** Mapeamento de etapas do pipeline para as 4 camadas do funil no dashboard. */
+export const funnelLayerStageIdsSchema = z.object({
+  lead: z.array(z.string().min(1).max(64)).max(32).default([]),
+  qualified: z.array(z.string().min(1).max(64)).max(32).default([]),
+  proposal: z.array(z.string().min(1).max(64)).max(32).default([]),
+  sale: z.array(z.string().min(1).max(64)).max(32).default([]),
+});
+
+export type FunnelLayerStageIdsInput = z.infer<typeof funnelLayerStageIdsSchema>;
+
 /** Entrada (API / JSON salvo) — aceita legado `measure` + `includeClosed` / `includeArchived`. */
 export const widgetQuerySpecInputSchema = z.object({
   source: z.literal("DEALS"),
@@ -57,9 +67,12 @@ export const widgetQuerySpecInputSchema = z.object({
       "BY_GOAL_PROGRESS",
       "BY_PRODUCT_SOLD",
       "BY_ASSIGNEE_RANKED_SALES",
+      "BY_FUNNEL_LAYERS",
     ])
     .optional()
     .nullable(),
+  /** Com BY_FUNNEL_LAYERS: etapas por camada (lead → qualificado → proposta → venda). */
+  funnelLayerStageIds: funnelLayerStageIdsSchema.optional(),
   /**
    * Com BY_CUSTOM_VALUE: chave do campo em `customData` usada para fatiar as barras.
    * Não usar com campos DATE (use BY_DAY + timelineBucketFieldKey).
@@ -138,7 +151,9 @@ export type ResolvedWidgetQuerySpec = {
     | "BY_GOAL_PROGRESS"
     | "BY_PRODUCT_SOLD"
     | "BY_ASSIGNEE_RANKED_SALES"
+    | "BY_FUNNEL_LAYERS"
     | null;
+  funnelLayerStageIds?: FunnelLayerStageIdsInput;
   days?: number;
   timelineStart?: string;
   timelineEnd?: string;
@@ -217,6 +232,15 @@ export function resolveWidgetQuerySpec(
     dataMeasure = "QUANTITY";
     aggregation = "SUM";
   }
+  if (dim === "BY_FUNNEL_LAYERS") {
+    dataMeasure = input.dataMeasure === "MONEY" ? "MONEY" : "QUANTITY";
+    aggregation =
+      dataMeasure === "MONEY"
+        ? input.aggregation === "AVG"
+          ? "AVG"
+          : "SUM"
+        : "SUM";
+  }
   const timelineBucketTrim = input.timelineBucketFieldKey?.trim();
   const groupByTrim = input.groupByCustomFieldKey?.trim();
 
@@ -260,6 +284,15 @@ export function resolveWidgetQuerySpec(
     includeClosed: input.includeClosed,
     includeArchived: input.includeArchived,
     filterGroups,
+    funnelLayerStageIds:
+      dim === "BY_FUNNEL_LAYERS" && input.funnelLayerStageIds
+        ? {
+            lead: [...(input.funnelLayerStageIds.lead ?? [])],
+            qualified: [...(input.funnelLayerStageIds.qualified ?? [])],
+            proposal: [...(input.funnelLayerStageIds.proposal ?? [])],
+            sale: [...(input.funnelLayerStageIds.sale ?? [])],
+          }
+        : undefined,
   };
 }
 
@@ -325,6 +358,48 @@ export const widgetQuerySpecSchema = widgetQuerySpecInputSchema.superRefine(
           code: z.ZodIssueCode.custom,
           message: "Intervalo na linha do tempo excede 500 dias",
           path: ["timelineEnd"],
+        });
+      }
+    }
+
+    if (val.dimension === "BY_FUNNEL_LAYERS") {
+      const fl = val.funnelLayerStageIds;
+      if (!fl) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "funnelLayerStageIds é obrigatório para o funil em camadas",
+          path: ["funnelLayerStageIds"],
+        });
+      } else {
+        const all = [...fl.lead, ...fl.qualified, ...fl.proposal, ...fl.sale];
+        if (all.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Defina ao menos uma etapa em alguma camada do funil",
+            path: ["funnelLayerStageIds"],
+          });
+        }
+        const uniq = new Set(all);
+        if (uniq.size !== all.length) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "A mesma etapa não pode aparecer em mais de uma camada",
+            path: ["funnelLayerStageIds"],
+          });
+        }
+      }
+      const eff =
+        val.dataMeasure ??
+        (val.measure === "COUNT"
+          ? "QUANTITY"
+          : val.measure === "SUM_VALUE"
+            ? "MONEY"
+            : undefined);
+      if (eff && eff !== "QUANTITY" && eff !== "MONEY") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Funil em camadas aceita só Quantidade ou Valor (R$)",
+          path: ["dataMeasure"],
         });
       }
     }

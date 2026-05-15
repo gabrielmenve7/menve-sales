@@ -34,6 +34,7 @@ import {
   type DealCustomFieldDef,
   type LayoutWidget,
   type PipelineListItem,
+  type WidgetDataFunnel,
   type WidgetDataResult,
 } from "@/lib/dashboard-builder-types";
 
@@ -131,6 +132,68 @@ function MetricDeltaBadge({
 
 const chartCardNeutralFrame =
   "rounded-[10px] border border-border/60 bg-card shadow-sm dark:bg-card";
+
+function FunnelLayersCard({
+  title,
+  layers,
+  formatValue,
+}: {
+  title: string;
+  layers: WidgetDataFunnel["layers"];
+  formatValue: (v: number) => string;
+}) {
+  const maxV = Math.max(...layers.map((l) => l.value), 1);
+  return (
+    <Card
+      className={cn(
+        "flex h-full min-h-0 flex-col overflow-hidden",
+        chartCardNeutralFrame,
+      )}
+    >
+      <CardHeader className="drag-handle shrink-0 cursor-grab pb-1 pt-3">
+        <CardTitle className="text-xs font-normal text-muted-foreground">
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto px-3 pb-3 pt-0">
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          Valores cumulativos por camada (uma oportunidade conta na etapa em que
+          está e nas camadas abaixo). À direita: % em relação à camada de cima.
+        </p>
+        <div className="flex flex-col gap-2.5">
+          {layers.map((layer) => {
+            const wPct = Math.max(6, Math.round((layer.value / maxV) * 100));
+            return (
+              <div key={layer.key}>
+                <div className="mb-0.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-[11px]">
+                  <span className="font-medium text-foreground">{layer.label}</span>
+                  <span className="text-right tabular-nums text-foreground">
+                    <span className="font-semibold">{formatValue(layer.value)}</span>
+                    {layer.conversionFromPreviousPct != null ? (
+                      <span className="ml-1.5 text-muted-foreground">
+                        (
+                        {layer.conversionFromPreviousPct.toLocaleString("pt-BR", {
+                          maximumFractionDigits: 1,
+                        })}
+                        %)
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted/50">
+                  <div
+                    className="h-full rounded-full bg-primary/75"
+                    style={{ width: `${wPct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function formatBrl0(n: number) {
   return n.toLocaleString("pt-BR", {
@@ -287,7 +350,9 @@ export function DashboardWidgetRenderer({
         ? "Gráfico de barras"
         : widget.type === "RANKING"
           ? "Ranking"
-          : "Gráfico de pizza");
+          : widget.type === "FUNNEL"
+            ? "Funil"
+            : "Gráfico de pizza");
 
   if (loading) {
     if (widget.type === "METRIC") {
@@ -353,7 +418,8 @@ export function DashboardWidgetRenderer({
       widget.type === "BAR" ||
       widget.type === "PIE" ||
       widget.type === "DONUT" ||
-      widget.type === "RANKING"
+      widget.type === "RANKING" ||
+      widget.type === "FUNNEL"
         ? chartCardNeutralFrame
         : "rounded-[10px] border border-border/60 bg-card shadow-sm";
     return (
@@ -372,6 +438,18 @@ export function DashboardWidgetRenderer({
           Sem dados
         </CardContent>
       </Card>
+    );
+  }
+
+  if (widget.type === "FUNNEL" && data.kind === "funnel") {
+    const formatValue = (v: number) =>
+      formatDashboardScalar(widget.querySpec, v, null);
+    return (
+      <FunnelLayersCard
+        title={title}
+        layers={data.layers}
+        formatValue={formatValue}
+      />
     );
   }
 

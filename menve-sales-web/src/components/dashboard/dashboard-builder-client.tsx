@@ -71,6 +71,7 @@ import type {
 import {
   DEFAULT_SALES_DASHBOARD_BOARD_NAME,
   defaultBarWidgetQueryAndChart,
+  defaultFunnelLayerStageIdsFromStages,
   defaultQuerySpec,
   newWidgetId,
   parseLayoutJson,
@@ -95,8 +96,10 @@ function nextGrid(widgets: LayoutWidget[], type: WidgetType) {
   for (const w of widgets) {
     maxY = Math.max(maxY, w.grid.y + w.grid.h);
   }
-  const h = type === "METRIC" ? 4 : 6;
-  return { x: 0, y: maxY, w: type === "METRIC" ? 3 : 6, h };
+  const h = type === "METRIC" ? 4 : type === "FUNNEL" ? 5 : 6;
+  const w =
+    type === "METRIC" ? 3 : type === "FUNNEL" ? 12 : 6;
+  return { x: 0, y: maxY, w, h };
 }
 
 export function DashboardBuilderClient({
@@ -336,19 +339,50 @@ export function DashboardBuilderClient({
                 grid,
                 querySpec: defaultQuerySpec(pid, "RANKING"),
               }
-            : {
-                id,
-                type,
-                querySpec: defaultQuerySpec(pid, type),
-                grid,
-              };
+            : type === "FUNNEL"
+              ? {
+                  id,
+                  type: "FUNNEL",
+                  grid,
+                  title: "Funil (Lead → Venda)",
+                  querySpec: {
+                    source: "DEALS",
+                    pipelineId: pid,
+                    dimension: "BY_FUNNEL_LAYERS",
+                    dataMeasure: "QUANTITY",
+                    aggregation: "SUM",
+                    funnelLayerStageIds: defaultFunnelLayerStageIdsFromStages(
+                      (pipelines.find((p) => p.id === pid)?.stages ?? []).map(
+                        (s) => s.id,
+                      ),
+                      pipelines.find((p) => p.id === pid)?.wonStageId,
+                    ),
+                    filterGroups: [
+                      {
+                        rows: [
+                          {
+                            field: "status",
+                            op: "IS",
+                            statusCodes: ["OPEN", "WON"],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                }
+              : {
+                  id,
+                  type,
+                  querySpec: defaultQuerySpec(pid, type),
+                  grid,
+                };
       setLayoutForActive((prev) => ({
         ...prev,
         widgets: [...prev.widgets, w],
       }));
       setConfigWidget(w);
     },
-    [activeId, activeBoard, pid, setLayoutForActive],
+    [activeId, activeBoard, pid, pipelines, setLayoutForActive],
   );
 
   const saveWidgetConfig = useCallback(
@@ -587,9 +621,16 @@ export function DashboardBuilderClient({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    {(
-                      ["METRIC", "BAR", "PIE", "DONUT", "RANKING"] as WidgetType[]
-                    ).map((t) => (
+                      {(
+                        [
+                          "METRIC",
+                          "BAR",
+                          "PIE",
+                          "DONUT",
+                          "RANKING",
+                          "FUNNEL",
+                        ] as WidgetType[]
+                      ).map((t) => (
                       <DropdownMenuItem key={t} onClick={() => addWidget(t)}>
                         {widgetTypeLabel(t)}
                       </DropdownMenuItem>

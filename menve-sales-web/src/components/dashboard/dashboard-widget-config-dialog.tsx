@@ -47,6 +47,7 @@ import type {
   DataMeasure,
   DealCustomFieldDef,
   DealStatusCode,
+  FunnelLayerStageIds,
   LayoutWidget,
   PipelineListItem,
   TagListItem,
@@ -57,6 +58,7 @@ import type {
 } from "@/lib/dashboard-builder-types";
 import {
   defaultBarChartConfig,
+  defaultFunnelLayerStageIdsFromStages,
   isWidgetFilterRollingDatePreset,
 } from "@/lib/dashboard-builder-types";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
@@ -91,6 +93,38 @@ const RANKING_DIMENSION_OPTIONS: {
     label: "Responsáveis (ranqueia por valor vendido)",
   },
 ];
+
+type FunnelLayerKey = "lead" | "qualified" | "proposal" | "sale";
+
+function funnelSpecToStageLayer(
+  fl: FunnelLayerStageIds | undefined,
+): Record<string, FunnelLayerKey | ""> {
+  const m: Record<string, FunnelLayerKey | ""> = {};
+  if (!fl) return m;
+  for (const id of fl.lead) m[id] = "lead";
+  for (const id of fl.qualified) m[id] = "qualified";
+  for (const id of fl.proposal) m[id] = "proposal";
+  for (const id of fl.sale) m[id] = "sale";
+  return m;
+}
+
+function stageLayerMapToFunnelSpec(
+  stages: NonNullable<PipelineListItem["stages"]>,
+  layerByStage: Record<string, FunnelLayerKey | "">,
+): FunnelLayerStageIds {
+  const lead: string[] = [];
+  const qualified: string[] = [];
+  const proposal: string[] = [];
+  const sale: string[] = [];
+  for (const s of stages) {
+    const layer = layerByStage[s.id];
+    if (layer === "lead") lead.push(s.id);
+    else if (layer === "qualified") qualified.push(s.id);
+    else if (layer === "proposal") proposal.push(s.id);
+    else if (layer === "sale") sale.push(s.id);
+  }
+  return { lead, qualified, proposal, sale };
+}
 
 const BAR_X_STAGE = "x:stage";
 const BAR_X_STATUS = "x:status";
@@ -1639,6 +1673,10 @@ export function DashboardWidgetConfigDialog({
   const [rankingLimit, setRankingLimit] = useState(10);
   const [donutGaugeShape, setDonutGaugeShape] = useState(false);
   const [timelineBucketFieldKey, setTimelineBucketFieldKey] = useState("");
+  /** FUNNEL: etapa do pipeline → camada (lead | … | sale | ""). */
+  const [funnelStageLayer, setFunnelStageLayer] = useState<
+    Record<string, FunnelLayerKey | "">
+  >({});
   /** Eixo X do gráfico em barras (estágio, status, responsável, timeline, campo). */
   const [barXColumnId, setBarXColumnId] = useState(BAR_X_STAGE);
   const [filterGroups, setFilterGroups] = useState<DashFilterGroupState[]>(() => [
@@ -1672,6 +1710,31 @@ export function DashboardWidgetConfigDialog({
       } else {
         setDimension("BY_PRODUCT_SOLD");
       }
+    } else if (widget.type === "FUNNEL") {
+      setDimension("BY_FUNNEL_LAYERS");
+      const p = pipelines.find((x) => x.id === s.pipelineId);
+      const st = p?.stages ?? [];
+      const fl = s.funnelLayerStageIds;
+      const total =
+        (fl?.lead.length ?? 0) +
+        (fl?.qualified.length ?? 0) +
+        (fl?.proposal.length ?? 0) +
+        (fl?.sale.length ?? 0);
+      if (fl && total > 0) {
+        setFunnelStageLayer(funnelSpecToStageLayer(fl));
+      } else {
+        setFunnelStageLayer(
+          funnelSpecToStageLayer(
+            defaultFunnelLayerStageIdsFromStages(
+              st.map((x) => x.id),
+              p?.wonStageId,
+            ),
+          ),
+        );
+      }
+      const dm = s.dataMeasure === "MONEY" ? "MONEY" : "QUANTITY";
+      setDataMeasure(dm);
+      setAggregation(dm === "MONEY" && s.aggregation === "AVG" ? "AVG" : "SUM");
     } else {
       setDimension(
         s.dimension === null || s.dimension === undefined ? "" : s.dimension,
@@ -1703,7 +1766,7 @@ export function DashboardWidgetConfigDialog({
         : 10,
     );
     setDonutGaugeShape(widget.donutChart?.variant === "semicircle");
-  }, [widget, open, dealCustomFields]);
+  }, [widget, open, dealCustomFields, pipelines]);
 
   const filtersAreDefault = useMemo(() => {
     if (filterGroups.length !== 1) return false;
@@ -1723,6 +1786,7 @@ export function DashboardWidgetConfigDialog({
   const isMetric = widget.type === "METRIC";
   const isBar = widget.type === "BAR";
   const isRanking = widget.type === "RANKING";
+  const isFunnel = widget.type === "FUNNEL";
 
   function coerceFilterValue(
     key: string,
@@ -1998,6 +2062,25 @@ export function DashboardWidgetConfigDialog({
       delete spec.byDayAnchor;
       delete spec.gaugeTargetMoney;
       delete spec.days;
+      delete spec.groupByCustomFieldKey;
+    } else if (isFunnel) {
+      const p = pipelines.find((x) => x.id === pipelineId);
+      const stages = p?.stages ?? [];
+      spec.dimension = "BY_FUNNEL_LAYERS";
+      spec.funnelLayerStageIds = stageLayerMapToFunnelSpec(
+        stages,
+        funnelStageLayer,
+      );
+      spec.dataMeasure = dataMeasure === "MONEY" ? "MONEY" : "QUANTITY";
+      spec.aggregation =
+        spec.dataMeasure === "MONEY" && aggregation === "AVG" ? "AVG" : "SUM";
+      delete spec.timelineStart;
+      delete spec.fillTimelineMonth;
+      delete spec.timelineBucketFieldKey;
+      delete spec.byDayAnchor;
+      delete spec.gaugeTargetMoney;
+      delete spec.days;
+      delete spec.rankingLimit;
       delete spec.groupByCustomFieldKey;
     } else {
       spec.dimension = (dimension || "BY_STAGE") as NonNullable<
@@ -2324,7 +2407,21 @@ export function DashboardWidgetConfigDialog({
                       id="dw-pipeline"
                       className={panel.control}
                       value={pipelineId}
-                      onChange={(e) => setPipelineId(e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setPipelineId(v);
+                        if (isFunnel) {
+                          const p = pipelines.find((x) => x.id === v);
+                          setFunnelStageLayer(
+                            funnelSpecToStageLayer(
+                              defaultFunnelLayerStageIdsFromStages(
+                                p?.stages?.map((s) => s.id) ?? [],
+                                p?.wonStageId,
+                              ),
+                            ),
+                          );
+                        }
+                      }}
                     >
                       {pipelines.map((p) => (
                         <option
@@ -2393,6 +2490,132 @@ export function DashboardWidgetConfigDialog({
                         (mostra também o número de pedidos).
                       </p>
                     </div>
+                  ) : isFunnel ? (
+                    <>
+                      <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
+                        <Label htmlFor="dw-funnel-measure" className="text-foreground">
+                          Medida do funil
+                        </Label>
+                        <select
+                          id="dw-funnel-measure"
+                          className={panel.control}
+                          value={dataMeasure === "MONEY" ? "MONEY" : "QUANTITY"}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === "MONEY") {
+                              setDataMeasure("MONEY");
+                              setAggregation("SUM");
+                            } else {
+                              setDataMeasure("QUANTITY");
+                              setAggregation("SUM");
+                            }
+                          }}
+                        >
+                          <option
+                            value="QUANTITY"
+                            className="bg-popover text-popover-foreground"
+                          >
+                            Número de deals
+                          </option>
+                          <option
+                            value="MONEY"
+                            className="bg-popover text-popover-foreground"
+                          >
+                            Valor (R$)
+                          </option>
+                        </select>
+                      </div>
+                      {dataMeasure === "MONEY" ? (
+                        <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
+                          <Label htmlFor="dw-funnel-calc" className="text-foreground">
+                            Cálculo (valor)
+                          </Label>
+                          <select
+                            id="dw-funnel-calc"
+                            className={panel.control}
+                            value={aggregation}
+                            onChange={(e) =>
+                              setAggregation(e.target.value as Aggregation)
+                            }
+                          >
+                            <option
+                              value="SUM"
+                              className="bg-popover text-popover-foreground"
+                            >
+                              Somatória
+                            </option>
+                            <option
+                              value="AVG"
+                              className="bg-popover text-popover-foreground"
+                            >
+                              Média
+                            </option>
+                          </select>
+                        </div>
+                      ) : null}
+                      <div className={`grid gap-2 border-t pt-5 ${panel.divider}`}>
+                        <p className="text-sm font-medium text-foreground">
+                          Camadas do funil
+                        </p>
+                        <p className={cn(panel.muted, "text-[11px] leading-snug")}>
+                          Defina em qual camada cada etapa do pipeline entra. A
+                          visualização usa totais cumulativos (Lead ≥ Qualificado
+                          ≥ Proposta ≥ Venda) para as taxas entre camadas.
+                        </p>
+                        {(pipelines.find((p) => p.id === pipelineId)?.stages
+                          ?.length ?? 0) === 0 ? (
+                          <p className={panel.muted}>
+                            Este pipeline ainda não tem etapas.
+                          </p>
+                        ) : (
+                          <div className="max-h-52 overflow-auto rounded-md border border-border/60">
+                            <table className="w-full border-collapse text-left text-xs">
+                              <thead>
+                                <tr className="border-b border-border/60 text-muted-foreground">
+                                  <th className="px-2 py-2 font-medium">Etapa</th>
+                                  <th className="px-2 py-2 font-medium">Camada</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(
+                                  pipelines.find((p) => p.id === pipelineId)
+                                    ?.stages ?? []
+                                ).map((s) => (
+                                  <tr
+                                    key={s.id}
+                                    className="border-b border-border/40 last:border-0"
+                                  >
+                                    <td className="px-2 py-1.5 text-foreground">
+                                      {s.name}
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                      <select
+                                        className={cn(panel.control, "w-full min-w-[8rem]")}
+                                        value={funnelStageLayer[s.id] ?? ""}
+                                        onChange={(e) => {
+                                          const v = e.target
+                                            .value as FunnelLayerKey | "";
+                                          setFunnelStageLayer((prev) => ({
+                                            ...prev,
+                                            [s.id]: v,
+                                          }));
+                                        }}
+                                      >
+                                        <option value="">— ignorar</option>
+                                        <option value="lead">Lead</option>
+                                        <option value="qualified">Qualificado</option>
+                                        <option value="proposal">Proposta</option>
+                                        <option value="sale">Venda</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </>
                   ) : (
                     <>
                   <div className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}>
@@ -2503,7 +2726,7 @@ export function DashboardWidgetConfigDialog({
                   ) : null}
                     </>
                   )}
-                  {!isMetric && !isRanking ? (
+                  {!isMetric && !isRanking && !isFunnel ? (
                     <>
                       <div
                         className={`grid gap-1.5 border-t pt-5 ${panel.divider}`}
@@ -3014,7 +3237,15 @@ export function DashboardWidgetConfigDialog({
             onClick={handleSave}
             disabled={
               !pipelineId ||
-              (dataMeasure === "CUSTOM_NUMBER" && !customFieldKey)
+              (dataMeasure === "CUSTOM_NUMBER" && !customFieldKey) ||
+              (isFunnel &&
+                !Object.values(funnelStageLayer).some(
+                  (v) =>
+                    v === "lead" ||
+                    v === "qualified" ||
+                    v === "proposal" ||
+                    v === "sale",
+                ))
             }
           >
             Salvar
@@ -3037,6 +3268,8 @@ export function widgetTypeLabel(t: WidgetType): string {
       return "Gráfico em anel";
     case "RANKING":
       return "Ranking (tabela)";
+    case "FUNNEL":
+      return "Funil (camadas + taxas)";
     default:
       return t;
   }

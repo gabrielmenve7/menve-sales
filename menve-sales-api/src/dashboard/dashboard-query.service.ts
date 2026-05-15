@@ -43,6 +43,20 @@ export type RankingResult = {
   rows: RankingRow[];
 };
 
+export type FunnelLayerRow = {
+  key: "lead" | "qualified" | "proposal" | "sale";
+  label: string;
+  /** Valor cumulativo: deals cuja etapa está nesta camada ou em camadas mais baixas no funil. */
+  value: number;
+  /** Taxa em relação à camada anterior (cumulativa); null na primeira camada ou se o anterior for 0. */
+  conversionFromPreviousPct: number | null;
+};
+
+export type FunnelResult = {
+  kind: "funnel";
+  layers: FunnelLayerRow[];
+};
+
 function startOfDayUtc(isoDate: string): Date {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
@@ -127,7 +141,7 @@ export class DashboardQueryService {
   async query(
     tenantId: string,
     raw: unknown,
-  ): Promise<ScalarResult | SeriesResult | RankingResult> {
+  ): Promise<ScalarResult | SeriesResult | RankingResult | FunnelResult> {
     const input = widgetQuerySpecSchema.parse(raw);
     const spec = resolveWidgetQuerySpec(input);
     await this.assertPipeline(tenantId, spec.pipelineId);
@@ -138,7 +152,7 @@ export class DashboardQueryService {
   async queryBulk(
     tenantId: string,
     specs: unknown[],
-  ): Promise<(ScalarResult | SeriesResult | RankingResult)[]> {
+  ): Promise<(ScalarResult | SeriesResult | RankingResult | FunnelResult)[]> {
     if (specs.length === 0) return [];
 
     const resolved = specs.map((s) => {
@@ -175,6 +189,7 @@ export class DashboardQueryService {
   ) {
     if (spec.dataMeasure === "AVG_CYCLE_DAYS") return;
     if (spec.dimension === "BY_GOAL_PROGRESS") return;
+    if (spec.dimension === "BY_FUNNEL_LAYERS") return;
     if (
       spec.dimension === "BY_PRODUCT_SOLD" ||
       spec.dimension === "BY_ASSIGNEE_RANKED_SALES"
@@ -446,7 +461,7 @@ export class DashboardQueryService {
   private async runQuery(
     tenantId: string,
     spec: ResolvedWidgetQuerySpec,
-  ): Promise<ScalarResult | SeriesResult | RankingResult> {
+  ): Promise<ScalarResult | SeriesResult | RankingResult | FunnelResult> {
     const dim = spec.dimension ?? null;
     if (dim == null) {
       return this.scalar(tenantId, spec);
@@ -475,7 +490,131 @@ export class DashboardQueryService {
     if (dim === "BY_ASSIGNEE_RANKED_SALES") {
       return this.byAssigneeRankedSales(tenantId, spec);
     }
+    if (dim === "BY_FUNNEL_LAYERS") {
+      return this.byFunnelLayers(tenantId, spec);
+    }
     throw new BadRequestException("Dimensão inválida");
+  }
+
+  private uniqStageIds(ids: string[]): string[] {
+    return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  }
+
+  private async assertFunnelStageIdsBelongToPipeline(
+    tenantId: string,
+    pipelineId: string,
+    stageIds: string[],
+  ) {
+    if (stageIds.length === 0) return;
+    const n = await this.prisma.stage.count({
+      where: {
+        id: { in: stageIds },
+        pipelineId,
+        pipeline: { tenantId },
+      },
+    });
+    if (n !== stageIds.length) {
+      throw new BadRequestException(
+        "Uma ou mais etapas do funil não pertencem a este pipeline",
+      );
+    }
+  }
+
+  /** Agrega deals cuja etapa está em `stageIds` (vazio → 0). */
+  private async aggregateDealsForStages(
+    tenantId: string,
+    spec: ResolvedWidgetQuerySpec,
+    stageIds: string[],
+  ): Promise<number> {
+    if (stageIds.length === 0) return 0;
+    const base = this.buildWhere(tenantId, spec);
+    const where: Prisma.DealWhereInput = {
+      AND: [base, { stageId: { in: stageIds } }],
+    };
+    if (spec.dataMeasure === "QUANTITY") {
+      return this.prisma.deal.count({ where });
+    }
+    if (spec.dataMeasure === "MONEY") {
+      if (spec.aggregation === "AVG") {
+        const agg = await this.prisma.deal.aggregate({
+          where,
+          _avg: { value: true },
+        });
+        return Number(agg._avg.value ?? 0);
+      }
+      const agg = await this.prisma.deal.aggregate({
+        where,
+        _sum: { value: true },
+      });
+      return Number(agg._sum.value ?? 0);
+    }
+    throw new BadRequestException("Funil em camadas aceita só Quantidade ou Valor (R$)");
+  }
+
+  /**
+   * Funil em 4 camadas: contagens (ou valores) cumulativas por etapa do pipeline.
+   * Ex.: "Qualificado" inclui deals em etapas mapeadas como qualificado, proposta ou venda.
+   */
+  private async byFunnelLayers(
+    tenantId: string,
+    spec: ResolvedWidgetQuerySpec,
+  ): Promise<FunnelResult> {
+    const fl = spec.funnelLayerStageIds;
+    if (!fl) {
+      throw new BadRequestException("funnelLayerStageIds é obrigatório para o funil");
+    }
+    const leadIds = this.uniqStageIds(fl.lead);
+    const qualIds = this.uniqStageIds(fl.qualified);
+    const propIds = this.uniqStageIds(fl.proposal);
+    const saleIds = this.uniqStageIds(fl.sale);
+    const allIds = this.uniqStageIds([...leadIds, ...qualIds, ...propIds, ...saleIds]);
+    await this.assertFunnelStageIdsBelongToPipeline(
+      tenantId,
+      spec.pipelineId,
+      allIds,
+    );
+
+    const saleUnion = [...saleIds];
+    const proposalUnion = this.uniqStageIds([...propIds, ...saleIds]);
+    const qualifiedUnion = this.uniqStageIds([...qualIds, ...propIds, ...saleIds]);
+    const leadUnion = this.uniqStageIds([
+      ...leadIds,
+      ...qualIds,
+      ...propIds,
+      ...saleIds,
+    ]);
+
+    const defs = [
+      { key: "lead" as const, label: "Lead", stageIds: leadUnion },
+      { key: "qualified" as const, label: "Qualificado", stageIds: qualifiedUnion },
+      { key: "proposal" as const, label: "Proposta", stageIds: proposalUnion },
+      { key: "sale" as const, label: "Venda", stageIds: saleUnion },
+    ];
+
+    const values: number[] = [];
+    for (const d of defs) {
+      values.push(
+        await this.aggregateDealsForStages(tenantId, spec, d.stageIds),
+      );
+    }
+
+    const layers: FunnelLayerRow[] = defs.map((d, i) => {
+      const value = values[i]!;
+      let conversionFromPreviousPct: number | null = null;
+      if (i > 0) {
+        const prev = values[i - 1]!;
+        conversionFromPreviousPct =
+          prev > 0 ? Math.round((value / prev) * 1000) / 10 : null;
+      }
+      return {
+        key: d.key,
+        label: d.label,
+        value,
+        conversionFromPreviousPct,
+      };
+    });
+
+    return { kind: "funnel", layers };
   }
 
   private async scalar(
