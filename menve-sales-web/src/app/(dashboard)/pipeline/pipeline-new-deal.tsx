@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { normalizedStageHex } from "@/lib/stage-pill-style";
 import type { Pipeline, Stage } from "@prisma/client";
 import { ProductPicker } from "./deal-products-block";
 
@@ -675,19 +676,30 @@ export function PipelineColumnNewDealHeaderButton({
 /** Área tracejada “ADICIONAR” no rodapé da coluna Kanban. */
 export function PipelineColumnNewDealFooterTrigger({
   onClick,
+  accentHex,
 }: {
   onClick: () => void;
+  /** Cor da etapa (hex) para borda/tracejado e texto, alinhado ao Kanban. */
+  accentHex?: string | null;
 }) {
+  const hex = normalizedStageHex(accentHex, "#94a3b8");
   return (
     <button
       type="button"
       className={cn(
-        "flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/70 bg-transparent py-4 text-muted-foreground transition-colors",
-        "hover:border-foreground/20 hover:bg-background/50 hover:text-foreground",
+        "flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed bg-transparent py-4 transition-colors",
+        "hover:bg-background/40",
       )}
+      style={{
+        borderColor: `color-mix(in srgb, ${hex} 45%, var(--border))`,
+        color: hex,
+      }}
       onClick={onClick}
     >
-      <span className="flex size-8 items-center justify-center rounded-full border border-border/80 text-foreground">
+      <span
+        className="flex size-8 items-center justify-center rounded-full border bg-background/80"
+        style={{ borderColor: `color-mix(in srgb, ${hex} 55%, var(--border))` }}
+      >
         <Plus className="size-4" strokeWidth={2} />
       </span>
       <span className="text-[7.5px] font-bold uppercase tracking-wide">

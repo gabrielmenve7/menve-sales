@@ -451,6 +451,7 @@ function ListStageTbody({
           <tr className="border-b border-border/25 bg-muted/10">
             <td colSpan={COL_COUNT} className="p-1.5 pt-1.5">
               <PipelineColumnNewDealFooterTrigger
+                accentHex={stage.color}
                 onClick={() => setNewDealOpen(true)}
               />
               <PipelineNewDealDialog
