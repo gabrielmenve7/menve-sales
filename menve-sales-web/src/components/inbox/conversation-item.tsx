@@ -1,8 +1,9 @@
 import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
 import { cn } from "@/lib/utils";
+import { ContactPhotoAvatar } from "./contact-photo-avatar";
 import type { InboxConversation } from "./inbox-types";
 import { OutboundAckIcons, type OutboundAckStatus } from "./outbound-ack-icons";
-import { relativeTime, getContactPhotoUrl, initials } from "./inbox-utils";
+import { relativeTime, getContactPhotoUrl } from "./inbox-utils";
 
 type BadgeConfig =
   | { bg: string; kind: "whatsapp" }
@@ -46,18 +47,7 @@ export function ConversationItem({
       )}
     >
       <div className="relative shrink-0">
-        {photo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={photo}
-            alt={c.contact.name}
-            className="size-9 rounded-full object-cover"
-          />
-        ) : (
-          <span className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-            {initials(c.contact.name)}
-          </span>
-        )}
+        <ContactPhotoAvatar photoUrl={photo} name={c.contact.name} sizeClass="size-9" />
         {badge && (
           <span
             className={cn(

@@ -9,10 +9,15 @@ export function getContactPhotoUrl(contact: Contact): string | null {
   return typeof raw === "string" && raw.trim() ? raw : null;
 }
 
+/** Iniciais para avatar: duas palavras → letra de cada; uma palavra → duas primeiras letras (ex.: Sara → SA). */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
+  if (parts.length === 1) {
+    const w = parts[0]!;
+    if (w.length <= 1) return w.toUpperCase();
+    return w.slice(0, 2).toUpperCase();
+  }
   return `${parts[0]!.slice(0, 1)}${parts[1]!.slice(0, 1)}`.toUpperCase();
 }
 

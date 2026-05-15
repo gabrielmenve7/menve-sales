@@ -5,6 +5,14 @@ import { findContactCustomFieldDefinitions } from "../custom-fields/custom-field
 import { useWorkspaceMembership } from "../common/use-workspace-membership";
 import { workspaceRoleToUserRole } from "../common/workspace-role.util";
 
+function publicWebhookBaseUrl() {
+  return (
+    process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") ||
+    ""
+  );
+}
+
 @Injectable()
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -55,6 +63,7 @@ export class SettingsService {
       tenant,
       whatsAppConnections,
       quickReplyCategories,
+      webhookPublicUrl: publicWebhookBaseUrl(),
       pipelines,
       tags,
       customFields,

@@ -23,6 +23,7 @@ import {
   deleteQuickReply,
   deleteQuickReplyCategory,
 } from "@/actions/quick-replies";
+import { nestExceptionJsonToMessage } from "@/lib/nest-api-error";
 import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 import { Button } from "@/components/ui/button";
 import {
@@ -94,7 +95,8 @@ async function evolutionPairHttp(): Promise<EvolutionPairOk> {
   }
   const o = data as { error?: string; connectionId?: string; qrDataUrl?: string; ok?: boolean };
   if (!res.ok) {
-    throw new Error(o.error?.trim() || `Falha ao iniciar pareamento (HTTP ${res.status}).`);
+    const errRaw = o.error?.trim() || `Falha ao iniciar pareamento (HTTP ${res.status}).`;
+    throw new Error(nestExceptionJsonToMessage(errRaw));
   }
   if (!o.qrDataUrl?.trim() || !o.connectionId) {
     throw new Error(o.error?.trim() || "A API não retornou o QR Code.");
@@ -115,7 +117,8 @@ async function evolutionRefreshQrHttp(connectionId: string): Promise<{ ok: true;
   }
   const o = data as { error?: string; qrDataUrl?: string; ok?: boolean };
   if (!res.ok) {
-    throw new Error(o.error?.trim() || `Falha ao recarregar QR (HTTP ${res.status}).`);
+    const errRaw = o.error?.trim() || `Falha ao recarregar QR (HTTP ${res.status}).`;
+    throw new Error(nestExceptionJsonToMessage(errRaw));
   }
   if (!o.qrDataUrl?.trim()) {
     throw new Error(o.error?.trim() || "Sem QR na resposta.");

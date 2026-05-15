@@ -108,14 +108,24 @@ function InboxConversationThreadColumn({
     queryKey: inboxQueryKeys.conversation(conversationId),
     queryFn: async () =>
       (await fetchInboxConversation(conversationId)) as InboxConversation,
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchInterval: 2500,
+    refetchOnWindowFocus: true,
   });
 
   const threadData = threadQuery.data;
+  const refetchThread = threadQuery.refetch;
   const serverSnapshot =
     initialConversationDetail?.id === conversationId
       ? initialConversationDetail
       : undefined;
+
+  useEffect(() => {
+    if (!threadData || threadData.id !== conversationId) return;
+    if (lastMessageMillis(listRow) > lastMessageMillis(threadData)) {
+      void refetchThread();
+    }
+  }, [conversationId, listRow, refetchThread, threadData]);
 
   /** Sempre mostra algo na hora: lista já traz última mensagem; thread completa em background. */
   const merged = useMemo(() => {

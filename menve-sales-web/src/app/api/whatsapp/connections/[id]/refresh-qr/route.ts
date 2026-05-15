@@ -1,4 +1,5 @@
 import { apiServer } from "@/lib/api-server";
+import { nestExceptionJsonToMessage } from "@/lib/nest-api-error";
 import { assertCanConfigureTenantApiRoute } from "@/lib/session";
 
 export const maxDuration = 60;
@@ -34,8 +35,9 @@ export async function POST(
     const m = /^API (\d+):\s*([\s\S]*)$/.exec(msg);
     if (m) {
       const code = Number(m[1]);
-      const body = m[2]?.trim() || msg;
-      return jsonError(body, code >= 400 && code < 600 ? code : 502);
+      const bodyRaw = m[2]?.trim() || msg;
+      const friendly = nestExceptionJsonToMessage(bodyRaw);
+      return jsonError(friendly, code >= 400 && code < 600 ? code : 502);
     }
     return jsonError(msg, 500);
   }

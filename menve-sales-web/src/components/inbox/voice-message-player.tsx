@@ -3,7 +3,7 @@
 import { Mic, Pause, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { initials } from "./inbox-utils";
+import { ContactPhotoAvatar } from "./contact-photo-avatar";
 
 const BAR_COUNT = 32;
 const ACCENT = "#53bdeb";
@@ -195,18 +195,13 @@ export function VoiceMessagePlayer({
 
         {incoming ? (
           <div className="relative shrink-0 self-start pt-0.5">
-            {contactPhotoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={contactPhotoUrl}
-                alt=""
-                className="size-10 rounded-full object-cover ring-1 ring-border/60"
-              />
-            ) : (
-              <span className="flex size-10 items-center justify-center rounded-full bg-muted-foreground/15 text-xs font-semibold text-foreground ring-1 ring-border/60">
-                {initials(contactName ?? "?")}
-              </span>
-            )}
+            <ContactPhotoAvatar
+              photoUrl={contactPhotoUrl}
+              name={contactName ?? "?"}
+              sizeClass="size-10"
+              imgClassName="ring-1 ring-border/60"
+              fallbackClassName="bg-muted-foreground/15 text-foreground ring-1 ring-border/60"
+            />
             <span
               className={cn(
                 "absolute -bottom-0.5 -left-0.5 flex size-5 items-center justify-center rounded-full shadow-sm ring-2",

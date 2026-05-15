@@ -14,6 +14,7 @@ type SettingsBundle = {
   } | null;
   whatsAppConnections: unknown[];
   quickReplyCategories: unknown[];
+  webhookPublicUrl?: string;
   tags: unknown[];
   customFields: unknown[];
   members: unknown[];
@@ -27,6 +28,36 @@ const SETTINGS_TABS = [
   "tags",
   "notifications",
 ] as const;
+
+function normalizePublicUrl(raw: string | undefined | null) {
+  return raw?.trim().replace(/\/$/, "") || "";
+}
+
+function isTemporaryUrl(raw: string) {
+  const u = raw.toLowerCase();
+  return (
+    u.includes("localhost") ||
+    u.includes("127.0.0.1") ||
+    u.includes(".ngrok-free.") ||
+    u.includes(".ngrok.") ||
+    u.includes("trycloudflare.com")
+  );
+}
+
+function resolveWebhookBaseUrl(apiWebhookUrl?: string) {
+  const fromApi = normalizePublicUrl(apiWebhookUrl);
+  if (fromApi) return fromApi;
+
+  const candidates = [
+    normalizePublicUrl(process.env.WEBHOOK_PUBLIC_URL),
+    normalizePublicUrl(process.env.INTERNAL_API_URL),
+  ].filter(Boolean);
+
+  const stable = candidates.find((url) => !isTemporaryUrl(url));
+  if (stable) return stable;
+
+  return candidates[0] || "http://localhost:4000";
+}
 
 export default async function SettingsPage({
   searchParams,
@@ -53,11 +84,7 @@ export default async function SettingsPage({
     redirect("/setup");
   }
 
-  const webhookBaseUrl =
-    process.env.WEBHOOK_PUBLIC_URL?.replace(/\/$/, "") ||
-    process.env.INTERNAL_API_URL?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "http://localhost:4000";
+  const webhookBaseUrl = resolveWebhookBaseUrl(data.webhookPublicUrl);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4 md:px-6 md:py-6">

@@ -157,6 +157,8 @@ export class DashboardQueryService {
     tenantId: string,
     spec: ResolvedWidgetQuerySpec,
   ) {
+    if (spec.dataMeasure === "AVG_CYCLE_DAYS") return;
+    if (spec.dimension === "BY_GOAL_PROGRESS") return;
     if (spec.dataMeasure === "CUSTOM_NUMBER" && spec.customFieldKey) {
       const cf = await this.prisma.customField.findFirst({
         where: {
@@ -251,6 +253,17 @@ export class DashboardQueryService {
         and.push({ createdAt: range });
       }
 
+      if (spec.filterUpdatedFrom || spec.filterUpdatedTo) {
+        const range: Prisma.DateTimeFilter = {};
+        if (spec.filterUpdatedFrom) {
+          range.gte = startOfDayUtc(spec.filterUpdatedFrom);
+        }
+        if (spec.filterUpdatedTo) {
+          range.lte = endOfDayUtc(spec.filterUpdatedTo);
+        }
+        and.push({ updatedAt: range });
+      }
+
       if (spec.filterCustomFields && spec.filterCustomFields.length > 0) {
         for (const f of spec.filterCustomFields) {
           and.push({
@@ -335,6 +348,17 @@ export class DashboardQueryService {
         }
         return { createdAt: range };
       }
+      case "updatedAt": {
+        if (!row.createdFrom?.trim() && !row.createdTo?.trim()) return null;
+        const range: Prisma.DateTimeFilter = {};
+        if (row.createdFrom?.trim()) {
+          range.gte = startOfDayUtc(row.createdFrom.trim());
+        }
+        if (row.createdTo?.trim()) {
+          range.lte = endOfDayUtc(row.createdTo.trim());
+        }
+        return { updatedAt: range };
+      }
       case "customField": {
         const k = row.customKey?.trim();
         if (!k) return null;
@@ -415,6 +439,9 @@ export class DashboardQueryService {
     if (dim === "BY_CUSTOM_VALUE") {
       return this.byCustomFieldValue(tenantId, spec);
     }
+    if (dim === "BY_GOAL_PROGRESS") {
+      return this.goalProgress(tenantId, spec);
+    }
     throw new BadRequestException("Dimensão inválida");
   }
 
@@ -423,6 +450,22 @@ export class DashboardQueryService {
     spec: ResolvedWidgetQuerySpec,
   ): Promise<ScalarResult> {
     const where = this.buildWhere(tenantId, spec);
+    if (spec.dataMeasure === "AVG_CYCLE_DAYS") {
+      const rows = await this.prisma.deal.findMany({
+        where,
+        select: { createdAt: true, updatedAt: true },
+        take: 10_000,
+      });
+      if (rows.length === 0) {
+        return { kind: "scalar", value: 0 };
+      }
+      let sumMs = 0;
+      for (const r of rows) {
+        sumMs += Math.max(0, r.updatedAt.getTime() - r.createdAt.getTime());
+      }
+      const days = sumMs / rows.length / 86_400_000;
+      return { kind: "scalar", value: Math.round(days * 10) / 10 };
+    }
     if (spec.dataMeasure === "QUANTITY") {
       const value = await this.prisma.deal.count({ where });
       return { kind: "scalar", value };
@@ -619,6 +662,29 @@ export class DashboardQueryService {
     return { kind: "series", series };
   }
 
+  /** Meta vs realizado (R$) — duas fatias para gráfico tipo gauge. */
+  private async goalProgress(
+    tenantId: string,
+    spec: ResolvedWidgetQuerySpec,
+  ): Promise<SeriesResult> {
+    const target = spec.gaugeTargetMoney ?? 0;
+    const where = this.buildWhere(tenantId, spec);
+    const agg = await this.prisma.deal.aggregate({
+      where,
+      _sum: { value: true },
+    });
+    const won = Number(agg._sum.value ?? 0);
+    const done = target > 0 ? Math.min(won, target) : won;
+    const rest = target > 0 ? Math.max(0, target - won) : 0;
+    return {
+      kind: "series",
+      series: [
+        { label: "Realizado", value: done },
+        { label: "Restante", value: rest },
+      ],
+    };
+  }
+
   private async byDay(
     tenantId: string,
     spec: ResolvedWidgetQuerySpec,
@@ -655,6 +721,9 @@ export class DashboardQueryService {
     const firstKey = dateKeys[0] ?? todayYmdBrazil();
     const lastKey = dateKeys[dateKeys.length - 1] ?? firstKey;
 
+    const byDayAnchor =
+      spec.byDayAnchor === "UPDATED_AT" ? "UPDATED_AT" : "CREATED_AT";
+
     const where: Prisma.DealWhereInput = bucketKey
       ? {
           AND: [
@@ -668,13 +737,25 @@ export class DashboardQueryService {
             },
           ],
         }
-      : {
-          AND: [baseWhere, { createdAt: { gte: sinceForCreatedFilter } }],
-        };
+      : byDayAnchor === "UPDATED_AT"
+        ? {
+            AND: [
+              baseWhere,
+              {
+                updatedAt: {
+                  gte: startOfDayUtc(firstKey),
+                  lte: endOfDayUtc(lastKey),
+                },
+              },
+            ],
+          }
+        : {
+            AND: [baseWhere, { createdAt: { gte: sinceForCreatedFilter } }],
+          };
 
     const rows = await this.prisma.deal.findMany({
       where,
-      select: { createdAt: true, value: true, customData: true },
+      select: { createdAt: true, updatedAt: true, value: true, customData: true },
     });
 
     const measureKey = spec.customFieldKey;
@@ -683,7 +764,9 @@ export class DashboardQueryService {
     for (const r of rows) {
       const dkey = bucketKey
         ? extractIsoDateKeyFromCustomData(r.customData, bucketKey)
-        : r.createdAt.toISOString().slice(0, 10);
+        : byDayAnchor === "UPDATED_AT"
+          ? r.updatedAt.toISOString().slice(0, 10)
+          : r.createdAt.toISOString().slice(0, 10);
       if (dkey == null) continue;
       if (!keySet.has(dkey)) continue;
       let v: number;

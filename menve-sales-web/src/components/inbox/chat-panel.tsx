@@ -41,7 +41,8 @@ import { cn } from "@/lib/utils";
 import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 import { quickRepliesHaveScripts } from "@/lib/quick-reply-types";
 import type { InboxConversation, InboxMessage } from "./inbox-types";
-import { getContactPhotoUrl, initials } from "./inbox-utils";
+import { ContactPhotoAvatar } from "./contact-photo-avatar";
+import { getContactPhotoUrl } from "./inbox-utils";
 import { MessageBubble } from "./message-bubble";
 
 function readFileAsDataUrl(file: Blob): Promise<string> {
@@ -462,14 +463,11 @@ export function ChatPanel({
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-border/20 px-4 py-3 dark:border-border/30">
         <div className="flex items-center gap-3">
-          {photo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={photo} alt="" className="size-9 rounded-full object-cover" />
-          ) : (
-            <span className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-              {initials(conversation.contact.name)}
-            </span>
-          )}
+          <ContactPhotoAvatar
+            photoUrl={photo}
+            name={conversation.contact.name}
+            sizeClass="size-9"
+          />
           <div>
             <p className="text-sm font-semibold">{conversation.contact.name}</p>
             <p className="text-xs text-muted-foreground">

@@ -154,7 +154,7 @@ export function DashboardShell({
         <div
           className={cn(
             "shrink-0 border-b border-border/40 dark:border-border/30",
-            collapsed ? "px-1.5 pb-2 pt-6 md:pt-7" : "px-2.5 pb-3 pt-6 md:pt-7",
+            collapsed ? "px-3 pb-2 pt-6 md:pt-7" : "px-5 pb-3 pt-6 md:pt-7",
           )}
         >
           {collapsed ? (

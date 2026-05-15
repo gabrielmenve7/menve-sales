@@ -11,7 +11,7 @@ const filterCustomFieldRow = z.object({
 
 const widgetFilterRowSchema = z.object({
   rowJoin: z.enum(["AND", "OR"]).optional(),
-  field: z.enum(["status", "tags", "createdAt", "customField"]),
+  field: z.enum(["status", "tags", "createdAt", "updatedAt", "customField"]),
   op: z.enum(["IS", "OR"]).optional(),
   statusCodes: z.array(dealStatusEnum).max(4).optional(),
   tagIds: z.array(z.string()).max(32).optional(),
@@ -52,6 +52,7 @@ export const widgetQuerySpecInputSchema = z.object({
       "BY_DAY",
       "BY_ASSIGNEE",
       "BY_CUSTOM_VALUE",
+      "BY_GOAL_PROGRESS",
     ])
     .optional()
     .nullable(),
@@ -73,6 +74,13 @@ export const widgetQuerySpecInputSchema = z.object({
    * Se omitido, mantém o comportamento anterior (bucket pela data de criação do deal).
    */
   timelineBucketFieldKey: z.string().min(1).max(64).optional(),
+  /**
+   * Com BY_DAY sem campo custom de data: qual data do deal define o bucket do eixo.
+   * `UPDATED_AT` aproxima o dia do fechamento para ganhos (WON).
+   */
+  byDayAnchor: z.enum(["CREATED_AT", "UPDATED_AT"]).optional(),
+  /** Com BY_GOAL_PROGRESS: meta em R$ (série = realizado vs falta). */
+  gaugeTargetMoney: z.number().finite().min(0).optional(),
 
   /** Legado */
   measure: z.enum(["COUNT", "SUM_VALUE"]).optional(),
@@ -80,7 +88,9 @@ export const widgetQuerySpecInputSchema = z.object({
   includeArchived: z.boolean().optional(),
 
   /** Novo: medida de negócio */
-  dataMeasure: z.enum(["QUANTITY", "MONEY", "CUSTOM_NUMBER"]).optional(),
+  dataMeasure: z
+    .enum(["QUANTITY", "MONEY", "CUSTOM_NUMBER", "AVG_CYCLE_DAYS"])
+    .optional(),
   /** Somatória ou média (vale para MONEY e CUSTOM_NUMBER) */
   aggregation: z.enum(["SUM", "AVG"]).optional(),
   /** Obrigatório quando dataMeasure = CUSTOM_NUMBER */
@@ -93,6 +103,8 @@ export const widgetQuerySpecInputSchema = z.object({
   filterTagIds: z.array(z.string()).max(32).optional(),
   filterCreatedFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   filterCreatedTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  filterUpdatedFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  filterUpdatedTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   filterCustomFields: z.array(filterCustomFieldRow).max(16).optional(),
 
   /** Grupos com E/Ou entre linhas e entre grupos (substitui filtros planos quando preenchido). */
@@ -111,14 +123,17 @@ export type ResolvedWidgetQuerySpec = {
     | "BY_DAY"
     | "BY_ASSIGNEE"
     | "BY_CUSTOM_VALUE"
+    | "BY_GOAL_PROGRESS"
     | null;
   days?: number;
   timelineStart?: string;
   fillTimelineMonth?: boolean;
   timelineBucketFieldKey?: string;
+  byDayAnchor?: "CREATED_AT" | "UPDATED_AT";
+  gaugeTargetMoney?: number;
   /** Só com dimension = BY_CUSTOM_VALUE */
   groupByCustomFieldKey?: string;
-  dataMeasure: "QUANTITY" | "MONEY" | "CUSTOM_NUMBER";
+  dataMeasure: "QUANTITY" | "MONEY" | "CUSTOM_NUMBER" | "AVG_CYCLE_DAYS";
   aggregation: "SUM" | "AVG";
   customFieldKey?: string;
   filterStatuses: DealStatus[];
@@ -126,6 +141,8 @@ export type ResolvedWidgetQuerySpec = {
   filterTagIds?: string[];
   filterCreatedFrom?: string;
   filterCreatedTo?: string;
+  filterUpdatedFrom?: string;
+  filterUpdatedTo?: string;
   filterCustomFields?: { key: string; value: string | number | boolean }[];
   includeClosed?: boolean;
   includeArchived?: boolean;
@@ -164,7 +181,7 @@ export function resolveWidgetQuerySpec(
   if (!dataMeasure) {
     dataMeasure = "QUANTITY";
   }
-  if (dataMeasure === "QUANTITY") {
+  if (dataMeasure === "QUANTITY" || dataMeasure === "AVG_CYCLE_DAYS") {
     aggregation = "SUM";
   }
 
@@ -176,6 +193,10 @@ export function resolveWidgetQuerySpec(
       : undefined;
 
   const dim = input.dimension ?? null;
+  if (dim === "BY_GOAL_PROGRESS") {
+    dataMeasure = "MONEY";
+    aggregation = "SUM";
+  }
   const timelineBucketTrim = input.timelineBucketFieldKey?.trim();
   const groupByTrim = input.groupByCustomFieldKey?.trim();
 
@@ -190,6 +211,15 @@ export function resolveWidgetQuerySpec(
       dim === "BY_DAY" && timelineBucketTrim ? timelineBucketTrim : undefined,
     groupByCustomFieldKey:
       dim === "BY_CUSTOM_VALUE" && groupByTrim ? groupByTrim : undefined,
+    byDayAnchor:
+      dim === "BY_DAY" && input.byDayAnchor === "UPDATED_AT"
+        ? "UPDATED_AT"
+        : undefined,
+    gaugeTargetMoney:
+      typeof input.gaugeTargetMoney === "number" &&
+      Number.isFinite(input.gaugeTargetMoney)
+        ? input.gaugeTargetMoney
+        : undefined,
     dataMeasure,
     aggregation,
     customFieldKey: input.customFieldKey,
@@ -198,6 +228,8 @@ export function resolveWidgetQuerySpec(
     filterTagIds: filterGroups ? undefined : input.filterTagIds,
     filterCreatedFrom: filterGroups ? undefined : input.filterCreatedFrom,
     filterCreatedTo: filterGroups ? undefined : input.filterCreatedTo,
+    filterUpdatedFrom: filterGroups ? undefined : input.filterUpdatedFrom,
+    filterUpdatedTo: filterGroups ? undefined : input.filterUpdatedTo,
     filterCustomFields: filterGroups ? undefined : input.filterCustomFields,
     includeClosed: input.includeClosed,
     includeArchived: input.includeArchived,
@@ -229,6 +261,22 @@ export const widgetQuerySpecSchema = widgetQuerySpecInputSchema.superRefine(
           "groupByCustomFieldKey é obrigatório quando a dimensão é valor de campo customizado",
         path: ["groupByCustomFieldKey"],
       });
+    }
+    if (val.dimension === "BY_GOAL_PROGRESS") {
+      if (val.gaugeTargetMoney == null || val.gaugeTargetMoney <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "gaugeTargetMoney deve ser > 0 para meta / atingimento",
+          path: ["gaugeTargetMoney"],
+        });
+      }
+      if (val.dataMeasure && val.dataMeasure !== "MONEY") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Meta / atingimento usa medida Valor (R$)",
+          path: ["dataMeasure"],
+        });
+      }
     }
   },
 );

@@ -1,44 +1,41 @@
 import { firstOfMonthYmd, todayYmdBrazil } from "../common/calendar-brazil.util";
 import type { LayoutJson } from "./dashboard-layout.zod";
 
+/** Meta padrão (R$) para cartão de atingimento — ajustável no cartão depois. */
+export const DEFAULT_SALES_GOAL_MONEY = 100_000;
+
+function monthTitlePtBr(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m) return ymd;
+  const day = d && d >= 1 && d <= 28 ? d : 15;
+  const d0 = new Date(Date.UTC(y, m - 1, day));
+  const raw = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(d0);
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
 /**
  * Layout pronto do painel "Vendas — Visão geral".
- * Usa apenas dimensões e filtros já suportados pelo motor de query.
+ * KPIs do mês por data de atualização (fechamento aproximado em WON),
+ * barras de receita ganha no mês civil, gauge de meta.
  *
- * Grid de 12 colunas; uma "linha de KPI" tem h=3 e cada cartão w=3.
- * Gráficos têm h=6 (≈ 264px de altura com rowHeight=44).
+ * Grid de 12 colunas; linha de KPI h=3; gráficos h=6.
  */
 export function buildDefaultSalesBoardLayout(pipelineId: string): LayoutJson {
   const todayBr = todayYmdBrazil();
   const monthStart = firstOfMonthYmd(todayBr);
+  const monthTitle = monthTitlePtBr(monthStart);
 
-  const baseFiltersOpen = {
-    filterStatuses: ["OPEN" as const],
-  };
-  /** Deals criados no mês civil (BR), qualquer status — só filtro de data. */
-  const baseFiltersCreatedThisMonth = {
-    filterGroups: [
-      {
-        rows: [
-          {
-            field: "createdAt" as const,
-            op: "IS" as const,
-            createdFrom: monthStart,
-            createdTo: todayBr,
-          },
-        ],
-      },
-    ],
-  };
-  const baseFiltersWonThisMonth = {
-    filterStatuses: ["WON" as const],
+  const filterWonUpdatedThisMonth = {
     filterGroups: [
       {
         rows: [
           { field: "status" as const, op: "IS" as const, statusCodes: ["WON" as const] },
           {
             rowJoin: "AND" as const,
-            field: "createdAt" as const,
+            field: "updatedAt" as const,
             op: "IS" as const,
             createdFrom: monthStart,
             createdTo: todayBr,
@@ -46,31 +43,10 @@ export function buildDefaultSalesBoardLayout(pipelineId: string): LayoutJson {
         ],
       },
     ],
-  };
-  const baseFiltersLostThisMonth = {
-    filterStatuses: ["LOST" as const],
-    filterGroups: [
-      {
-        rows: [
-          { field: "status" as const, op: "IS" as const, statusCodes: ["LOST" as const] },
-          {
-            rowJoin: "AND" as const,
-            field: "createdAt" as const,
-            op: "IS" as const,
-            createdFrom: monthStart,
-            createdTo: todayBr,
-          },
-        ],
-      },
-    ],
-  };
-  const baseFiltersWonAll = {
-    filterStatuses: ["WON" as const],
   };
 
   let yCursor = 0;
 
-  /** Linha de 4 KPIs (h=3, w=3 cada). */
   function kpiRow(
     items: { id: string; title: string; spec: Record<string, unknown> }[],
   ) {
@@ -95,166 +71,83 @@ export function buildDefaultSalesBoardLayout(pipelineId: string): LayoutJson {
   widgets.push(
     ...kpiRow([
       {
-        id: "seed_kpi_in_neg",
-        title: "Em negociação",
+        id: "seed_kpi_sales_value_month",
+        title: "Valor de vendas (no mês)",
         spec: {
           dataMeasure: "MONEY",
           aggregation: "SUM",
-          ...baseFiltersOpen,
+          ...filterWonUpdatedThisMonth,
         },
       },
       {
-        id: "seed_kpi_won_money_month",
-        title: "Vendido no mês",
+        id: "seed_kpi_sales_count_month",
+        title: "Número de vendas (no mês)",
+        spec: {
+          dataMeasure: "QUANTITY",
+          aggregation: "SUM",
+          ...filterWonUpdatedThisMonth,
+        },
+      },
+      {
+        id: "seed_kpi_ticket_avg_month",
+        title: "Ticket médio (no mês)",
         spec: {
           dataMeasure: "MONEY",
-          aggregation: "SUM",
-          ...baseFiltersWonThisMonth,
+          aggregation: "AVG",
+          ...filterWonUpdatedThisMonth,
         },
       },
       {
-        id: "seed_kpi_won_qty_month",
-        title: "Ganhos no mês",
+        id: "seed_kpi_sales_cycle_month",
+        title: "Ciclo de vendas (média, dias)",
         spec: {
-          dataMeasure: "QUANTITY",
-          aggregation: "SUM",
-          ...baseFiltersWonThisMonth,
-        },
-      },
-      {
-        id: "seed_kpi_new_deals_month",
-        title: "Novos no mês",
-        spec: {
-          dataMeasure: "QUANTITY",
-          aggregation: "SUM",
-          ...baseFiltersCreatedThisMonth,
-        },
-      },
-    ]),
-  );
-
-  widgets.push(
-    ...kpiRow([
-      {
-        id: "seed_kpi_open_count",
-        title: "Deals abertos",
-        spec: {
-          dataMeasure: "QUANTITY",
-          aggregation: "SUM",
-          ...baseFiltersOpen,
-        },
-      },
-      {
-        id: "seed_kpi_lost_month",
-        title: "Perdidos no mês",
-        spec: {
-          dataMeasure: "QUANTITY",
-          aggregation: "SUM",
-          ...baseFiltersLostThisMonth,
-        },
-      },
-      {
-        id: "seed_kpi_won_total_all",
-        title: "Total vendido (geral)",
-        spec: {
-          dataMeasure: "MONEY",
-          aggregation: "SUM",
-          ...baseFiltersWonAll,
-        },
-      },
-      {
-        id: "seed_kpi_won_qty_all",
-        title: "Deals ganhos (total)",
-        spec: {
-          dataMeasure: "QUANTITY",
-          aggregation: "SUM",
-          ...baseFiltersWonAll,
+          dataMeasure: "AVG_CYCLE_DAYS",
+          ...filterWonUpdatedThisMonth,
         },
       },
     ]),
   );
 
   widgets.push({
-    id: "seed_bar_daily_created",
+    id: "seed_bar_revenue_won_month",
     type: "BAR",
-    title: "Volume diário — últimos 30 dias",
+    title: `Receita ganha por dia — ${monthTitle}`,
     grid: { x: 0, y: yCursor, w: 8, h: 6 },
     querySpec: {
       source: "DEALS",
       pipelineId,
       dimension: "BY_DAY",
-      days: 30,
-      dataMeasure: "QUANTITY",
+      timelineStart: monthStart,
+      fillTimelineMonth: true,
+      byDayAnchor: "UPDATED_AT",
+      dataMeasure: "MONEY",
       aggregation: "SUM",
-      filterStatuses: ["OPEN", "WON", "LOST"],
+          ...filterWonUpdatedThisMonth,
     },
     barChart: {
-      showAverageLine: true,
+      showAverageLine: false,
       showLegend: false,
-      timePreset: "LAST_30_DAYS",
+      timePreset: "THIS_MONTH",
       xGroupBy: "DAY",
-      seriesDisplay: "LINE",
+      seriesDisplay: "BAR",
     },
   });
 
   widgets.push({
-    id: "seed_pie_status",
+    id: "seed_donut_goal_month",
     type: "DONUT",
-    title: "Distribuição por status",
+    title: `Atingimento da meta — ${monthTitle}`,
     grid: { x: 8, y: yCursor, w: 4, h: 6 },
     querySpec: {
       source: "DEALS",
       pipelineId,
-      dimension: "BY_STATUS",
-      dataMeasure: "QUANTITY",
-      aggregation: "SUM",
-      filterStatuses: ["OPEN", "WON", "LOST"],
-    },
-  });
-  yCursor += 6;
-
-  widgets.push({
-    id: "seed_bar_stage_funnel",
-    type: "BAR",
-    title: "Funil — deals abertos por etapa",
-    grid: { x: 0, y: yCursor, w: 6, h: 6 },
-    querySpec: {
-      source: "DEALS",
-      pipelineId,
-      dimension: "BY_STAGE",
-      dataMeasure: "QUANTITY",
-      aggregation: "SUM",
-      ...baseFiltersOpen,
-    },
-    barChart: {
-      showAverageLine: false,
-      showLegend: false,
-      timePreset: "LAST_30_DAYS",
-      xGroupBy: "DAY",
-      seriesDisplay: "BAR",
-    },
-  });
-
-  widgets.push({
-    id: "seed_bar_open_value_by_stage",
-    type: "BAR",
-    title: "Valor em aberto por etapa (R$)",
-    grid: { x: 6, y: yCursor, w: 6, h: 6 },
-    querySpec: {
-      source: "DEALS",
-      pipelineId,
-      dimension: "BY_STAGE",
+      dimension: "BY_GOAL_PROGRESS",
       dataMeasure: "MONEY",
       aggregation: "SUM",
-      ...baseFiltersOpen,
+      gaugeTargetMoney: DEFAULT_SALES_GOAL_MONEY,
+          ...filterWonUpdatedThisMonth,
     },
-    barChart: {
-      showAverageLine: false,
-      showLegend: false,
-      timePreset: "LAST_30_DAYS",
-      xGroupBy: "DAY",
-      seriesDisplay: "BAR",
-    },
+    donutChart: { variant: "semicircle" },
   });
   yCursor += 6;
 

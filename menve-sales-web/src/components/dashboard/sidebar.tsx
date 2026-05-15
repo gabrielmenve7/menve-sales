@@ -39,7 +39,7 @@ export function Sidebar({
   const linkClass = (active: boolean) =>
     cn(
       "flex items-center rounded-lg text-[15px] font-medium leading-snug transition-colors",
-      collapsed ? "justify-center px-2 py-2.5" : "gap-2.5 px-2.5 py-2",
+      collapsed ? "justify-center px-4 py-2.5" : "gap-2.5 px-5 py-2",
       active
         ? "bg-neutral-200/90 font-semibold text-foreground dark:bg-white/[0.14] dark:text-white"
         : "text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.08] dark:hover:text-white",
@@ -52,7 +52,7 @@ export function Sidebar({
       <nav
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2",
-          collapsed ? "items-center px-1" : "px-1.5",
+          collapsed ? "items-center px-2" : "px-3",
         )}
       >
         {collapsed ? (
@@ -164,7 +164,7 @@ export function Sidebar({
         ) : null}
       </nav>
       <div className="shrink-0 border-t border-border/40 dark:border-border/30">
-        <div className="px-1.5 py-2">
+        <div className="px-3 py-2">
           <UserAccountMenu
             collapsed={collapsed}
             userName={userName}

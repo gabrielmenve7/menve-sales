@@ -13,6 +13,15 @@ export function getEvolutionEnv() {
   return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey };
 }
 
+/**
+ * Mesma normalização de `getEvolutionEnv().baseUrl` (trim + sem `/` final),
+ * inclusive quando a API Evolution fica atrás de um subpath (ex.: `/manager`).
+ */
+export function getEvolutionBaseUrlForDisplay(): string {
+  const u = process.env.EVOLUTION_BASE_URL?.trim().replace(/\/$/, "");
+  return u || "(EVOLUTION_BASE_URL não definido)";
+}
+
 function evolutionHeaders(apiKey: string) {
   return {
     "Content-Type": "application/json",
@@ -59,6 +68,7 @@ function formatWebhookSetFailure(
  */
 const WEBHOOK_EVENTS = [
   "MESSAGES_UPSERT",
+  "SEND_MESSAGE",
   "MESSAGES_UPDATE",
   "CONNECTION_UPDATE",
   "QRCODE_UPDATED",

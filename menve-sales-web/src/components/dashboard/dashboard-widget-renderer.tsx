@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { DollarSign, Hash, Target } from "lucide-react";
+import { CalendarClock, DollarSign, Hash, Target } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -78,6 +78,7 @@ function metricIconForSpec(spec: LayoutWidget["querySpec"]) {
       : spec.measure === "COUNT"
         ? "QUANTITY"
         : "QUANTITY");
+  if (dm === "AVG_CYCLE_DAYS") return CalendarClock;
   if (dm === "MONEY") return DollarSign;
   if (dm === "CUSTOM_NUMBER") return Hash;
   return Target;
@@ -95,6 +96,12 @@ function metricAccentForSpec(spec: LayoutWidget["querySpec"]): {
       : spec.measure === "COUNT"
         ? "QUANTITY"
         : "QUANTITY");
+  if (dm === "AVG_CYCLE_DAYS") {
+    return {
+      card: "border-l-4 border-l-amber-500 dark:border-l-amber-400",
+      icon: "bg-amber-500/12 text-amber-900 dark:bg-amber-400/15 dark:text-amber-100",
+    };
+  }
   if (dm === "MONEY") {
     return {
       card: "border-l-4 border-l-emerald-500 dark:border-l-emerald-400",
@@ -341,6 +348,15 @@ export function DashboardWidgetRenderer({
     const formatBarValue = (v: number) =>
       formatDashboardScalar(widget.querySpec, v, cfMeta);
 
+    const isGoalGauge = widget.querySpec.dimension === "BY_GOAL_PROGRESS";
+    const gaugeTarget = widget.querySpec.gaugeTargetMoney ?? 0;
+    const segmentDone =
+      chartData.find((s) => s.name === "Realizado")?.value ?? 0;
+    const pctLabel =
+      isGoalGauge && gaugeTarget > 0
+        ? Math.min(100, Math.round((segmentDone / gaugeTarget) * 100))
+        : null;
+
     if (widget.type === "BAR" && barCfg) {
       return (
         <BarChartCardBody
@@ -353,6 +369,9 @@ export function DashboardWidgetRenderer({
         />
       );
     }
+
+    const semi =
+      isGoalGauge || widget.donutChart?.variant === "semicircle";
 
     return (
       <Card
@@ -367,17 +386,25 @@ export function DashboardWidgetRenderer({
           </CardTitle>
         </CardHeader>
         <CardContent className="min-h-0 flex-1 px-2 pb-2 pt-0">
-          <div className="h-full min-h-[120px] w-full">
+          <div className="relative h-full min-h-[120px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+              <PieChart margin={semi ? { top: 4, bottom: 0 } : undefined}>
                 <Pie
                   data={chartData}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
-                  cy="50%"
-                  outerRadius="80%"
-                  innerRadius={widget.type === "DONUT" ? "55%" : 0}
+                  cy={semi ? "82%" : "50%"}
+                  startAngle={semi ? 180 : 0}
+                  endAngle={semi ? 0 : 360}
+                  outerRadius={semi ? "95%" : "80%"}
+                  innerRadius={
+                    widget.type === "DONUT"
+                      ? semi
+                        ? "68%"
+                        : "55%"
+                      : 0
+                  }
                   paddingAngle={1}
                 >
                   {chartData.map((_, i) => (
@@ -399,6 +426,16 @@ export function DashboardWidgetRenderer({
                 />
               </PieChart>
             </ResponsiveContainer>
+            {pctLabel != null ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-6 flex flex-col items-center">
+                <span className="text-2xl font-bold tabular-nums text-foreground">
+                  {pctLabel}%
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  da meta
+                </span>
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>

@@ -30,6 +30,13 @@ const barChartConfigSchema = z
   .strict()
   .optional();
 
+const donutChartConfigSchema = z
+  .object({
+    variant: z.enum(["full", "semicircle"]).optional(),
+  })
+  .strict()
+  .optional();
+
 export const layoutWidgetSchema = z.object({
   id: z.string().min(1),
   type: z.enum(["METRIC", "BAR", "PIE", "DONUT"]),
@@ -37,6 +44,7 @@ export const layoutWidgetSchema = z.object({
   grid: gridSchema,
   querySpec: widgetQuerySpecSchema,
   barChart: barChartConfigSchema,
+  donutChart: donutChartConfigSchema,
 });
 
 export const layoutJsonSchema = z.object({

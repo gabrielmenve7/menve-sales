@@ -12,6 +12,7 @@ import {
   createEvolutionInstance,
   deleteEvolutionInstance,
   fetchEvolutionConnectionState,
+  getEvolutionBaseUrlForDisplay,
   getEvolutionEnv,
   getPairingQrDataUrl,
   setEvolutionInstanceWebhook,
@@ -42,9 +43,28 @@ async function assertMetaGraphPhoneAccess(
 
 function appPublicUrl() {
   const u =
-    process.env.PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+    process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
   return u || "";
+}
+
+function isTemporaryWebhookUrl(url: string) {
+  const u = url.toLowerCase();
+  return (
+    u.includes("localhost") ||
+    u.includes("127.0.0.1") ||
+    u.includes(".ngrok-free.") ||
+    u.includes(".ngrok.") ||
+    u.includes("trycloudflare.com")
+  );
+}
+
+function assertProductionWebhookUrl(url: string) {
+  if (process.env.NODE_ENV !== "production") return;
+  if (!isTemporaryWebhookUrl(url)) return;
+  throw new BadRequestException(
+    `PUBLIC_APP_URL da API está apontando para URL temporária/local (${url}). Em produção, defina PUBLIC_APP_URL no serviço da API como a URL pública estável da API (ex.: https://menve-sales-production.up.railway.app) e faça redeploy.`,
+  );
 }
 
 function buildWebhookHeaders(): Record<string, string> | undefined {
@@ -89,6 +109,7 @@ export class WhatsappConnectionsService {
         "Configure PUBLIC_APP_URL ou NEXT_PUBLIC_APP_URL para o webhook.",
       );
     }
+    assertProductionWebhookUrl(appUrl);
     const { baseUrl, apiKey } = getEvolutionEnv();
     const connection = await this.prisma.whatsAppConnection.create({
       data: {
@@ -209,6 +230,7 @@ export class WhatsappConnectionsService {
     if (!appUrl) {
       throw new BadRequestException("Configure PUBLIC_APP_URL para o webhook.");
     }
+    assertProductionWebhookUrl(appUrl);
     const conn = await this.prisma.whatsAppConnection.findFirst({
       where: { id: connectionId, tenantId, provider: "EVOLUTION" },
     });
@@ -460,7 +482,13 @@ export class WhatsappConnectionsService {
       msg.includes("ETIMEDOUT")
     ) {
       return new ServiceUnavailableException(
-        `Evolution API indisponível (${process.env.EVOLUTION_BASE_URL}). Verifique se o serviço está rodando.`,
+        `Evolution API indisponível (${getEvolutionBaseUrlForDisplay()}). Verifique se o serviço está rodando e se EVOLUTION_BASE_URL na API Nest (ex.: Railway) inclui o subpath correto (ex.: /manager).`,
+      );
+    }
+    /** Resposta 5xx do Evolution (ou proxy) — não é “requisição inválida” do cliente. */
+    if (/Evolution[^:]*:\s*HTTP\s+5\d\d/i.test(msg)) {
+      return new ServiceUnavailableException(
+        `${fallback}: o Evolution retornou erro de servidor (502/503 etc.). URL base configurada: ${getEvolutionBaseUrlForDisplay()}. Confira se a API Nest alcança esse host/subpath e se a Evolution está no ar.`,
       );
     }
     const hint = fallback.includes("webhook")

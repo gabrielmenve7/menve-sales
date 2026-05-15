@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  History,
   Calendar,
   ChevronsUpDown,
   CircleDot,
@@ -74,6 +75,7 @@ const DIMENSION_OPTIONS: {
   { value: "BY_DAY", label: "Por dia (linha do tempo)" },
   { value: "BY_ASSIGNEE", label: "Por responsável" },
   { value: "BY_CUSTOM_VALUE", label: "Por valor de campo" },
+  { value: "BY_GOAL_PROGRESS", label: "Meta / atingimento (gauge)" },
 ];
 
 const BAR_X_STAGE = "x:stage";
@@ -634,7 +636,7 @@ const groupJoinSelectClass = cn(
   "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 );
 
-type DashFilterField = "status" | "tags" | "createdAt" | "customField";
+type DashFilterField = "status" | "tags" | "createdAt" | "updatedAt" | "customField";
 
 /** é = um valor / todas as tags; ou = vários status ou qualquer tag. */
 type DashFilterOp = "IS" | "OR";
@@ -649,6 +651,7 @@ const DASH_BUILTIN_LABELS: Record<
   status: "Status",
   tags: "Tags",
   createdAt: "Data de criação",
+  updatedAt: "Data de atualização",
 };
 
 type DashFilterRow =
@@ -670,6 +673,14 @@ type DashFilterRow =
       id: string;
       rowJoin?: DashRowJoin;
       field: "createdAt";
+      op: "IS";
+      createdFrom: string;
+      createdTo: string;
+    }
+  | {
+      id: string;
+      rowJoin?: DashRowJoin;
+      field: "updatedAt";
       op: "IS";
       createdFrom: string;
       createdTo: string;
@@ -725,6 +736,8 @@ function createDashFilterRowWithId(
       return { id, field: "tags", op: "IS", tagIds: [] };
     case "createdAt":
       return { id, field: "createdAt", op: "IS", createdFrom: "", createdTo: "" };
+    case "updatedAt":
+      return { id, field: "updatedAt", op: "IS", createdFrom: "", createdTo: "" };
     case "customField":
       return {
         id,
@@ -813,6 +826,14 @@ function savedRowToDashRow(
         createdFrom: r.createdFrom ?? "",
         createdTo: r.createdTo ?? "",
       };
+    case "updatedAt":
+      return {
+        id,
+        field: "updatedAt",
+        op: "IS",
+        createdFrom: r.createdFrom ?? "",
+        createdTo: r.createdTo ?? "",
+      };
     case "customField": {
       const key = r.customKey ?? "";
       const base = {
@@ -894,6 +915,14 @@ function dashRowToSaved(
       return {
         rowJoin,
         field: "createdAt",
+        op: "IS",
+        createdFrom: row.createdFrom || undefined,
+        createdTo: row.createdTo || undefined,
+      };
+    case "updatedAt":
+      return {
+        rowJoin,
+        field: "updatedAt",
         op: "IS",
         createdFrom: row.createdFrom || undefined,
         createdTo: row.createdTo || undefined,
@@ -1011,6 +1040,7 @@ function nextFieldToAdd(rows: DashFilterRow[]): DashFilterField | null {
   if (!taken.has("status")) return "status";
   if (!taken.has("tags")) return "tags";
   if (!taken.has("createdAt")) return "createdAt";
+  if (!taken.has("updatedAt")) return "updatedAt";
   return "customField";
 }
 
@@ -1047,6 +1077,11 @@ const DASH_BUILTIN_COLUMN_OPTIONS: {
     id: "builtin:createdAt",
     label: DASH_BUILTIN_LABELS.createdAt,
     Icon: Calendar,
+  },
+  {
+    id: "builtin:updatedAt",
+    label: DASH_BUILTIN_LABELS.updatedAt,
+    Icon: History,
   },
 ];
 
@@ -1333,6 +1368,7 @@ function barYMeasureButtonLabel(
 ): string {
   if (dataMeasure === "QUANTITY") return "Número de deals";
   if (dataMeasure === "MONEY") return "Valor do negócio (R$)";
+  if (dataMeasure === "AVG_CYCLE_DAYS") return "Ciclo médio (dias)";
   const cf = dealCustomFields.find((c) => c.key === customFieldKey);
   return cf?.name ?? "Campo numérico…";
 }
@@ -1576,7 +1612,13 @@ export function DashboardWidgetConfigDialog({
   const [barFillFullMonth, setBarFillFullMonth] = useState(false);
   const [barCustomDays, setBarCustomDays] = useState(30);
   const [barXGroupBy, setBarXGroupBy] = useState<BarXGroupBy>("DAY");
-  /** BY_DAY: chave do campo DATE para eixo; vazio = criação do deal. */
+  /** BY_DAY sem campo Data custom: bucket por criação ou por atualização. */
+  const [byDayAnchor, setByDayAnchor] = useState<"CREATED_AT" | "UPDATED_AT">(
+    "CREATED_AT",
+  );
+  /** BY_GOAL_PROGRESS: meta em R$. */
+  const [gaugeTargetMoney, setGaugeTargetMoney] = useState(100_000);
+  const [donutGaugeShape, setDonutGaugeShape] = useState(false);
   const [timelineBucketFieldKey, setTimelineBucketFieldKey] = useState("");
   /** Eixo X do gráfico em barras (estágio, status, responsável, timeline, campo). */
   const [barXColumnId, setBarXColumnId] = useState(BAR_X_STAGE);
@@ -1610,6 +1652,7 @@ export function DashboardWidgetConfigDialog({
     setDays(s.days ?? 30);
     setTimelineBucketFieldKey(s.timelineBucketFieldKey ?? "");
     setFilterGroups(specToFilterGroups(s, dealCustomFields));
+    setByDayAnchor(s.byDayAnchor === "UPDATED_AT" ? "UPDATED_AT" : "CREATED_AT");
     if (widget.type === "BAR") {
       const bc = { ...defaultBarChartConfig(), ...widget.barChart };
       setBarShowAverage(bc.showAverageLine ?? true);
@@ -1621,6 +1664,12 @@ export function DashboardWidgetConfigDialog({
       setBarXColumnId(inferBarXColumnIdFromSpec(s, dealCustomFields));
       setBarSeriesDisplay(bc.seriesDisplay === "LINE" ? "LINE" : "BAR");
     }
+    setGaugeTargetMoney(
+      typeof s.gaugeTargetMoney === "number" && Number.isFinite(s.gaugeTargetMoney)
+        ? s.gaugeTargetMoney
+        : 100_000,
+    );
+    setDonutGaugeShape(widget.donutChart?.variant === "semicircle");
   }, [widget, open, dealCustomFields]);
 
   const filtersAreDefault = useMemo(() => {
@@ -1846,7 +1895,10 @@ export function DashboardWidgetConfigDialog({
       source: "DEALS",
       pipelineId,
       dataMeasure,
-      aggregation: dataMeasure === "QUANTITY" ? "SUM" : aggregation,
+      aggregation:
+        dataMeasure === "QUANTITY" || dataMeasure === "AVG_CYCLE_DAYS"
+          ? "SUM"
+          : aggregation,
       customFieldKey:
         dataMeasure === "CUSTOM_NUMBER" ? customFieldKey || undefined : undefined,
       filterGroups: filterGroupsPayload,
@@ -1858,6 +1910,8 @@ export function DashboardWidgetConfigDialog({
       delete spec.fillTimelineMonth;
       delete spec.timelineBucketFieldKey;
       delete spec.days;
+      delete spec.gaugeTargetMoney;
+      delete spec.byDayAnchor;
     } else if (isBar) {
       const x = parseBarXColumnId(barXColumnId);
       spec.dimension = x.dimension;
@@ -1867,6 +1921,7 @@ export function DashboardWidgetConfigDialog({
       delete spec.fillTimelineMonth;
       delete spec.days;
 
+      delete spec.byDayAnchor;
       if (x.dimension === "BY_CUSTOM_VALUE" && x.groupByCustomFieldKey) {
         spec.groupByCustomFieldKey = x.groupByCustomFieldKey;
       }
@@ -1874,6 +1929,9 @@ export function DashboardWidgetConfigDialog({
       if (x.dimension === "BY_DAY") {
         const tb = x.timelineBucketFieldKey?.trim();
         if (tb) spec.timelineBucketFieldKey = tb;
+        if (!tb && byDayAnchor === "UPDATED_AT") {
+          spec.byDayAnchor = "UPDATED_AT";
+        }
         if (barTimePreset === "THIS_MONTH") {
           spec.timelineStart = firstDayOfMonthIsoLocal();
           spec.fillTimelineMonth = barFillFullMonth;
@@ -1897,7 +1955,14 @@ export function DashboardWidgetConfigDialog({
       delete spec.timelineStart;
       delete spec.fillTimelineMonth;
       delete spec.timelineBucketFieldKey;
-      if (spec.dimension === "BY_DAY") {
+      delete spec.byDayAnchor;
+      delete spec.gaugeTargetMoney;
+      delete spec.days;
+      if (spec.dimension === "BY_GOAL_PROGRESS") {
+        spec.gaugeTargetMoney = Math.max(1, Math.floor(gaugeTargetMoney));
+        spec.dataMeasure = "MONEY";
+        spec.aggregation = "SUM";
+      } else if (spec.dimension === "BY_DAY") {
         spec.days = Math.min(366, Math.max(1, days));
       }
     }
@@ -1917,6 +1982,12 @@ export function DashboardWidgetConfigDialog({
         xGroupBy: spec.dimension === "BY_DAY" ? barXGroupBy : "DAY",
         seriesDisplay: barSeriesDisplay,
       };
+    } else if (widget.type === "DONUT" || widget.type === "PIE") {
+      if (donutGaugeShape) {
+        next.donutChart = { variant: "semicircle" };
+      } else {
+        next.donutChart = undefined;
+      }
     }
     onSave(next);
     onOpenChange(false);
@@ -2109,6 +2180,34 @@ export function DashboardWidgetConfigDialog({
                             ))}
                           </select>
                         </div>
+                        {parseBarXColumnId(barXColumnId).dimension === "BY_DAY" &&
+                        !parseBarXColumnId(barXColumnId).timelineBucketFieldKey ? (
+                          <div className="grid gap-1.5">
+                            <Label
+                              htmlFor="dw-bar-day-anchor"
+                              className="text-foreground"
+                            >
+                              Data no eixo (por dia)
+                            </Label>
+                            <select
+                              id="dw-bar-day-anchor"
+                              className={panel.control}
+                              value={byDayAnchor}
+                              onChange={(e) =>
+                                setByDayAnchor(
+                                  e.target.value as "CREATED_AT" | "UPDATED_AT",
+                                )
+                              }
+                            >
+                              <option value="CREATED_AT">
+                                Criação do deal
+                              </option>
+                              <option value="UPDATED_AT">
+                                Atualização (fechamento aprox.)
+                              </option>
+                            </select>
+                          </div>
+                        ) : null}
                       </>
                     ) : null}
                   </div>
@@ -2197,6 +2296,10 @@ export function DashboardWidgetConfigDialog({
                       onChange={(e) =>
                         setDataMeasure(e.target.value as DataMeasure)
                       }
+                      disabled={
+                        !isMetric &&
+                        (dimension || "BY_STAGE") === "BY_GOAL_PROGRESS"
+                      }
                     >
                       <option
                         value="QUANTITY"
@@ -2216,9 +2319,17 @@ export function DashboardWidgetConfigDialog({
                       >
                         Campo customizado
                       </option>
+                      {isMetric ? (
+                        <option
+                          value="AVG_CYCLE_DAYS"
+                          className="bg-popover text-popover-foreground"
+                        >
+                          Ciclo médio (dias)
+                        </option>
+                      ) : null}
                     </select>
                   </div>
-                  {dataMeasure !== "QUANTITY" ? (
+                  {dataMeasure !== "QUANTITY" && dataMeasure !== "AVG_CYCLE_DAYS" ? (
                     <div className="grid gap-1.5">
                       <Label htmlFor="dw-calc" className="text-foreground">
                         Cálculo
@@ -2292,13 +2403,16 @@ export function DashboardWidgetConfigDialog({
                           id="dw-dim"
                           className={panel.control}
                           value={dimension || "BY_STAGE"}
-                          onChange={(e) =>
-                            setDimension(
-                              e.target.value as NonNullable<
-                                WidgetQuerySpec["dimension"]
-                              >,
-                            )
-                          }
+                          onChange={(e) => {
+                            const v = e.target.value as NonNullable<
+                              WidgetQuerySpec["dimension"]
+                            >;
+                            setDimension(v);
+                            if (v === "BY_GOAL_PROGRESS") {
+                              setDataMeasure("MONEY");
+                              setAggregation("SUM");
+                            }
+                          }}
                         >
                           {DIMENSION_OPTIONS.map((o) => (
                             <option
@@ -2311,6 +2425,43 @@ export function DashboardWidgetConfigDialog({
                           ))}
                         </select>
                       </div>
+                      {(dimension || "BY_STAGE") === "BY_GOAL_PROGRESS" ? (
+                        <div className="grid gap-1.5">
+                          <Label
+                            htmlFor="dw-gauge-target"
+                            className="text-foreground"
+                          >
+                            Meta (R$)
+                          </Label>
+                          <Input
+                            id="dw-gauge-target"
+                            type="number"
+                            min={1}
+                            step={1000}
+                            value={gaugeTargetMoney}
+                            onChange={(e) =>
+                              setGaugeTargetMoney(
+                                Math.max(1, Number(e.target.value) || 1),
+                              )
+                            }
+                            className={panel.control}
+                          />
+                          <p className={panel.muted}>
+                            Compara a soma do valor dos deals filtrados com esta
+                            meta.
+                          </p>
+                        </div>
+                      ) : null}
+                      {widget.type === "DONUT" ? (
+                        <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                          <BarConfigToggle
+                            id="dw-donut-semicircle"
+                            label="Gauge (meia rosca)"
+                            checked={donutGaugeShape}
+                            onCheckedChange={setDonutGaugeShape}
+                          />
+                        </div>
+                      ) : null}
                       {(dimension || "BY_STAGE") === "BY_DAY" ? (
                         <div className="grid gap-1.5">
                           <Label htmlFor="dw-days" className="text-foreground">
@@ -2584,7 +2735,7 @@ export function DashboardWidgetConfigDialog({
                           ) : null}
                         </div>
                       ) : null}
-                      {row.field === "createdAt" ? (
+                      {(row.field === "createdAt" || row.field === "updatedAt") ? (
                         <div className="flex min-w-0 flex-1 flex-wrap gap-2">
                           <div className="grid min-w-[8.5rem] flex-1 gap-1">
                             <Label className="text-[10px] text-muted-foreground">
@@ -2601,7 +2752,8 @@ export function DashboardWidgetConfigDialog({
                                       ...g,
                                       rows: g.rows.map((r) =>
                                         r.id === row.id &&
-                                        r.field === "createdAt"
+                                        (r.field === "createdAt" ||
+                                          r.field === "updatedAt")
                                           ? {
                                               ...r,
                                               createdFrom: e.target.value,
@@ -2630,7 +2782,8 @@ export function DashboardWidgetConfigDialog({
                                       ...g,
                                       rows: g.rows.map((r) =>
                                         r.id === row.id &&
-                                        r.field === "createdAt"
+                                        (r.field === "createdAt" ||
+                                          r.field === "updatedAt")
                                           ? {
                                               ...r,
                                               createdTo: e.target.value,

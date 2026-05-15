@@ -1,5 +1,6 @@
 import { apiServer } from "@/lib/api-server";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
+import { ContactPhotoAvatar } from "@/components/inbox/contact-photo-avatar";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -11,13 +12,6 @@ function getContactPhotoUrl(customData: unknown): string | null {
   }
   const raw = (customData as Record<string, unknown>).whatsappProfilePhotoUrl;
   return typeof raw === "string" && raw.trim() ? raw : null;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
-  return `${parts[0]!.slice(0, 1)}${parts[1]!.slice(0, 1)}`.toUpperCase();
 }
 
 type ContactBundle = {
@@ -64,18 +58,11 @@ export default async function ContactDetailPage({
             <Link href="/contacts">← Contatos</Link>
           </Button>
           <div className="flex items-center gap-3">
-            {photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={photoUrl}
-                alt={contact.name}
-                className="h-10 w-10 rounded-full object-cover"
-              />
-            ) : (
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-                {initials(contact.name)}
-              </span>
-            )}
+            <ContactPhotoAvatar
+              photoUrl={photoUrl}
+              name={contact.name}
+              sizeClass="h-10 w-10"
+            />
             <h1 className="text-xl font-semibold">{contact.name}</h1>
           </div>
           <p className="text-muted-foreground">

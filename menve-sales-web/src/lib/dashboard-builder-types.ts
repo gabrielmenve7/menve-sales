@@ -1,6 +1,10 @@
 export type DealStatusCode = "OPEN" | "WON" | "LOST" | "ARCHIVED";
 
-export type DataMeasure = "QUANTITY" | "MONEY" | "CUSTOM_NUMBER";
+export type DataMeasure =
+  | "QUANTITY"
+  | "MONEY"
+  | "CUSTOM_NUMBER"
+  | "AVG_CYCLE_DAYS";
 export type Aggregation = "SUM" | "AVG";
 
 /**
@@ -32,7 +36,7 @@ export function isWidgetFilterRollingDatePreset(
 export type WidgetFilterRowSaved = {
   /** Liga esta linha à anterior dentro do mesmo grupo (filtro duplo). */
   rowJoin?: "AND" | "OR";
-  field: "status" | "tags" | "createdAt" | "customField";
+  field: "status" | "tags" | "createdAt" | "updatedAt" | "customField";
   op?: "IS" | "OR";
   statusCodes?: DealStatusCode[];
   tagIds?: string[];
@@ -82,6 +86,11 @@ export type BarChartConfig = {
   seriesDisplay?: BarSeriesDisplay;
 };
 
+export type DonutChartConfig = {
+  /** `semicircle` = gauge (meia rosca). */
+  variant?: "full" | "semicircle";
+};
+
 export type WidgetQuerySpec = {
   source: "DEALS";
   pipelineId: string;
@@ -91,6 +100,7 @@ export type WidgetQuerySpec = {
     | "BY_DAY"
     | "BY_ASSIGNEE"
     | "BY_CUSTOM_VALUE"
+    | "BY_GOAL_PROGRESS"
     | null;
   /** Eixo X por valor de campo (não-Data) em customData. */
   groupByCustomFieldKey?: string;
@@ -109,6 +119,13 @@ export type WidgetQuerySpec = {
    * BY_DAY: agrupar por este campo Data do deal (customData). Vazio = data de criação do deal.
    */
   timelineBucketFieldKey?: string;
+  /**
+   * BY_DAY sem campo custom de data: qual data do deal define o bucket.
+   * `UPDATED_AT` aproxima o dia do fechamento (WON).
+   */
+  byDayAnchor?: "CREATED_AT" | "UPDATED_AT";
+  /** BY_GOAL_PROGRESS: meta em R$ (atingimento). */
+  gaugeTargetMoney?: number;
   /** Legado — ainda aceito pela API */
   measure?: "COUNT" | "SUM_VALUE";
   includeClosed?: boolean;
@@ -127,6 +144,8 @@ export type WidgetQuerySpec = {
   filterTagIds?: string[];
   filterCreatedFrom?: string;
   filterCreatedTo?: string;
+  filterUpdatedFrom?: string;
+  filterUpdatedTo?: string;
   filterCustomFields?: { key: string; value: string | number | boolean }[];
 };
 
@@ -140,6 +159,8 @@ export type LayoutWidget = {
   querySpec: WidgetQuerySpec;
   /** Só tipo BAR — configuração de tela e eixos conforme UX do gráfico de barras. */
   barChart?: BarChartConfig;
+  /** Só tipo DONUT/PIE — variante visual (ex.: gauge). */
+  donutChart?: DonutChartConfig;
 };
 
 export type LayoutJson = {
@@ -257,6 +278,10 @@ export function formatDashboardScalar(
         ? "QUANTITY"
         : "QUANTITY");
 
+  if (dm === "AVG_CYCLE_DAYS") {
+    const n = Math.round(value * 10) / 10;
+    return `${n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias`;
+  }
   if (dm === "MONEY") {
     return value.toLocaleString("pt-BR", {
       style: "currency",

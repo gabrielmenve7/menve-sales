@@ -295,13 +295,17 @@ export class EvolutionWhatsAppProvider implements IWhatsAppProvider {
   }
 }
 
-/** Evolution envia `event: "messages.upsert"`; ignorar outros para não tratar `data` de CONNECTION_UPDATE como mensagem. */
+/**
+ * Evolution envia `event: "messages.upsert"` para mensagens recebidas, mas algumas
+ * instalações/proxies usam `send.message` para mensagens enviadas pelo WhatsApp real.
+ * Ainda ignoramos eventos operacionais (connection/update, qrcode etc.).
+ */
 function evolutionEventIsMessagesUpsert(payload: Record<string, unknown>): boolean {
   const ev = payload.event;
   if (ev == null) return true;
   if (typeof ev !== "string") return true;
   const n = ev.trim().replace(/[.-]/g, "_").toUpperCase();
-  return n === "MESSAGES_UPSERT";
+  return n === "MESSAGES_UPSERT" || n === "SEND_MESSAGE";
 }
 
 function normalizeMessagesArray(
@@ -519,6 +523,37 @@ function extractTextFromMessage(
   return "";
 }
 
+function extractFallbackTextFromEvolutionData(
+  data: Record<string, unknown>,
+  message: Record<string, unknown> | undefined,
+): string {
+  const candidates: unknown[] = [
+    data.messageText,
+    data.text,
+    data.body,
+    data.caption,
+    data.message?.toString?.(),
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim() && c.trim() !== "[object Object]") {
+      return c.trim();
+    }
+  }
+
+  const typeRaw =
+    data.messageType ??
+    data.type ??
+    (message && Object.keys(unwrapProtoContent(message) ?? {})[0]);
+  const type = typeof typeRaw === "string" ? typeRaw.toLowerCase() : "";
+  if (type.includes("audio") || type.includes("ptt")) return "[Áudio]";
+  if (type.includes("image")) return "[Imagem]";
+  if (type.includes("video") || type.includes("sticker")) return "[Mídia]";
+  if (type.includes("document") || type.includes("pdf")) return "[Documento]";
+  if (type.includes("contact")) return "[Contato]";
+  if (type.includes("location")) return "[Localização]";
+  return "";
+}
+
 /** Mídia no webhook (áudio, imagem, PDF) quando a Evolution envia base64 no payload. */
 function extractWebhookMediaPayload(
   data: Record<string, unknown>,
@@ -618,7 +653,9 @@ function parseOneEvolutionMessage(data: Record<string, unknown>): {
     const parsed = tryParseJsonObject(rawMsg.trim());
     if (parsed) message = parsed;
   }
-  const text = extractTextFromMessage(message);
+  const text =
+    extractTextFromMessage(message) ||
+    extractFallbackTextFromEvolutionData(data, message);
   if (!text) return null;
 
   const id = String(key.id ?? "");
