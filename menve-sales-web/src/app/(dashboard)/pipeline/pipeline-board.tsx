@@ -29,10 +29,7 @@ import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/user/user-avatar";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { cn } from "@/lib/utils";
-import {
-  normalizedStageHex,
-  stageSolidPillStyle,
-} from "@/lib/stage-pill-style";
+import { stageSolidPillStyle } from "@/lib/stage-pill-style";
 import { PipelineDealDetailDialog } from "./pipeline-deal-detail-dialog";
 import {
   PipelineColumnNewDealFooterTrigger,
@@ -135,13 +132,7 @@ function DealCardPreviewTags({ tags }: { tags: Tag[] }) {
 }
 
 /** Só visual — usado no DragOverlay (fora da coluna com overflow). */
-function DealCardDragOverlayFace({
-  deal,
-  stageHex,
-}: {
-  deal: DealRow;
-  stageHex: string;
-}) {
+function DealCardDragOverlayFace({ deal }: { deal: DealRow }) {
   const previewTags = mergeDealPreviewTags(deal);
   const displayValue =
     deal.value != null && Number.isFinite(Number(deal.value))
@@ -169,20 +160,15 @@ function DealCardDragOverlayFace({
           ) : null}
         </div>
         <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
-          <p
-            className="min-w-0 truncate text-[12.5px] font-semibold tabular-nums leading-none tracking-tight"
-            style={{ color: stageHex }}
-          >
+          <p className="min-w-0 truncate text-[12.5px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
             {formatDealCurrency(displayValue)}
           </p>
           <div className="flex shrink-0 items-center gap-1 text-[10px] font-normal leading-none tabular-nums text-muted-foreground">
             <DealCardPreviewTags tags={previewTags} />
-            <span className="flex size-6 items-center justify-center" style={{ color: stageHex }}>
+            <span className="flex size-6 items-center justify-center text-foreground/80">
               <WhatsAppLogo className="size-3.5" />
             </span>
-            <span title="Atualizado" style={{ color: stageHex }}>
-              {relativeShort(deal.updatedAt)}
-            </span>
+            <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
           </div>
         </div>
       </div>
@@ -229,12 +215,9 @@ function LeadAssigneeAvatar({
 
 function DealCard({
   deal,
-  stageHex,
   onOpenDetail,
 }: {
   deal: DealRow;
-  /** Cor da etapa (hex canónico) para borda e acentos do cartão. */
-  stageHex: string;
   onOpenDetail: (d: DealRow) => void;
 }) {
   const router = useRouter();
@@ -543,10 +526,7 @@ function DealCard({
           </div>
 
         <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
-          <p
-            className="min-w-0 truncate text-[12.5px] font-semibold tabular-nums leading-none tracking-tight"
-            style={{ color: stageHex }}
-          >
+          <p className="min-w-0 truncate text-[12.5px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
             {formatDealCurrency(displayValue)}
           </p>
           {!renaming ? (
@@ -557,16 +537,13 @@ function DealCard({
                 href={`/inbox?contact=${encodeURIComponent(deal.contactId)}`}
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="flex size-6 items-center justify-center rounded-md outline-none transition-colors hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring"
-                style={{ color: stageHex }}
+                className="flex size-6 items-center justify-center rounded-md text-foreground/80 outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 title="Abrir conversa no WhatsApp"
                 aria-label={`Abrir conversa com ${deal.contact.name} no WhatsApp`}
               >
                 <WhatsAppLogo className="size-3.5" />
               </Link>
-              <span title="Atualizado" style={{ color: stageHex }}>
-                {relativeShort(deal.updatedAt)}
-              </span>
+              <span title="Atualizado">{relativeShort(deal.updatedAt)}</span>
             </div>
           ) : null}
         </div>
@@ -590,7 +567,6 @@ function StageColumn({
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
   const sum = deals.reduce((acc, d) => acc + Number(d.value ?? 0), 0);
-  const stageHex = normalizedStageHex(stage.color, "#94a3b8");
 
   return (
     <div
@@ -648,7 +624,6 @@ function StageColumn({
                 <DealCard
                   key={d.id}
                   deal={d}
-                  stageHex={stageHex}
                   onOpenDetail={onOpenDetail}
                 />
               ))}
@@ -915,14 +890,7 @@ export function PipelineBoard({
         </div>
         <DragOverlay zIndex={120} dropAnimation={null}>
           {activeDragDeal ? (
-            <DealCardDragOverlayFace
-              deal={activeDragDeal}
-              stageHex={normalizedStageHex(
-                pipeline.stages.find((s) => s.id === activeDragDeal.stageId)
-                  ?.color,
-                "#94a3b8",
-              )}
-            />
+            <DealCardDragOverlayFace deal={activeDragDeal} />
           ) : null}
         </DragOverlay>
       </DndContext>
