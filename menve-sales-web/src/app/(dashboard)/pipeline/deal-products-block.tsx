@@ -7,7 +7,7 @@ import {
   replaceDealItems,
   type DealItemRow,
 } from "@/actions/deals";
-import { listProducts, type ProductOption } from "@/actions/products";
+import { listProductsForPicker, type ProductOption } from "@/actions/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -109,27 +109,41 @@ export function DealProductsBlock({
     setError(null);
     void (async () => {
       try {
-        const [items, prods] = await Promise.all([
-          getDealItems(dealId),
-          listProducts(),
-        ]);
+        const items = await getDealItems(dealId);
         if (cancelled) return;
         const initial =
           items.length > 0 ? items.map(rowFromServer) : [emptyRow()];
         setRows(initial);
         setBaselineKey(rowsSignature(initial));
-        setProducts(prods);
       } catch (e) {
         if (cancelled) return;
         setError(
-          e instanceof Error ? e.message : "Não foi possível carregar produtos.",
+          e instanceof Error ? e.message : "Não foi possível carregar itens.",
         );
-        setProducts([]);
+        setRows([emptyRow()]);
       } finally {
-        if (cancelled) return;
-        setLoading(false);
-        setCatalogLoading(false);
+        if (!cancelled) setLoading(false);
       }
+
+      void (async () => {
+        try {
+          const prods = await listProductsForPicker();
+          if (cancelled) return;
+          setProducts(prods);
+        } catch (e) {
+          if (cancelled) return;
+          setError(
+            (prev) =>
+              prev ??
+              (e instanceof Error
+                ? e.message
+                : "Não foi possível carregar o catálogo."),
+          );
+          setProducts([]);
+        } finally {
+          if (!cancelled) setCatalogLoading(false);
+        }
+      })();
     })();
     return () => {
       cancelled = true;

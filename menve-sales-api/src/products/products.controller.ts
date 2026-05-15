@@ -20,6 +20,11 @@ export class ProductsController {
     return this.products.list(u.tenantId);
   }
 
+  @Get("picker")
+  listForPicker(@ReqUser() u: RequestUser) {
+    return this.products.listForPicker(u.tenantId);
+  }
+
   @Get(":id")
   getOne(@ReqUser() u: RequestUser, @Param("id") id: string) {
     return this.products.getById(u.tenantId, id);

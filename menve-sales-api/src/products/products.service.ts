@@ -56,6 +56,13 @@ function toDto(row: ProductRow): ProductDto {
   };
 }
 
+/** Lista mínima para selects (sem coleção nem timestamps). */
+export type ProductPickerDto = {
+  id: string;
+  name: string;
+  price: number;
+};
+
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -82,6 +89,19 @@ export class ProductsService {
       },
     });
     return rows.map(toDto);
+  }
+
+  async listForPicker(tenantId: string): Promise<ProductPickerDto[]> {
+    const rows = await this.prisma.product.findMany({
+      where: { tenantId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, price: true },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      price: Number(r.price),
+    }));
   }
 
   async getById(tenantId: string, id: string): Promise<ProductDto> {

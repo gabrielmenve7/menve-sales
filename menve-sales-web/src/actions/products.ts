@@ -12,7 +12,7 @@ export type ProductOption = {
   collectionName: string | null;
 };
 
-/** Lista produtos do tenant ativo (para selects em outras telas, ex.: bloco Produtos do deal). */
+/** Lista produtos do tenant (tela de produtos / edição completa). */
 export async function listProducts(): Promise<ProductOption[]> {
   const rows = await apiServer<
     {
@@ -27,6 +27,19 @@ export async function listProducts(): Promise<ProductOption[]> {
     name: r.name,
     price: Number(r.price),
     collectionName: r.collection?.name ?? null,
+  }));
+}
+
+/** Catálogo mínimo para o funil (picker mais rápido: sem coleção no payload). */
+export async function listProductsForPicker(): Promise<ProductOption[]> {
+  const rows = await apiServer<{ id: string; name: string; price: number }[]>(
+    "/products/picker",
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    price: Number(r.price),
+    collectionName: null,
   }));
 }
 

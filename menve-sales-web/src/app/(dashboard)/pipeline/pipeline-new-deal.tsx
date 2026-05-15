@@ -7,7 +7,7 @@ import {
   listContactsForPipeline,
 } from "@/actions/contacts";
 import { createDeal } from "@/actions/deals";
-import { listProducts, type ProductOption } from "@/actions/products";
+import { listProductsForPicker, type ProductOption } from "@/actions/products";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -117,7 +117,7 @@ export function PipelineNewDealDialog({
       try {
         const [c, p] = await Promise.all([
           listContactsForPipeline(),
-          listProducts(),
+          listProductsForPicker(),
         ]);
         if (!cancelled) {
           setContacts(c);
