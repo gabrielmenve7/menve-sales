@@ -579,7 +579,7 @@ function StageColumn({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="truncate text-[12.5px] font-bold leading-tight text-foreground">
+              <h3 className="truncate text-[12.5px] font-bold uppercase leading-tight tracking-wide text-foreground">
                 {stage.name}
               </h3>
               <span className="inline-flex min-h-[1.375rem] min-w-[1.375rem] shrink-0 items-center justify-center rounded-md bg-black/[0.06] px-1.5 text-[10px] font-semibold tabular-nums text-foreground/80 dark:bg-white/10">
