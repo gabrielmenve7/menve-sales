@@ -88,13 +88,13 @@ function metricIconForSpec(spec: LayoutWidget["querySpec"]) {
   return Target;
 }
 
-/** Ícone do KPI: neutro (cores só nos gráficos). */
+/** Ícone do KPI: neutro, círculo suave (referência painel padrão). */
 function metricIconSurfaceClass(): string {
-  return "bg-muted/70 text-muted-foreground dark:bg-muted/50";
+  return "rounded-full bg-muted/60 text-muted-foreground dark:bg-muted/45";
 }
 
 const chartCardNeutralFrame =
-  "border border-border/60 bg-card shadow-sm dark:bg-card";
+  "rounded-[10px] border border-border/60 bg-card shadow-sm dark:bg-card";
 
 function formatBrl0(n: number) {
   return n.toLocaleString("pt-BR", {
@@ -131,12 +131,12 @@ function RankingTableCard({
   return (
     <Card
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl",
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-[10px]",
         chartCardNeutralFrame,
       )}
     >
       <CardHeader className="drag-handle shrink-0 cursor-grab pb-1 pt-3">
-        <CardTitle className="text-xs font-medium text-muted-foreground">
+        <CardTitle className="text-xs font-normal text-muted-foreground">
           {title}
         </CardTitle>
       </CardHeader>
@@ -256,19 +256,19 @@ export function DashboardWidgetRenderer({
       return (
         <Card
           className={cn(
-            "flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm",
+            "flex h-full flex-col overflow-hidden rounded-[10px] border border-border/60 bg-card shadow-sm",
           )}
         >
-          <CardHeader className="drag-handle cursor-grab space-y-0 px-5 pb-0 pt-5">
-            <div className="flex items-start justify-between gap-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="drag-handle cursor-grab space-y-0 px-4 pb-0 pt-4">
+            <div className="flex items-start justify-between gap-2">
+              <CardTitle className="text-xs font-normal leading-snug text-muted-foreground">
                 {title}
               </CardTitle>
-              <div className="size-9 shrink-0 animate-pulse rounded-lg bg-muted" />
+              <div className="size-8 shrink-0 animate-pulse rounded-full bg-muted" />
             </div>
           </CardHeader>
-          <CardContent className="flex flex-1 flex-col px-5 pb-5 pt-4">
-            <div className="h-9 w-28 animate-pulse rounded bg-muted" />
+          <CardContent className="flex flex-1 flex-col px-4 pb-4 pt-2">
+            <div className="h-8 w-24 animate-pulse rounded-md bg-muted" />
           </CardContent>
         </Card>
       );
@@ -277,12 +277,12 @@ export function DashboardWidgetRenderer({
     return (
       <Card
         className={cn(
-          "flex h-full flex-col overflow-hidden rounded-xl",
+          "flex h-full flex-col overflow-hidden",
           chartFrame,
         )}
       >
         <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
+          <CardTitle className="text-xs font-normal text-muted-foreground">
             {title}
           </CardTitle>
         </CardHeader>
@@ -295,9 +295,9 @@ export function DashboardWidgetRenderer({
 
   if (error) {
     return (
-      <Card className="flex h-full flex-col overflow-hidden rounded-xl border border-destructive/30 bg-card shadow-sm">
+      <Card className="flex h-full flex-col overflow-hidden rounded-[10px] border border-destructive/30 bg-card shadow-sm">
         <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
+          <CardTitle className="text-xs font-normal text-muted-foreground">
             {title}
           </CardTitle>
         </CardHeader>
@@ -315,16 +315,16 @@ export function DashboardWidgetRenderer({
       widget.type === "DONUT" ||
       widget.type === "RANKING"
         ? chartCardNeutralFrame
-        : "border border-border/60 bg-card shadow-sm";
+        : "rounded-[10px] border border-border/60 bg-card shadow-sm";
     return (
       <Card
         className={cn(
-          "flex h-full flex-col overflow-hidden rounded-xl bg-card/95",
+          "flex h-full flex-col overflow-hidden bg-card/95",
           emptyFrame,
         )}
       >
         <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
+          <CardTitle className="text-xs font-normal text-muted-foreground">
             {title}
           </CardTitle>
         </CardHeader>
@@ -359,27 +359,27 @@ export function DashboardWidgetRenderer({
     return (
       <Card
         className={cn(
-          "flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm",
+          "flex h-full flex-col overflow-hidden rounded-[10px] border border-border/60 bg-card shadow-sm",
         )}
       >
-        <CardHeader className="drag-handle cursor-grab space-y-0 px-5 pb-0 pt-5">
-          <div className="flex items-start justify-between gap-3">
-            <CardTitle className="text-sm font-medium leading-snug text-muted-foreground">
+        <CardHeader className="drag-handle cursor-grab space-y-0 px-4 pb-0 pt-4">
+          <div className="flex items-start justify-between gap-2">
+            <CardTitle className="text-xs font-normal leading-snug text-muted-foreground">
               {title}
             </CardTitle>
             <div
               className={cn(
-                "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                "flex size-8 shrink-0 items-center justify-center",
                 iconSurface,
               )}
               aria-hidden
             >
-              <Icon className="size-4 stroke-[1.75]" />
+              <Icon className="size-[15px] stroke-[1.6]" />
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-1 flex-col justify-center px-5 pb-5 pt-4">
-          <p className="text-3xl font-bold tabular-nums tracking-tight text-foreground">
+        <CardContent className="flex flex-1 flex-col justify-center px-4 pb-4 pt-1">
+          <p className="text-[1.375rem] font-bold leading-tight tabular-nums tracking-tight text-foreground sm:text-[1.5rem]">
             {formatted}
           </p>
         </CardContent>
@@ -461,12 +461,12 @@ export function DashboardWidgetRenderer({
     return (
       <Card
         className={cn(
-          "flex h-full flex-col overflow-hidden rounded-xl",
+          "flex h-full flex-col overflow-hidden",
           chartCardNeutralFrame,
         )}
       >
         <CardHeader className="drag-handle cursor-grab pb-1 pt-3">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
+          <CardTitle className="text-xs font-normal text-muted-foreground">
             {title}
           </CardTitle>
         </CardHeader>
@@ -534,9 +534,9 @@ export function DashboardWidgetRenderer({
   }
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+    <Card className="flex h-full flex-col overflow-hidden rounded-[10px] border border-border/60 bg-card shadow-sm">
       <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
-        <CardTitle className="text-xs font-medium text-muted-foreground">
+        <CardTitle className="text-xs font-normal text-muted-foreground">
           {title}
         </CardTitle>
       </CardHeader>
@@ -668,12 +668,12 @@ function BarChartCardBody({
   return (
     <Card
       className={cn(
-        "flex h-full flex-col overflow-hidden rounded-xl",
+        "flex h-full flex-col overflow-hidden",
         chartCardNeutralFrame,
       )}
     >
       <CardHeader className="drag-handle cursor-grab pb-1 pt-3">
-        <CardTitle className="text-xs font-medium text-muted-foreground">
+        <CardTitle className="text-xs font-normal text-muted-foreground">
           {title}
         </CardTitle>
       </CardHeader>

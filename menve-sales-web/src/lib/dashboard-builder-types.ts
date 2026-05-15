@@ -257,16 +257,6 @@ export function parseLayoutJson(raw: unknown): LayoutJson {
   return { schemaVersion: 1, widgets: [] };
 }
 
-function firstDayOfMonthIsoLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function todayIsoLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 /** Padrão alinhado ao protótipo de configuração do gráfico de barras. */
 export function defaultBarChartConfig(): BarChartConfig {
   return {
@@ -299,25 +289,15 @@ export function defaultQuerySpec(
     return { ...base, dimension: "BY_STATUS" };
   }
   if (widgetType === "RANKING") {
-    const monthStart = firstDayOfMonthIsoLocal();
-    const today = todayIsoLocal();
     return {
       source: "DEALS",
       pipelineId,
       dataMeasure: "QUANTITY",
       aggregation: "SUM",
-      filterStatuses: ["WON"],
       filterGroups: [
         {
           rows: [
             { field: "status", op: "IS", statusCodes: ["WON"] },
-            {
-              rowJoin: "AND",
-              field: "updatedAt",
-              op: "IS",
-              createdFrom: monthStart,
-              createdTo: today,
-            },
           ],
         },
       ],

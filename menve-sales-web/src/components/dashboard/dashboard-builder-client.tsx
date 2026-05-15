@@ -90,7 +90,7 @@ function nextGrid(widgets: LayoutWidget[], type: WidgetType) {
   for (const w of widgets) {
     maxY = Math.max(maxY, w.grid.y + w.grid.h);
   }
-  const h = type === "METRIC" ? 3 : 6;
+  const h = type === "METRIC" ? 4 : 6;
   return { x: 0, y: maxY, w: type === "METRIC" ? 3 : 6, h };
 }
 
@@ -398,7 +398,7 @@ export function DashboardBuilderClient({
       y: w.grid.y,
       w: w.grid.w,
       h: w.grid.h,
-      minW: 2,
+      minW: w.grid.w <= 1 ? 1 : 2,
       minH: 2,
     }));
   }, [activeBoard]);
@@ -560,7 +560,7 @@ export function DashboardBuilderClient({
                   <GridLayoutWithWidth
                     className="layout dashboard-grid-layout"
                     cols={12}
-                    rowHeight={44}
+                    rowHeight={46}
                     margin={[8, 8]}
                     layout={rglLayout}
                     onLayoutChange={onLayoutChange}
