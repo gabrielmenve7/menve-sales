@@ -24,13 +24,14 @@
   --sidebar: #f3f4f6;
   /* Colunas do funil (Kanban) — cinza-azulado suave sobre canvas quase branco */
   --kanban-column: #eef0f4;
-  /* Barras / pizza no dashboard (fundo de cartão claro → cinzas) */
-  --chart-bar-1: #3f3f46;
-  --chart-bar-2: #52525b;
-  --chart-bar-3: #71717a;
-  --chart-bar-4: #27272a;
-  --chart-bar-5: #525252;
-  --chart-line-stroke: #3f3f46;
+  /* Barras / pizza / linhas — paleta distinta sobre cartão claro */
+  --chart-bar-1: #0d9488;
+  --chart-bar-2: #2563eb;
+  --chart-bar-3: #7c3aed;
+  --chart-bar-4: #ca8a04;
+  --chart-bar-5: #db2777;
+  --chart-line-stroke: #0f7669;
+  --chart-ref-line: #14b8a6;
   /* Neutro: CTAs, links e bolhas enviadas — modo claro (ícones/botões escuros) */
   --primary: #171717;
   --primary-foreground: #fafafa;
@@ -61,13 +62,14 @@
   --input: #374151;
   --sidebar: #0f172a;
   --kanban-column: #374151;
-  /* Barras / pizza no dashboard (fundo de cartão escuro → brancos/off-white) */
-  --chart-bar-1: #ffffff;
-  --chart-bar-2: #f5f5f5;
-  --chart-bar-3: #e5e5e5;
-  --chart-bar-4: #fafafa;
-  --chart-bar-5: #d4d4d4;
-  --chart-line-stroke: #fafafa;
+  /* Barras / pizza — tons mais claros sobre cartão escuro */
+  --chart-bar-1: #2dd4bf;
+  --chart-bar-2: #60a5fa;
+  --chart-bar-3: #a78bfa;
+  --chart-bar-4: #fbbf24;
+  --chart-bar-5: #f472b6;
+  --chart-line-stroke: #5eead4;
+  --chart-ref-line: #2dd4bf;
   /* Neutro: bolhas enviadas e CTAs — modo escuro (ícones/botões claros) */
   --primary-solid: #f3f4f6;
   --primary-solid-fg: #111827;
@@ -239,5 +241,18 @@ body {
   .dark .inbox-chat-messages-pattern {
     background-color: var(--card);
     background-image: url("/inbox-chat-pattern-dark.svg");
+  }
+
+  /* Dashboard builder: placeholder ao arrastar cartões */
+  .dashboard-grid-layout .react-grid-item.react-grid-placeholder {
+    background: rgb(13 148 136 / 0.18) !important;
+    border-radius: var(--radius-lg);
+    border: 1px dashed rgb(13 148 136 / 0.45);
+    opacity: 1 !important;
+  }
+
+  .dark .dashboard-grid-layout .react-grid-item.react-grid-placeholder {
+    background: rgb(45 212 191 / 0.12) !important;
+    border-color: rgb(45 212 191 / 0.35);
   }
 }

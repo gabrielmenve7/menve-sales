@@ -21,12 +21,17 @@ export function DashboardKpiCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("border-border/60 shadow-sm", className)}>
+    <Card
+      className={cn(
+        "overflow-hidden border border-border/60 border-l-4 border-l-emerald-500 shadow-sm dark:border-l-emerald-400",
+        className,
+      )}
+    >
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
         <CardTitle className="text-[13px] font-medium text-muted-foreground">
           {label}
         </CardTitle>
-        <div className="rounded-md bg-primary-solid/10 p-1.5 text-primary-solid">
+        <div className="rounded-md bg-emerald-500/12 p-1.5 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200">
           <Icon className="size-4" strokeWidth={1.75} />
         </div>
       </CardHeader>

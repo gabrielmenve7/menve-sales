@@ -20,6 +20,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CHART_BAR_SEQUENCE, CHART_LINE_STROKE } from "@/lib/chart-colors";
+import { cn } from "@/lib/utils";
 import {
   customFieldByKey,
   defaultBarChartConfig,
@@ -82,6 +83,41 @@ function metricIconForSpec(spec: LayoutWidget["querySpec"]) {
   return Target;
 }
 
+/** Acento por tipo de medida (KPIs mais legíveis e semânticos). */
+function metricAccentForSpec(spec: LayoutWidget["querySpec"]): {
+  card: string;
+  icon: string;
+} {
+  const dm =
+    spec.dataMeasure ??
+    (spec.measure === "SUM_VALUE"
+      ? "MONEY"
+      : spec.measure === "COUNT"
+        ? "QUANTITY"
+        : "QUANTITY");
+  if (dm === "MONEY") {
+    return {
+      card: "border-l-4 border-l-emerald-500 dark:border-l-emerald-400",
+      icon: "bg-emerald-500/12 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200",
+    };
+  }
+  if (dm === "CUSTOM_NUMBER") {
+    return {
+      card: "border-l-4 border-l-violet-500 dark:border-l-violet-400",
+      icon: "bg-violet-500/12 text-violet-700 dark:bg-violet-400/15 dark:text-violet-200",
+    };
+  }
+  return {
+    card: "border-l-4 border-l-sky-500 dark:border-l-sky-400",
+    icon: "bg-sky-500/12 text-sky-800 dark:bg-sky-400/15 dark:text-sky-100",
+  };
+}
+
+const chartCardBarFrame =
+  "border border-border/60 border-t-4 border-t-teal-500 bg-card/95 shadow-sm dark:border-t-teal-400";
+const chartCardPieFrame =
+  "border border-border/60 border-t-4 border-t-violet-600 bg-card/95 shadow-sm dark:border-t-violet-400";
+
 function rollupBarSeries(
   series: { label: string; value: number }[],
   xGroupBy: BarXGroupBy | undefined,
@@ -137,8 +173,14 @@ export function DashboardWidgetRenderer({
 
   if (loading) {
     if (widget.type === "METRIC") {
+      const accent = metricAccentForSpec(widget.querySpec);
       return (
-        <Card className="flex h-full flex-col rounded-xl border border-border/60 bg-card shadow-sm">
+        <Card
+          className={cn(
+            "flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm",
+            accent.card,
+          )}
+        >
           <CardHeader className="drag-handle cursor-grab space-y-0 px-5 pb-0 pt-5">
             <div className="flex items-start justify-between gap-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -153,8 +195,15 @@ export function DashboardWidgetRenderer({
         </Card>
       );
     }
+    const chartFrame =
+      widget.type === "BAR" ? chartCardBarFrame : chartCardPieFrame;
     return (
-      <Card className="flex h-full flex-col border-border/60 bg-card/80 shadow-sm">
+      <Card
+        className={cn(
+          "flex h-full flex-col overflow-hidden rounded-xl",
+          chartFrame,
+        )}
+      >
         <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             {title}
@@ -169,7 +218,7 @@ export function DashboardWidgetRenderer({
 
   if (error) {
     return (
-      <Card className="flex h-full flex-col border-destructive/40 bg-card/80 shadow-sm">
+      <Card className="flex h-full flex-col overflow-hidden rounded-xl border border-destructive/35 border-l-4 border-l-destructive bg-card/95 shadow-sm">
         <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             {title}
@@ -183,8 +232,22 @@ export function DashboardWidgetRenderer({
   }
 
   if (!data) {
+    const emptyFrame =
+      widget.type === "BAR"
+        ? chartCardBarFrame
+        : widget.type === "METRIC"
+          ? cn(
+              "border border-border/60 shadow-sm",
+              metricAccentForSpec(widget.querySpec).card,
+            )
+          : chartCardPieFrame;
     return (
-      <Card className="flex h-full flex-col border-border/60 bg-card/80 shadow-sm">
+      <Card
+        className={cn(
+          "flex h-full flex-col overflow-hidden rounded-xl bg-card/95",
+          emptyFrame,
+        )}
+      >
         <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             {title}
@@ -199,6 +262,7 @@ export function DashboardWidgetRenderer({
 
   if (widget.type === "METRIC" && data.kind === "scalar") {
     const Icon = metricIconForSpec(widget.querySpec);
+    const accent = metricAccentForSpec(widget.querySpec);
     const formatted = formatDashboardScalar(
       widget.querySpec,
       data.value,
@@ -208,14 +272,22 @@ export function DashboardWidgetRenderer({
     );
 
     return (
-      <Card className="flex h-full flex-col rounded-xl border border-border/60 bg-card shadow-sm">
+      <Card
+        className={cn(
+          "flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm",
+          accent.card,
+        )}
+      >
         <CardHeader className="drag-handle cursor-grab space-y-0 px-5 pb-0 pt-5">
           <div className="flex items-start justify-between gap-3">
             <CardTitle className="text-sm font-medium leading-snug text-muted-foreground">
               {title}
             </CardTitle>
             <div
-              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-solid/10 text-primary-solid"
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                accent.icon,
+              )}
               aria-hidden
             >
               <Icon className="size-4 stroke-[1.75]" />
@@ -283,7 +355,12 @@ export function DashboardWidgetRenderer({
     }
 
     return (
-      <Card className="flex h-full flex-col border-border/60 bg-card/80 shadow-sm">
+      <Card
+        className={cn(
+          "flex h-full flex-col overflow-hidden rounded-xl",
+          chartCardPieFrame,
+        )}
+      >
         <CardHeader className="drag-handle cursor-grab pb-1 pt-3">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             {title}
@@ -329,7 +406,7 @@ export function DashboardWidgetRenderer({
   }
 
   return (
-    <Card className="flex h-full flex-col border-border/60 bg-card/80 shadow-sm">
+    <Card className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 border-t-4 border-t-amber-500/70 bg-card/95 shadow-sm dark:border-t-amber-400/80">
       <CardHeader className="drag-handle cursor-grab pb-2 pt-3">
         <CardTitle className="text-xs font-medium text-muted-foreground">
           {title}
@@ -453,7 +530,12 @@ function BarChartCardBody({
   };
 
   return (
-    <Card className="flex h-full flex-col border-border/60 bg-card/80 shadow-sm">
+    <Card
+      className={cn(
+        "flex h-full flex-col overflow-hidden rounded-xl",
+        chartCardBarFrame,
+      )}
+    >
       <CardHeader className="drag-handle cursor-grab pb-1 pt-3">
         <CardTitle className="text-xs font-medium text-muted-foreground">
           {title}
@@ -531,8 +613,9 @@ function BarChartCardBody({
                 {barCfg.showAverageLine && chartData.length > 0 ? (
                   <ReferenceLine
                     y={barAvg}
-                    stroke="var(--muted-foreground)"
+                    stroke="var(--chart-ref-line)"
                     strokeDasharray="4 4"
+                    strokeOpacity={0.85}
                   />
                 ) : null}
                 <Area
@@ -594,8 +677,9 @@ function BarChartCardBody({
                 {barCfg.showAverageLine && chartData.length > 0 ? (
                   <ReferenceLine
                     y={barAvg}
-                    stroke="var(--muted-foreground)"
+                    stroke="var(--chart-ref-line)"
                     strokeDasharray="4 4"
+                    strokeOpacity={0.85}
                   />
                 ) : null}
                 <Bar

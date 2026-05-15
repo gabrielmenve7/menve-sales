@@ -1,6 +1,5 @@
 /**
- * Paleta fixa (métricas semânticas). Para barras/pizza sobre `bg-card`, prefira
- * `CHART_BAR_SEQUENCE` — cores fixas escuras somem no tema escuro.
+ * Paleta fixa legada (hex). Preferir `CHART_BAR_SEQUENCE` / `--chart-bar-*` no dashboard.
  */
 export const CHART = {
   primary: "#171717",
@@ -13,8 +12,7 @@ export const CHART = {
 } as const;
 
 /**
- * Barras e fatias: `globals.css` define `--chart-bar-*` (cinza no tema claro,
- * branco/off-white no `.dark`).
+ * Sequência de cores para barras e fatias (variáveis `--chart-bar-*` em `globals.css`).
  */
 export const CHART_BAR_SEQUENCE = [
   "var(--chart-bar-1)",

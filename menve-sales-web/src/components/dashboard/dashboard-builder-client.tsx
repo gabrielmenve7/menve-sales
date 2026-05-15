@@ -382,7 +382,10 @@ export function DashboardBuilderClient({
           <div className="flex flex-wrap items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
             {activeBoard?.name === DEFAULT_SALES_DASHBOARD_BOARD_NAME ? (
-              <Badge variant="secondary" className="font-normal">
+              <Badge
+                variant="secondary"
+                className="font-normal border border-teal-500/25 bg-teal-500/10 text-teal-900 dark:border-teal-400/30 dark:bg-teal-500/15 dark:text-teal-50"
+              >
                 Painel padrão de vendas
               </Badge>
             ) : null}
@@ -442,7 +445,7 @@ export function DashboardBuilderClient({
       </div>
 
       {boards.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border/80 bg-muted/20 px-6 py-16 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-teal-500/25 bg-gradient-to-br from-teal-500/[0.07] via-card/50 to-violet-500/[0.08] px-6 py-16 text-center shadow-sm dark:border-teal-400/20 dark:from-teal-500/10 dark:via-card/30 dark:to-violet-500/10">
           <LayoutGrid className="mb-3 size-10 text-muted-foreground" />
           <p className="mb-4 max-w-sm text-sm text-muted-foreground">
             Você ainda não tem painéis. Comece pelo modelo padrão de vendas
@@ -467,7 +470,11 @@ export function DashboardBuilderClient({
           <Tabs value={activeId ?? ""} onValueChange={(v) => setActiveId(v)}>
             <TabsList className="mb-4 h-auto w-full flex-wrap justify-start gap-1 border-b border-border bg-transparent p-0">
               {boards.map((b) => (
-                <TabsTrigger key={b.id} value={b.id} className="shrink-0">
+                <TabsTrigger
+                  key={b.id}
+                  value={b.id}
+                  className="shrink-0 rounded-t-md px-3 transition-colors data-[state=active]:border-b-2 data-[state=active]:border-teal-600 data-[state=active]:bg-teal-500/10 data-[state=active]:text-teal-900 data-[state=inactive]:hover:bg-muted/60 dark:data-[state=active]:border-teal-400 dark:data-[state=active]:bg-teal-500/15 dark:data-[state=active]:text-teal-100"
+                >
                   {b.name}
                 </TabsTrigger>
               ))}
@@ -509,15 +516,15 @@ export function DashboardBuilderClient({
               </div>
 
               {activeBoard.layout.widgets.length === 0 ? (
-                <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border/60 bg-card/30 py-20">
+                <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-violet-500/20 bg-gradient-to-br from-sky-500/[0.05] via-transparent to-violet-500/[0.06] py-20 dark:border-violet-400/25">
                   <p className="mb-3 text-sm text-muted-foreground">
                     Quadro em branco — use &quot;Cartão&quot; para adicionar métricas e gráficos.
                   </p>
                 </div>
               ) : (
-                <div className="min-h-[420px] flex-1">
+                <div className="min-h-[420px] flex-1 rounded-xl border border-border/50 bg-gradient-to-b from-muted/30 to-transparent p-1 dark:from-muted/20">
                   <GridLayoutWithWidth
-                    className="layout"
+                    className="layout dashboard-grid-layout"
                     cols={12}
                     rowHeight={44}
                     margin={[8, 8]}
