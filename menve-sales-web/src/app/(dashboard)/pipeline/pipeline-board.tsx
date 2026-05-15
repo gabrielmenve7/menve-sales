@@ -655,6 +655,10 @@ export function PipelineBoard({
 
   const [detailDeal, setDetailDeal] = useState<DealRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  /** Sobrescreve dados do card até o RSC atualizar (tags, email, valor, etc.). */
+  const [localDealById, setLocalDealById] = useState<Record<string, DealRow>>(
+    {},
+  );
   const [optimisticStageByDealId, setOptimisticStageByDealId] = useState<
     Record<string, string>
   >({});
@@ -664,12 +668,33 @@ export function PipelineBoard({
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
 
+  useEffect(() => {
+    setLocalDealById({});
+  }, [deals]);
+
+  const onDealPatch = useCallback(
+    (dealId: string, fn: (row: DealRow) => DealRow) => {
+      setLocalDealById((prevMap) => {
+        const server = deals.find((d) => d.id === dealId);
+        if (!server) return prevMap;
+        const base = prevMap[dealId] ?? server;
+        return { ...prevMap, [dealId]: fn(base) };
+      });
+      setDetailDeal((prev) =>
+        prev && prev.id === dealId ? fn(prev) : prev,
+      );
+    },
+    [deals],
+  );
+
   const displayedDeals = useMemo(() => {
     return deals.map((d) => {
-      const sid = optimisticStageByDealId[d.id];
-      return sid ? { ...d, stageId: sid } : d;
+      const local = localDealById[d.id];
+      const base = local ?? d;
+      const sid = optimisticStageByDealId[base.id];
+      return sid ? { ...base, stageId: sid } : base;
     });
-  }, [deals, optimisticStageByDealId]);
+  }, [deals, localDealById, optimisticStageByDealId]);
 
   const byStage = useMemo(() => {
     const map = new Map<string, DealRow[]>();
@@ -866,6 +891,7 @@ export function PipelineBoard({
         stages={pipeline.stages}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={tenantMembers}
+        onDealPatch={onDealPatch}
       />
     </div>
   );

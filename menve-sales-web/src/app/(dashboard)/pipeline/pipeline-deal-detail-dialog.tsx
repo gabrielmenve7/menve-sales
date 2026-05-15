@@ -94,6 +94,11 @@ import { cn } from "@/lib/utils";
 import { DealProductsBlock } from "./deal-products-block";
 import type { DealRow } from "./pipeline-types";
 
+/** `Deal.value` é `Decimal` no Prisma; no client tratamos como número na UI otimista. */
+function dealValueFromNumber(n: number | null): Deal["value"] {
+  return n as unknown as Deal["value"];
+}
+
 export type DealActivityRow = {
   id: string;
   type: ActivityType;
@@ -362,6 +367,7 @@ export function PipelineDealDetailDialog({
   variant = "modal",
   onRequestClose,
   onInvalidate,
+  onDealPatch,
 }: {
   deal: DealRow | null;
   open: boolean;
@@ -376,6 +382,8 @@ export function PipelineDealDetailDialog({
   onRequestClose?: () => void;
   /** Ex.: invalidar cache do inbox após mutação. */
   onInvalidate?: () => void;
+  /** Atualização otimista do card no Kanban/lista (evita esperar `router.refresh`). */
+  onDealPatch?: (dealId: string, patch: (row: DealRow) => DealRow) => void;
 }) {
   const router = useRouter();
   const isEmbedded = variant === "embedded";
@@ -390,7 +398,7 @@ export function PipelineDealDetailDialog({
     boardRefreshTimerRef.current = setTimeout(() => {
       boardRefreshTimerRef.current = null;
       router.refresh();
-    }, 450);
+    }, 120);
   }, [isEmbedded, router]);
   const [remote, setRemote] = useState<DealDetailPayload | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -398,7 +406,6 @@ export function PipelineDealDetailDialog({
   const [headerBusy, setHeaderBusy] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
-  const [contactFieldBusy, setContactFieldBusy] = useState(false);
   const [emailLocal, setEmailLocal] = useState("");
   const [phoneLocal, setPhoneLocal] = useState("");
   const [companyLocal, setCompanyLocal] = useState("");
@@ -546,8 +553,18 @@ export function PipelineDealDetailDialog({
     }
   }, [initial?.id]);
 
-  const afterRemoteChange = useCallback(async () => {
-    await reload({ silent: true });
+  const patchActiveRemoteDeal = useCallback(
+    (mutate: (deal: DealDetailPayload["deal"]) => DealDetailPayload["deal"]) => {
+      setRemote((prev) => {
+        if (!prev?.deal || prev.deal.id !== latestDealIdRef.current) return prev;
+        return { ...prev, deal: mutate(prev.deal) };
+      });
+    },
+    [],
+  );
+
+  const afterRemoteChange = useCallback(() => {
+    void reload({ silent: true });
     onInvalidate?.();
     scheduleBoardRefresh();
   }, [reload, onInvalidate, scheduleBoardRefresh]);
@@ -569,7 +586,7 @@ export function PipelineDealDetailDialog({
   const onReorderSelectOptions = useCallback(
     async (fieldId: string, options: string[]) => {
       await updateCustomField({ id: fieldId, options });
-      await afterRemoteChange();
+      afterRemoteChange();
     },
     [afterRemoteChange],
   );
@@ -583,7 +600,7 @@ export function PipelineDealDetailDialog({
       const t = label.trim();
       if (!t) return;
       await updateCustomField({ id: fieldId, options: [...cur, t] });
-      await afterRemoteChange();
+      afterRemoteChange();
     },
     [dealCustomFieldDefs, afterRemoteChange],
   );
@@ -712,7 +729,7 @@ export function PipelineDealDetailDialog({
     setHeaderBusy(true);
     try {
       await moveDealStage(d.id, stageId);
-      await afterRemoteChange();
+      afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -724,7 +741,7 @@ export function PipelineDealDetailDialog({
     setHeaderBusy(true);
     try {
       await patchDeal(d.id, { assignedToId: userId });
-      await afterRemoteChange();
+      afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -744,7 +761,7 @@ export function PipelineDealDetailDialog({
         description: text.length > 500 ? text.slice(500) : undefined,
       });
       setNoteBody("");
-      await afterRemoteChange();
+      afterRemoteChange();
     } finally {
       setNoteSaving(false);
     }
@@ -782,13 +799,55 @@ export function PipelineDealDetailDialog({
     campaignSourceId?: string | null;
   }) {
     if (!d) return;
-    setContactFieldBusy(true);
+    const dealId = d.id;
+    const contactId = d.contactId;
+
+    onDealPatch?.(dealId, (row) => ({
+      ...row,
+      contact: {
+        ...row.contact,
+        ...(patch.email !== undefined ? { email: patch.email || null } : {}),
+        ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+        ...(patch.company !== undefined ? { company: patch.company } : {}),
+        ...(patch.jobTitle !== undefined ? { jobTitle: patch.jobTitle } : {}),
+        ...(patch.campaignSourceId !== undefined
+          ? {
+              campaignSourceId: patch.campaignSourceId,
+              campaignSource: null,
+            }
+          : {}),
+      },
+    }));
+
+    patchActiveRemoteDeal((deal) => ({
+      ...deal,
+      contact: {
+        ...deal.contact,
+        ...(patch.email !== undefined ? { email: patch.email || null } : {}),
+        ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+        ...(patch.company !== undefined ? { company: patch.company } : {}),
+        ...(patch.jobTitle !== undefined ? { jobTitle: patch.jobTitle } : {}),
+        ...(patch.campaignSourceId !== undefined
+          ? {
+              campaignSourceId: patch.campaignSourceId,
+              campaignSource: null,
+            }
+          : {}),
+      },
+    }));
+
     try {
-      await patchContact({ contactId: d.contactId, ...patch });
-      await afterRemoteChange();
-    } finally {
-      setContactFieldBusy(false);
+      await patchContact({ contactId, ...patch });
+    } catch (e) {
+      void reload({ silent: false });
+      window.alert(
+        e instanceof Error ? e.message : "Não foi possível salvar o contato.",
+      );
+      return;
     }
+    onInvalidate?.();
+    void reload({ silent: true });
+    scheduleBoardRefresh();
   }
 
   async function onRenameLeadSave() {
@@ -801,9 +860,17 @@ export function PipelineDealDetailDialog({
     }
     setRenameLeadBusy(true);
     try {
+      onDealPatch?.(d.id, (row) => ({
+        ...row,
+        contact: { ...row.contact, name: t },
+      }));
+      patchActiveRemoteDeal((deal) => ({
+        ...deal,
+        contact: { ...deal.contact, name: t },
+      }));
       await patchContact({ contactId: d.contactId, name: t });
       setRenamingLead(false);
-      await afterRemoteChange();
+      afterRemoteChange();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
@@ -841,8 +908,16 @@ export function PipelineDealDetailDialog({
       if (prev == null) return;
       setHeaderBusy(true);
       try {
+        onDealPatch?.(d.id, (row) => ({
+          ...row,
+          value: dealValueFromNumber(null),
+        }));
+        patchActiveRemoteDeal((deal) => ({
+          ...deal,
+          value: dealValueFromNumber(null),
+        }));
         await patchDeal(d.id, { value: null });
-        await afterRemoteChange();
+        afterRemoteChange();
       } finally {
         setHeaderBusy(false);
       }
@@ -863,8 +938,13 @@ export function PipelineDealDetailDialog({
     if (prev != null && Math.abs(prev - n) < 0.005) return;
     setHeaderBusy(true);
     try {
+      onDealPatch?.(d.id, (row) => ({ ...row, value: dealValueFromNumber(n) }));
+      patchActiveRemoteDeal((deal) => ({
+        ...deal,
+        value: dealValueFromNumber(n),
+      }));
       await patchDeal(d.id, { value: n });
-      await afterRemoteChange();
+      afterRemoteChange();
     } finally {
       setHeaderBusy(false);
     }
@@ -872,14 +952,44 @@ export function PipelineDealDetailDialog({
 
   async function onAddTagFromCatalog(tagId: string) {
     if (!d) return;
+    const tag = catalogTags.find((t) => t.id === tagId);
+    if (!tag) return;
     setTagBusy(true);
     try {
+      onDealPatch?.(d.id, (row) => {
+        const cur = row.contact.contactTags ?? [];
+        if (cur.some((x) => x.tag.id === tagId)) return row;
+        return {
+          ...row,
+          contact: {
+            ...row.contact,
+            contactTags: [...cur, { tag }],
+          },
+        };
+      });
+      patchActiveRemoteDeal((deal) => {
+        const cur = deal.contact.contactTags ?? [];
+        if (cur.some((x) => x.tag.id === tagId)) return deal;
+        return {
+          ...deal,
+          contact: {
+            ...deal.contact,
+            contactTags: [...cur, { tag }],
+          },
+        };
+      });
       await addTagToContact(d.contactId, tagId);
       setTagAddOpen(false);
-      await afterRemoteChange();
+    } catch (e) {
+      void reload({ silent: false });
+      window.alert(
+        e instanceof Error ? e.message : "Não foi possível adicionar a tag.",
+      );
     } finally {
       setTagBusy(false);
     }
+    void reload({ silent: true });
+    scheduleBoardRefresh();
   }
 
   async function onCreateTagAndAdd() {
@@ -893,24 +1003,78 @@ export function PipelineDealDetailDialog({
       const t = list.find(
         (x) => x.name.trim().toLowerCase() === n.toLowerCase(),
       );
-      if (t) await addTagToContact(d.contactId, t.id);
+      if (t) {
+        onDealPatch?.(d.id, (row) => {
+          const cur = row.contact.contactTags ?? [];
+          if (cur.some((x) => x.tag.id === t.id)) return row;
+          return {
+            ...row,
+            contact: {
+              ...row.contact,
+              contactTags: [...cur, { tag: t }],
+            },
+          };
+        });
+        patchActiveRemoteDeal((deal) => {
+          const cur = deal.contact.contactTags ?? [];
+          if (cur.some((x) => x.tag.id === t.id)) return deal;
+          return {
+            ...deal,
+            contact: {
+              ...deal.contact,
+              contactTags: [...cur, { tag: t }],
+            },
+          };
+        });
+        await addTagToContact(d.contactId, t.id);
+      }
       setNewTagName("");
       setTagAddOpen(false);
-      await afterRemoteChange();
+    } catch (e) {
+      void reload({ silent: false });
+      window.alert(
+        e instanceof Error ? e.message : "Não foi possível criar a tag.",
+      );
     } finally {
       setTagBusy(false);
     }
+    void reload({ silent: true });
+    scheduleBoardRefresh();
   }
 
   async function onRemoveContactTag(tagId: string) {
     if (!d) return;
     setTagBusy(true);
     try {
+      onDealPatch?.(d.id, (row) => ({
+        ...row,
+        contact: {
+          ...row.contact,
+          contactTags: (row.contact.contactTags ?? []).filter(
+            (x) => x.tag.id !== tagId,
+          ),
+        },
+      }));
+      patchActiveRemoteDeal((deal) => ({
+        ...deal,
+        contact: {
+          ...deal.contact,
+          contactTags: (deal.contact.contactTags ?? []).filter(
+            (x) => x.tag.id !== tagId,
+          ),
+        },
+      }));
       await removeTagFromContact(d.contactId, tagId);
-      await afterRemoteChange();
+    } catch (e) {
+      void reload({ silent: false });
+      window.alert(
+        e instanceof Error ? e.message : "Não foi possível remover a tag.",
+      );
     } finally {
       setTagBusy(false);
     }
+    void reload({ silent: true });
+    scheduleBoardRefresh();
   }
 
   if (!initial || !d) return null;
@@ -1029,7 +1193,6 @@ export function PipelineDealDetailDialog({
                 <input
                   type="email"
                   autoComplete="email"
-                  disabled={contactFieldBusy}
                   placeholder="Adicionar email"
                   className={contactInputClass}
                   value={emailLocal}
@@ -1056,7 +1219,6 @@ export function PipelineDealDetailDialog({
                   type="tel"
                   autoComplete="tel"
                   inputMode="numeric"
-                  disabled={contactFieldBusy}
                   placeholder="(00) 00000-0000"
                   className={contactInputClass}
                   value={phoneLocal}
@@ -1088,7 +1250,6 @@ export function PipelineDealDetailDialog({
                 <Building2 className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <input
                   type="text"
-                  disabled={contactFieldBusy}
                   placeholder="Adicionar empresa"
                   className={contactInputClass}
                   value={companyLocal}
@@ -1107,7 +1268,6 @@ export function PipelineDealDetailDialog({
                 <Briefcase className="size-4 shrink-0 stroke-[1.5] text-muted-foreground" />
                 <input
                   type="text"
-                  disabled={contactFieldBusy}
                   placeholder="Adicionar cargo"
                   className={contactInputClass}
                   value={jobTitleLocal}
@@ -1259,7 +1419,6 @@ export function PipelineDealDetailDialog({
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      disabled={contactFieldBusy}
                       className={cn(
                         "flex w-full min-w-0 items-center gap-2 py-0.5 text-left text-sm outline-none",
                         !d.contact.campaignSource &&
@@ -1277,7 +1436,6 @@ export function PipelineDealDetailDialog({
                     className="max-h-64 w-[min(100vw-2rem,14rem)] overflow-y-auto"
                   >
                     <DropdownMenuItem
-                      disabled={contactFieldBusy}
                       onClick={() =>
                         void flushContactField({ campaignSourceId: null })
                       }
@@ -1288,7 +1446,6 @@ export function PipelineDealDetailDialog({
                     {campaignSources.map((s) => (
                       <DropdownMenuItem
                         key={s.id}
-                        disabled={contactFieldBusy}
                         onClick={() =>
                           void flushContactField({
                             campaignSourceId: s.id,
@@ -1408,7 +1565,7 @@ export function PipelineDealDetailDialog({
                       dealId: d.id,
                       values: { [key]: value },
                     });
-                    await afterRemoteChange();
+                    afterRemoteChange();
                   }}
                   onReorderSelectOptions={onReorderSelectOptions}
                   onAppendSelectOption={onAppendSelectOption}
@@ -1426,14 +1583,21 @@ export function PipelineDealDetailDialog({
               onSaved={(total) => {
                 setDealValueLocal(
                   total > 0
-                    ? total
-                        .toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
+                    ? total.toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
                     : "",
                 );
-                void afterRemoteChange();
+                onDealPatch?.(d.id, (row) => ({
+                  ...row,
+                  value: dealValueFromNumber(total > 0 ? total : null),
+                }));
+                patchActiveRemoteDeal((deal) => ({
+                  ...deal,
+                  value: dealValueFromNumber(total > 0 ? total : null),
+                }));
+                afterRemoteChange();
               }}
             />
 

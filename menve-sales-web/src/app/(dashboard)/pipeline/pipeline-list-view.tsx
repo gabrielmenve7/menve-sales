@@ -488,6 +488,9 @@ export function PipelineListView({
   const router = useRouter();
   const [detailDeal, setDetailDeal] = useState<DealRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [localDealById, setLocalDealById] = useState<Record<string, DealRow>>(
+    {},
+  );
   const [collapsedStageIds, setCollapsedStageIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -514,12 +517,33 @@ export function PipelineListView({
     return sortedStages.filter((s) => visibleStageIds.has(s.id));
   }, [sortedStages, visibleStageIds]);
 
+  useEffect(() => {
+    setLocalDealById({});
+  }, [deals]);
+
+  const onDealPatch = useCallback(
+    (dealId: string, fn: (row: DealRow) => DealRow) => {
+      setLocalDealById((prevMap) => {
+        const server = deals.find((d) => d.id === dealId);
+        if (!server) return prevMap;
+        const base = prevMap[dealId] ?? server;
+        return { ...prevMap, [dealId]: fn(base) };
+      });
+      setDetailDeal((prev) =>
+        prev && prev.id === dealId ? fn(prev) : prev,
+      );
+    },
+    [deals],
+  );
+
   const displayedDeals = useMemo(() => {
     return deals.map((d) => {
-      const sid = optimisticStageByDealId[d.id];
-      return sid ? { ...d, stageId: sid } : d;
+      const local = localDealById[d.id];
+      const base = local ?? d;
+      const sid = optimisticStageByDealId[base.id];
+      return sid ? { ...base, stageId: sid } : base;
     });
-  }, [deals, optimisticStageByDealId]);
+  }, [deals, localDealById, optimisticStageByDealId]);
 
   const selectedDeals = useMemo(
     () => displayedDeals.filter((d) => selectedIds.has(d.id)),
@@ -720,6 +744,7 @@ export function PipelineListView({
         stages={sortedStages}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={tenantMembers}
+        onDealPatch={onDealPatch}
       />
     </div>
   );

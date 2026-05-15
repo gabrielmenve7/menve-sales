@@ -109,33 +109,24 @@ export function DealProductsBlock({
     setError(null);
     void (async () => {
       try {
-        const items = await getDealItems(dealId);
+        const [items, prods] = await Promise.all([
+          getDealItems(dealId),
+          listProducts(),
+        ]);
         if (cancelled) return;
         const initial =
           items.length > 0 ? items.map(rowFromServer) : [emptyRow()];
         setRows(initial);
         setBaselineKey(rowsSignature(initial));
-        setLoading(false);
-
-        void listProducts()
-          .then((prods) => {
-            if (cancelled) return;
-            setProducts(prods);
-          })
-          .catch((e) => {
-            if (cancelled) return;
-            console.error("[deal-products] listProducts:", e);
-            setProducts([]);
-          })
-          .finally(() => {
-            if (cancelled) return;
-            setCatalogLoading(false);
-          });
+        setProducts(prods);
       } catch (e) {
         if (cancelled) return;
         setError(
           e instanceof Error ? e.message : "Não foi possível carregar produtos.",
         );
+        setProducts([]);
+      } finally {
+        if (cancelled) return;
         setLoading(false);
         setCatalogLoading(false);
       }
