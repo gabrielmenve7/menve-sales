@@ -48,10 +48,15 @@ import { DashboardWidgetConfigDialog, widgetTypeLabel } from "@/components/dashb
 import { DashboardWidgetRenderer } from "@/components/dashboard/dashboard-widget-renderer";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import {
+  buildWidgetQuerySpecsFromApplied,
   buildWidgetQuerySpecsWithGlobalRange,
   defaultDashboardDateRangeState,
+  resolveAppliedGlobalDateRange,
+  resolvePreviousComparisonAppliedGlobalDateRange,
   type DashboardDateRangeState,
 } from "@/lib/dashboard-global-date-range";
+import { buildMetricComparisonByWidgetId } from "@/lib/dashboard-metric-comparison";
+import type { MetricComparisonDisplay } from "@/lib/dashboard-metric-comparison";
 import type {
   DashboardBoardDto,
   DealCustomFieldDef,
@@ -139,6 +144,10 @@ export function DashboardBuilderClient({
     () => defaultDashboardDateRangeState(),
   );
 
+  const [metricComparisonByWidget, setMetricComparisonByWidget] = useState<
+    Record<string, MetricComparisonDisplay | null>
+  >({});
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeBoard = useMemo(
     () => boards.find((b) => b.id === activeId) ?? null,
@@ -174,6 +183,7 @@ export function DashboardBuilderClient({
       return {
         specs: [] as WidgetQuerySpec[],
         specsKey: "",
+        applied: resolveAppliedGlobalDateRange(dateRangeState),
       };
     }
     return buildWidgetQuerySpecsWithGlobalRange(
@@ -183,44 +193,89 @@ export function DashboardBuilderClient({
   }, [activeBoard, dateRangeState]);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!activeBoard || activeBoard.layout.widgets.length === 0) {
       setDataByWidget({});
+      setMetricComparisonByWidget({});
       setLoadingData(false);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
+
+    const widgets = activeBoard.layout.widgets;
+    const applied = globalQuery.applied;
+    const prevApplied = resolvePreviousComparisonAppliedGlobalDateRange(
+      dateRangeState,
+      applied,
+    );
+    const prevSpecs = prevApplied
+      ? buildWidgetQuerySpecsFromApplied(widgets, prevApplied)
+      : null;
+
+    const loadComparison = (
+      currentRows: WidgetDataResult[],
+      prevRows: WidgetDataResult[],
+    ): Record<string, MetricComparisonDisplay | null> => {
+      if (!prevSpecs || prevRows.length !== widgets.length) return {};
+      return buildMetricComparisonByWidgetId(widgets, currentRows, prevRows);
+    };
 
     if (
       initialWidgetBundle &&
       initialWidgetBundle.boardId === activeBoard.id &&
       initialWidgetBundle.specsKey === globalQuery.specsKey &&
-      initialWidgetBundle.rows.length === activeBoard.layout.widgets.length
+      initialWidgetBundle.rows.length === widgets.length
     ) {
       const map: Record<string, WidgetDataResult | null> = {};
-      activeBoard.layout.widgets.forEach((w, i) => {
+      widgets.forEach((w, i) => {
         map[w.id] = initialWidgetBundle.rows[i] ?? null;
       });
       setDataByWidget(map);
       setLoadErr(null);
       setLoadingData(false);
-      return;
+      void (async () => {
+        const prevRows = prevSpecs
+          ? await queryDashboardWidgetsBulk(prevSpecs).catch(
+              () => [] as WidgetDataResult[],
+            )
+          : [];
+        if (cancelled) return;
+        setMetricComparisonByWidget(
+          loadComparison(initialWidgetBundle.rows, prevRows),
+        );
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
 
-    let cancelled = false;
     setLoadingData(true);
     setLoadErr(null);
+    setMetricComparisonByWidget({});
     void (async () => {
       try {
-        const rows = await queryDashboardWidgetsBulk(globalQuery.specs);
+        const [rows, prevRows] = await Promise.all([
+          queryDashboardWidgetsBulk(globalQuery.specs),
+          prevSpecs
+            ? queryDashboardWidgetsBulk(prevSpecs).catch(
+                () => [] as WidgetDataResult[],
+              )
+            : Promise.resolve([] as WidgetDataResult[]),
+        ]);
         if (cancelled) return;
         const map: Record<string, WidgetDataResult | null> = {};
-        activeBoard.layout.widgets.forEach((w, i) => {
+        widgets.forEach((w, i) => {
           map[w.id] = rows[i] ?? null;
         });
         setDataByWidget(map);
+        setMetricComparisonByWidget(loadComparison(rows, prevRows));
       } catch {
         if (!cancelled) {
           setLoadErr("Não foi possível carregar os dados dos cartões.");
           setDataByWidget({});
+          setMetricComparisonByWidget({});
         }
       } finally {
         if (!cancelled) setLoadingData(false);
@@ -233,6 +288,8 @@ export function DashboardBuilderClient({
     activeBoard?.id,
     globalQuery.specsKey,
     globalQuery.specs,
+    globalQuery.applied,
+    dateRangeState,
     activeBoard,
     initialWidgetBundle,
   ]);
@@ -613,6 +670,11 @@ export function DashboardBuilderClient({
                             error={null}
                             dealCustomFields={dealCustomFields}
                             pipelines={pipelines}
+                            metricComparison={
+                              w.type === "METRIC"
+                                ? (metricComparisonByWidget[w.id] ?? null)
+                                : undefined
+                            }
                           />
                         </div>
                       </div>

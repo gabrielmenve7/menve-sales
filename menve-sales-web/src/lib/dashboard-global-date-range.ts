@@ -300,3 +300,73 @@ export function triggerLabelForDashboardDateRange(
   }
   return `${formatYmdToBr(applied.from)} - ${formatYmdToBr(applied.to)}`;
 }
+
+function countInclusiveYmdDays(from: string, to: string): number {
+  let n = 0;
+  let c = from;
+  while (c <= to) {
+    n++;
+    c = addCalendarDaysIso(c, 1);
+    if (n > 500) break;
+  }
+  return n;
+}
+
+/**
+ * Intervalo imediatamente anterior ao selecionado, para comparação (MoM / janela rolante / custom).
+ */
+export function resolvePreviousComparisonAppliedGlobalDateRange(
+  state: DashboardDateRangeState,
+  current: AppliedGlobalDateRange,
+  todayBr = todayYmdBrazil(),
+): AppliedGlobalDateRange | null {
+  if (state.mode === "preset" && state.preset === "THIS_MONTH") {
+    const first = firstOfPreviousMonthYmd(todayBr);
+    const last = endOfMonthYmd(first);
+    return resolveAppliedGlobalDateRange(
+      { mode: "custom", from: first, to: last },
+      todayBr,
+    );
+  }
+  if (state.mode === "preset" && state.preset === "PREV_MONTH") {
+    const prevFirst = firstOfPreviousMonthYmd(current.from);
+    const prevLast = endOfMonthYmd(prevFirst);
+    return resolveAppliedGlobalDateRange(
+      { mode: "custom", from: prevFirst, to: prevLast },
+      todayBr,
+    );
+  }
+  if (state.mode === "preset" && state.preset === "TODAY") {
+    const y = addCalendarDaysIso(todayBr, -1);
+    return resolveAppliedGlobalDateRange(
+      { mode: "custom", from: y, to: y },
+      todayBr,
+    );
+  }
+  if (state.mode === "preset" && state.preset === "YESTERDAY") {
+    const y = addCalendarDaysIso(todayBr, -2);
+    return resolveAppliedGlobalDateRange(
+      { mode: "custom", from: y, to: y },
+      todayBr,
+    );
+  }
+
+  const n = countInclusiveYmdDays(current.from, current.to);
+  if (n < 1) return null;
+  const prevTo = addCalendarDaysIso(current.from, -1);
+  const prevFrom = addCalendarDaysIso(prevTo, -(n - 1));
+  if (prevFrom > prevTo) return null;
+  return resolveAppliedGlobalDateRange(
+    { mode: "custom", from: prevFrom, to: prevTo },
+    todayBr,
+  );
+}
+
+export function buildWidgetQuerySpecsFromApplied(
+  widgets: { querySpec: WidgetQuerySpec }[],
+  applied: AppliedGlobalDateRange,
+): WidgetQuerySpec[] {
+  return widgets.map((w) =>
+    applyGlobalDateRangeToQuerySpec(w.querySpec, applied),
+  );
+}

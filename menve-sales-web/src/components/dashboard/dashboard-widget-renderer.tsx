@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { CalendarClock, DollarSign, Hash, Target } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarClock, DollarSign, Hash, Minus, Target } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -24,6 +24,7 @@ import {
   dashboardWonAccentFill,
 } from "@/lib/dashboard-chart-funnel-colors";
 import { cn } from "@/lib/utils";
+import type { MetricComparisonDisplay } from "@/lib/dashboard-metric-comparison";
 import {
   customFieldByKey,
   defaultBarChartConfig,
@@ -91,6 +92,41 @@ function metricIconForSpec(spec: LayoutWidget["querySpec"]) {
 /** Ícone do KPI: neutro, círculo suave (referência painel padrão). */
 function metricIconSurfaceClass(): string {
   return "rounded-full bg-muted/60 text-muted-foreground dark:bg-muted/45";
+}
+
+function MetricDeltaBadge({
+  comparison,
+}: {
+  comparison: MetricComparisonDisplay;
+}) {
+  const Arrow =
+    comparison.direction === "up"
+      ? ArrowUp
+      : comparison.direction === "down"
+        ? ArrowDown
+        : Minus;
+  const sentimentCls =
+    comparison.sentiment === "positive"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : comparison.sentiment === "negative"
+        ? "text-red-600 dark:text-red-400"
+        : "text-muted-foreground";
+  const pctLabel = comparison.pctPoints.toLocaleString("pt-BR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold tabular-nums",
+        sentimentCls,
+      )}
+      aria-label={`Variação em relação ao período anterior: ${pctLabel}%`}
+    >
+      <Arrow className="size-3.5 shrink-0" strokeWidth={2.5} />
+      {pctLabel}%
+    </span>
+  );
 }
 
 const chartCardNeutralFrame =
@@ -228,6 +264,7 @@ export function DashboardWidgetRenderer({
   error,
   dealCustomFields,
   pipelines,
+  metricComparison,
 }: {
   widget: LayoutWidget;
   data: WidgetDataResult | null;
@@ -235,6 +272,8 @@ export function DashboardWidgetRenderer({
   error: string | null;
   dealCustomFields: DealCustomFieldDef[];
   pipelines: PipelineListItem[];
+  /** Só cartões METRIC: comparação com o período anterior (global). */
+  metricComparison?: MetricComparisonDisplay | null;
 }) {
   const cfMap = useMemo(
     () => customFieldByKey(dealCustomFields),
@@ -268,7 +307,8 @@ export function DashboardWidgetRenderer({
             </div>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col px-4 pb-4 pt-2">
-            <div className="h-8 w-24 animate-pulse rounded-md bg-muted" />
+            <div className="h-8 w-28 animate-pulse rounded-md bg-muted" />
+            <div className="mt-2 h-4 w-16 animate-pulse rounded bg-muted/80" />
           </CardContent>
         </Card>
       );
@@ -379,9 +419,14 @@ export function DashboardWidgetRenderer({
           </div>
         </CardHeader>
         <CardContent className="flex flex-1 flex-col justify-center px-4 pb-4 pt-1">
-          <p className="text-[1.375rem] font-bold leading-tight tabular-nums tracking-tight text-foreground sm:text-[1.5rem]">
-            {formatted}
-          </p>
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <p className="text-[1.65rem] font-bold leading-tight tabular-nums tracking-tight text-foreground sm:text-[1.8rem]">
+              {formatted}
+            </p>
+            {metricComparison ? (
+              <MetricDeltaBadge comparison={metricComparison} />
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     );
