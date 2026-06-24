@@ -1,5 +1,15 @@
 # Migração Evolution → Zappfy
 
+## Documentação oficial Zappfy
+
+Consultar sempre que precisar de endpoints, formatos de webhook ou comportamento da API:
+
+- **Docs:** https://docs.zappfy.io/
+- **Introdução (pt-BR):** https://docs.zappfy.io/pt-BR/get-started/introduction
+- **Índice completo (para busca/LLM):** https://docs.zappfy.io/llms.txt
+
+Regra Cursor do projeto: `.cursor/rules/zappfy-docs.mdc`
+
 ## Resumo
 
 A Zappfy API (`https://api.zappfy.io`) usa autenticação por **token de instância** (header `token`) e **admintoken** para operações administrativas (criar instância).
@@ -14,7 +24,7 @@ A Zappfy API (`https://api.zappfy.io`) usa autenticação por **token de instân
 | Enviar texto | `POST /message/sendText/{instance}` | `POST /send/text` + token |
 | Enviar mídia | `POST /message/sendMedia/{instance}` | `POST /send/media` + token |
 | Webhook | `POST /webhook/set/{instance}` | `POST /webhook` + token — body `{ url, events: ["messages"], excludeMessages: ["wasSentByApi"], enabled: true }` |
-| Baixar mídia inbound | `POST /chat/getBase64FromMediaMessage/{instance}` | `POST /chat/getBase64FromMediaMessage` + token |
+| Baixar mídia inbound | `POST /chat/getBase64FromMediaMessage/{instance}` | `POST /message/download` + token — body `{ id, return_base64: true }`; resposta `base64Data` e/ou `fileURL` ([doc](https://docs.zappfy.io/pt-BR/ações-na-mensagem-e-buscar/baixar-arquivo-de-uma-mensagem.md)) |
 | Webhook inbound | `MESSAGES_UPSERT` | `messages` (simples) ou `NEW-MESSAGE` (proto Baileys) |
 
 ## Formatos de webhook suportados

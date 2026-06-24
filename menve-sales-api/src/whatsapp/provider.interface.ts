@@ -19,6 +19,8 @@ export type NormalizedInbound = {
     remoteJid?: string;
     participant?: string;
     remoteJidAlt?: string;
+    /** ID alternativo da mensagem (ex.: `id` vs `messageid` no webhook flat). */
+    keyIdAlt?: string;
   };
 };
 
@@ -67,10 +69,11 @@ export interface IWhatsAppProvider {
   /** Converte payload bruto do webhook em mensagens normalizadas */
   parseWebhook(payload: unknown): NormalizedInbound[];
 
-  /** Evolution/Zappfy: baixa base64 da mídia após o webhook. */
+  /** Evolution/Zappfy: baixa mídia após o webhook (base64 ou URL pública). */
   fetchInboundMediaBase64?(args: {
     keyId: string;
+    keyIdAlt?: string;
     remoteJid: string;
     remoteJidAlt?: string;
-  }): Promise<{ base64: string; mimetype?: string } | null>;
+  }): Promise<{ base64?: string; url?: string; mimetype?: string } | null>;
 }

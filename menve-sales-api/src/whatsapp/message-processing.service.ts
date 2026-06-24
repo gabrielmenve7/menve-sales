@@ -283,10 +283,15 @@ export class MessageProcessingService {
       if (keyId && (remoteJid || remoteJidAlt || conn.provider === WhatsAppProvider.ZAPPFY)) {
         const fetched = await fetchFn({
           keyId,
+          keyIdAlt: args.inbound.debug?.keyIdAlt,
           remoteJid: remoteJid ?? remoteJidAlt ?? "",
           remoteJidAlt,
         }).catch(() => null);
-        if (fetched?.base64) {
+        if (fetched?.url) {
+          mediaUrl = fetched.url;
+          mediaType =
+            fetched.mimetype?.split(";")[0]?.trim() ?? mediaType ?? "audio/mpeg";
+        } else if (fetched?.base64) {
           const mime =
             fetched.mimetype?.split(";")[0]?.trim() ?? mediaType ?? "audio/ogg";
           const raw = fetched.base64.trim();
@@ -294,6 +299,15 @@ export class MessageProcessingService {
             ? raw
             : `data:${mime};base64,${raw}`;
           mediaType = mime;
+        } else if (needsMediaFetch) {
+          console.warn("[whatsapp:inbound-media]", {
+            tenantId: args.tenantId,
+            connectionId: conn.id,
+            keyId,
+            keyIdAlt: args.inbound.debug?.keyIdAlt ?? null,
+            body: args.inbound.body,
+            provider: conn.provider,
+          });
         }
       }
     }

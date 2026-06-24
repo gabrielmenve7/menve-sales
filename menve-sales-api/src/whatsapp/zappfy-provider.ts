@@ -114,69 +114,72 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
 
   async fetchInboundMediaBase64(args: {
     keyId: string;
+    keyIdAlt?: string;
     remoteJid: string;
     remoteJidAlt?: string;
   }) {
-    const jids = [
-      args.remoteJid,
-      args.remoteJidAlt,
-    ].filter((j, i, arr) => typeof j === "string" && j.trim() && arr.indexOf(j) === i) as string[];
+    const ids = [args.keyId, args.keyIdAlt].filter(
+      (id, i, arr) => typeof id === "string" && id.trim() && arr.indexOf(id) === i,
+    ) as string[];
 
-    const attempts: Array<{ path: string; body: Record<string, unknown> }> = [
-      { path: "/message/download", body: { id: args.keyId, return_base64: true } },
-      {
-        path: "/message/download",
-        body: { messageId: args.keyId, return_base64: true },
-      },
-    ];
+    const jids = [args.remoteJid, args.remoteJidAlt].filter(
+      (j, i, arr) => typeof j === "string" && j.trim() && arr.indexOf(j) === i,
+    ) as string[];
 
-    for (const jid of jids) {
-      attempts.push(
+    for (const id of ids) {
+      const zappfyDownloadBodies: Record<string, unknown>[] = [
         {
-          path: "/chat/getBase64FromMediaMessage",
-          body: {
-            message: { key: { id: args.keyId, remoteJid: jid } },
+          id,
+          return_base64: true,
+          return_link: true,
+          generate_mp3: true,
+        },
+        { id, return_base64: true, return_link: false, generate_mp3: true },
+        { id, return_base64: true },
+      ];
+
+      for (const body of zappfyDownloadBodies) {
+        const parsed = await this.postZappfyMediaDownload("/message/download", body);
+        if (parsed) return parsed;
+      }
+
+      for (const jid of jids) {
+        const evolutionBodies = [
+          {
+            message: { key: { id, remoteJid: jid } },
             convertToMp4: false,
           },
-        },
-        {
-          path: "/message/getBase64FromMediaMessage",
-          body: {
-            message: { key: { id: args.keyId, remoteJid: jid } },
-            convertToMp4: false,
-          },
-        },
-      );
+        ];
+        for (const path of [
+          "/chat/getBase64FromMediaMessage",
+          "/message/getBase64FromMediaMessage",
+        ]) {
+          for (const body of evolutionBodies) {
+            const parsed = await this.postZappfyMediaDownload(path, body);
+            if (parsed) return parsed;
+          }
+        }
+      }
+
+      for (const path of [
+        "/chat/getBase64FromMediaMessage",
+        "/message/getBase64FromMediaMessage",
+      ]) {
+        const parsed = await this.postZappfyMediaDownload(path, {
+          message: { key: { id } },
+          convertToMp4: false,
+        });
+        if (parsed) return parsed;
+      }
     }
 
-    attempts.push(
-      {
-        path: "/chat/getBase64FromMediaMessage",
-        body: {
-          message: { key: { id: args.keyId } },
-          convertToMp4: false,
-        },
-      },
-      {
-        path: "/message/getBase64FromMediaMessage",
-        body: {
-          message: { key: { id: args.keyId } },
-          convertToMp4: false,
-        },
-      },
-    );
-
-    for (const { path, body } of attempts) {
-      const parsed = await this.postZappfyMediaDownload(path, body);
-      if (parsed) return parsed;
-    }
     return null;
   }
 
   private async postZappfyMediaDownload(
     path: string,
     body: Record<string, unknown>,
-  ): Promise<{ base64: string; mimetype?: string } | null> {
+  ): Promise<{ base64?: string; url?: string; mimetype?: string } | null> {
     try {
       const res = await fetch(`${this.base()}${path}`, {
         method: "POST",
@@ -749,7 +752,7 @@ function resolveZappfySenderIdentity(blob: Record<string, unknown>): {
 
 function extractZappfyDownloadPayload(
   json: Record<string, unknown>,
-): { base64: string; mimetype?: string } | null {
+): { base64?: string; url?: string; mimetype?: string } | null {
   const pick = (v: unknown): string | undefined =>
     typeof v === "string" && v.trim() ? v.trim() : undefined;
 
@@ -762,19 +765,33 @@ function extractZappfyDownloadPayload(
   }
 
   for (const node of nodes) {
+    const url =
+      pick(node.fileURL) ||
+      pick(node.fileUrl) ||
+      pick(node.url) ||
+      pick(node.mediaUrl);
     const b64 =
+      pick(node.base64Data) ||
       pick(node.base64) ||
       pick(node.fileBase64) ||
       pick(node.mediaBase64) ||
       pick(node.messageBase64);
-    if (!b64) continue;
     const mimetype =
       pick(node.mimetype) ||
       pick(node.mimeType) ||
       pick(node.mediaType);
-    return { base64: b64, mimetype };
+
+    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+      return { url, mimetype, base64: b64 };
+    }
+    if (b64) return { base64: b64, mimetype };
   }
   return null;
+}
+
+/** Exportado para selftest — formato documentado em docs.zappfy.io/message/download */
+export function parseZappfyDownloadResponse(json: Record<string, unknown>) {
+  return extractZappfyDownloadPayload(json);
 }
 
 function zappfyMediaKindTokens(data: Record<string, unknown>): string {
@@ -804,6 +821,7 @@ function flatMimeFromBlob(data: Record<string, unknown>, kind: string): string {
 
 function extractFlatMediaUrl(data: Record<string, unknown>): string | null {
   for (const field of [
+    "fileURL",
     "fileUrl",
     "fileurl",
     "mediaUrl",
@@ -1020,10 +1038,13 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
   const text = extractZappfyText(blob, message);
   if (!text) return null;
 
+  const messageIdRaw = asTrimmedString(pickBlobField(blob, "messageId", "messageid"));
+  const idRaw = asTrimmedString(pickBlobField(blob, "id"));
   const keyId =
-    (key?.id ? String(key.id) : undefined) ??
-    asTrimmedString(pickBlobField(blob, "messageId", "messageid")) ??
-    undefined;
+    (key?.id ? String(key.id) : undefined) ?? messageIdRaw ?? idRaw ?? undefined;
+  const keyIdAlt = [messageIdRaw, idRaw, key?.id ? String(key.id) : undefined].find(
+    (v) => v && v !== keyId,
+  );
   const externalId = String(
     keyId ??
       blob.messageId ??
@@ -1055,6 +1076,7 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
       participant: key?.participant ? String(key.participant) : undefined,
       remoteJidAlt:
         typeof key?.remoteJidAlt === "string" ? key.remoteJidAlt : undefined,
+      keyIdAlt: keyIdAlt || undefined,
     },
   };
 }

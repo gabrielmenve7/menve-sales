@@ -1,4 +1,4 @@
-import { ZappfyWhatsAppProvider } from "./zappfy-provider";
+import { ZappfyWhatsAppProvider, parseZappfyDownloadResponse } from "./zappfy-provider";
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);
@@ -203,5 +203,13 @@ const flatAudioB64 = provider.parseWebhook({
 });
 assert(flatAudioB64[0]?.mediaUrl?.includes("base64"), "base64 em convertOptions");
 assert(flatAudioB64[0]?.mediaType === "audio/ogg", "mime convertOptions");
+
+const zappfyDownload = parseZappfyDownloadResponse({
+  fileURL: "https://cdn.zappfy.io/files/audio.mp3",
+  mimetype: "audio/mpeg",
+  base64Data: "ZGF0YQ==",
+});
+assert(zappfyDownload?.url?.includes("audio.mp3"), "fileURL da doc Zappfy");
+assert(zappfyDownload?.base64 === "ZGF0YQ==", "base64Data da doc Zappfy");
 
 console.log("zappfy-provider.selftest: OK");
