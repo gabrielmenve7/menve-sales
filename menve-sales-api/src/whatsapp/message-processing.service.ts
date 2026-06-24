@@ -262,19 +262,29 @@ export class MessageProcessingService {
     let mediaType: string | null = args.inbound.mediaType ?? null;
 
     const fetchFn = provider.fetchInboundMediaBase64;
-    if (
+    const needsMediaFetch =
       !mediaUrl &&
-      args.inbound.body === "[Áudio]" &&
+      (args.inbound.body === "[Áudio]" ||
+        args.inbound.body === "[Imagem]" ||
+        args.inbound.body === "[Mídia]" ||
+        args.inbound.body === "[Documento]");
+    if (
+      needsMediaFetch &&
       (conn.provider === WhatsAppProvider.EVOLUTION ||
         conn.provider === WhatsAppProvider.ZAPPFY) &&
       typeof fetchFn === "function"
     ) {
-      const remoteJid = args.inbound.debug?.remoteJid;
-      const keyId = args.inbound.whatsappKeyId;
-      if (remoteJid && keyId) {
+      const keyId =
+        args.inbound.whatsappKeyId?.trim() ||
+        args.inbound.externalId?.trim() ||
+        undefined;
+      const remoteJid = args.inbound.debug?.remoteJid?.trim();
+      const remoteJidAlt = args.inbound.debug?.remoteJidAlt?.trim();
+      if (keyId && (remoteJid || remoteJidAlt || conn.provider === WhatsAppProvider.ZAPPFY)) {
         const fetched = await fetchFn({
           keyId,
-          remoteJid,
+          remoteJid: remoteJid ?? remoteJidAlt ?? "",
+          remoteJidAlt,
         }).catch(() => null);
         if (fetched?.base64) {
           const mime =

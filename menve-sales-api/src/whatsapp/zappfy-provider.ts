@@ -112,48 +112,83 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
     });
   }
 
-  async fetchInboundMediaBase64(args: { keyId: string; remoteJid: string }) {
-    const body = JSON.stringify({
-      message: {
-        key: {
-          id: args.keyId,
-          remoteJid: args.remoteJid,
+  async fetchInboundMediaBase64(args: {
+    keyId: string;
+    remoteJid: string;
+    remoteJidAlt?: string;
+  }) {
+    const jids = [
+      args.remoteJid,
+      args.remoteJidAlt,
+    ].filter((j, i, arr) => typeof j === "string" && j.trim() && arr.indexOf(j) === i) as string[];
+
+    const attempts: Array<{ path: string; body: Record<string, unknown> }> = [
+      { path: "/message/download", body: { id: args.keyId, return_base64: true } },
+      {
+        path: "/message/download",
+        body: { messageId: args.keyId, return_base64: true },
+      },
+    ];
+
+    for (const jid of jids) {
+      attempts.push(
+        {
+          path: "/chat/getBase64FromMediaMessage",
+          body: {
+            message: { key: { id: args.keyId, remoteJid: jid } },
+            convertToMp4: false,
+          },
+        },
+        {
+          path: "/message/getBase64FromMediaMessage",
+          body: {
+            message: { key: { id: args.keyId, remoteJid: jid } },
+            convertToMp4: false,
+          },
+        },
+      );
+    }
+
+    attempts.push(
+      {
+        path: "/chat/getBase64FromMediaMessage",
+        body: {
+          message: { key: { id: args.keyId } },
+          convertToMp4: false,
         },
       },
-      convertToMp4: false,
-    });
-    const paths = [
-      "/chat/getBase64FromMediaMessage",
-      "/message/getBase64FromMediaMessage",
-    ];
-    for (const path of paths) {
-      try {
-        const res = await fetch(`${this.base()}${path}`, {
-          method: "POST",
-          headers: this.headers(),
-          body,
-        });
-        if (!res.ok) continue;
-        const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        const pick = (v: unknown): string | undefined =>
-          typeof v === "string" && v.trim() ? v.trim() : undefined;
-        const b64 =
-          pick(json.base64) ||
-          (json.data && typeof json.data === "object"
-            ? pick((json.data as Record<string, unknown>).base64)
-            : undefined);
-        if (!b64) continue;
-        const mimetype =
-          pick(json.mimetype) ||
-          (json.data && typeof json.data === "object"
-            ? pick((json.data as Record<string, unknown>).mimetype as string)
-            : undefined);
-        return { base64: b64, mimetype };
-      } catch {
-        // try next path
-      }
+      {
+        path: "/message/getBase64FromMediaMessage",
+        body: {
+          message: { key: { id: args.keyId } },
+          convertToMp4: false,
+        },
+      },
+    );
+
+    for (const { path, body } of attempts) {
+      const parsed = await this.postZappfyMediaDownload(path, body);
+      if (parsed) return parsed;
     }
     return null;
+  }
+
+  private async postZappfyMediaDownload(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<{ base64: string; mimetype?: string } | null> {
+    try {
+      const res = await fetch(`${this.base()}${path}`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return null;
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      return extractZappfyDownloadPayload(json);
+    } catch {
+      return null;
+    }
   }
 
   parseWebhook(payload: unknown): NormalizedInbound[] {
@@ -712,6 +747,101 @@ function resolveZappfySenderIdentity(blob: Record<string, unknown>): {
   return null;
 }
 
+function extractZappfyDownloadPayload(
+  json: Record<string, unknown>,
+): { base64: string; mimetype?: string } | null {
+  const pick = (v: unknown): string | undefined =>
+    typeof v === "string" && v.trim() ? v.trim() : undefined;
+
+  const nodes: Record<string, unknown>[] = [json];
+  if (json.data && typeof json.data === "object" && !Array.isArray(json.data)) {
+    nodes.push(json.data as Record<string, unknown>);
+  }
+  if (json.result && typeof json.result === "object" && !Array.isArray(json.result)) {
+    nodes.push(json.result as Record<string, unknown>);
+  }
+
+  for (const node of nodes) {
+    const b64 =
+      pick(node.base64) ||
+      pick(node.fileBase64) ||
+      pick(node.mediaBase64) ||
+      pick(node.messageBase64);
+    if (!b64) continue;
+    const mimetype =
+      pick(node.mimetype) ||
+      pick(node.mimeType) ||
+      pick(node.mediaType);
+    return { base64: b64, mimetype };
+  }
+  return null;
+}
+
+function zappfyMediaKindTokens(data: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const field of ["messageType", "mediaType", "type"]) {
+    const raw = pickBlobField(data, field);
+    if (typeof raw === "string" && raw.trim()) {
+      parts.push(raw.trim().toLowerCase());
+    }
+  }
+  return parts.join(" ");
+}
+
+function flatMimeFromBlob(data: Record<string, unknown>, kind: string): string {
+  const raw =
+    asTrimmedString(pickBlobField(data, "mimetype", "mimeType", "mediaType")) ??
+    "";
+  if (raw.includes("/")) return raw.split(";")[0]?.trim() || "application/octet-stream";
+  if (kind.includes("audio") || kind.includes("ptt")) {
+    return "audio/ogg; codecs=opus";
+  }
+  if (kind.includes("image")) return "image/jpeg";
+  if (kind.includes("video")) return "video/mp4";
+  if (kind.includes("document") || kind.includes("pdf")) return "application/pdf";
+  return "application/octet-stream";
+}
+
+function extractFlatMediaUrl(data: Record<string, unknown>): string | null {
+  for (const field of [
+    "fileUrl",
+    "fileurl",
+    "mediaUrl",
+    "mediaurl",
+    "url",
+    "file",
+    "media",
+  ]) {
+    const s = asTrimmedString(pickBlobField(data, field));
+    if (s?.startsWith("http://") || s?.startsWith("https://")) return s;
+  }
+  const content = asTrimmedString(pickBlobField(data, "content"));
+  if (content?.startsWith("http://") || content?.startsWith("https://")) {
+    return content;
+  }
+  return null;
+}
+
+function extractConvertOptionsBase64(
+  data: Record<string, unknown>,
+): { b64: string; mime?: string } | null {
+  const opts = pickBlobField(data, "convertOptions", "convertoptions");
+  if (!opts || typeof opts !== "object" || Array.isArray(opts)) return null;
+  const o = opts as Record<string, unknown>;
+  const b64 = asTrimmedString(o.base64 ?? o.fileBase64 ?? o.data ?? o.mediaBase64);
+  if (!b64) return null;
+  const mime = asTrimmedString(o.mimetype ?? o.mimeType ?? o.mediaType) ?? undefined;
+  return { b64, mime };
+}
+
+function pickFlatBase64(data: Record<string, unknown>): string | null {
+  for (const field of ["base64", "messageBase64", "mediaBase64", "fileBase64"]) {
+    const s = asTrimmedString(pickBlobField(data, field));
+    if (s) return s;
+  }
+  return extractConvertOptionsBase64(data)?.b64 ?? null;
+}
+
 function unwrapProtoContent(
   message: Record<string, unknown> | undefined,
 ): Record<string, unknown> | null {
@@ -739,21 +869,31 @@ function extractZappfyText(
   data: Record<string, unknown>,
   message?: Record<string, unknown>,
 ): string {
+  const kind = zappfyMediaKindTokens(data);
+  const contentRaw = asTrimmedString(pickBlobField(data, "content"));
+  const contentAsText =
+    contentRaw &&
+    !contentRaw.startsWith("http://") &&
+    !contentRaw.startsWith("https://") &&
+    !kind.includes("audio") &&
+    !kind.includes("ptt") &&
+    !kind.includes("image") &&
+    !kind.includes("video") &&
+    !kind.includes("document")
+      ? contentRaw
+      : undefined;
+
   const textRaw =
     data.text ??
     data.body ??
     data.messageText ??
     data.messageBody ??
-    pickBlobField(data, "content") ??
+    contentAsText ??
     (message ? extractTextFromProto(message) : undefined);
   if (typeof textRaw === "string" && textRaw.trim()) return textRaw.trim();
 
   const root = unwrapProtoContent(message);
-  const typeRaw =
-    data.messageType ??
-    data.type ??
-    (root ? Object.keys(root)[0] : undefined);
-  const type = typeof typeRaw === "string" ? typeRaw.toLowerCase() : "";
+  const type = kind;
 
   if (
     root?.audioMessage ||
@@ -779,25 +919,32 @@ function extractZappfyMedia(
   data: Record<string, unknown>,
   message?: Record<string, unknown>,
 ): { mediaUrl: string | null; mediaType: string | null } {
+  const kind = zappfyMediaKindTokens(data);
   const root = unwrapProtoContent(message);
   if (!root) {
-    const b64Raw =
-      (typeof data.base64 === "string" && data.base64) ||
-      (typeof data.messageBase64 === "string" && data.messageBase64) ||
-      (typeof data.mediaBase64 === "string" && data.mediaBase64) ||
-      null;
-    if (b64Raw) {
-      const trimmed = b64Raw.trim();
+    const converted = extractConvertOptionsBase64(data);
+    const b64Raw = pickFlatBase64(data);
+    const flatUrl = extractFlatMediaUrl(data);
+    const mimeFromFlat = flatMimeFromBlob(data, kind);
+
+    if (b64Raw || converted?.b64) {
+      const trimmed = (b64Raw ?? converted?.b64 ?? "").trim();
       const mime =
-        typeof data.mimetype === "string"
+        converted?.mime?.split(";")[0]?.trim() ??
+        (typeof data.mimetype === "string"
           ? data.mimetype.split(";")[0]?.trim()
-          : "application/octet-stream";
+          : mimeFromFlat);
       if (trimmed.startsWith("data:")) {
         return { mediaUrl: trimmed, mediaType: mime };
       }
       return { mediaUrl: `data:${mime};base64,${trimmed}`, mediaType: mime };
     }
-    return { mediaUrl: null, mediaType: null };
+
+    if (flatUrl) {
+      return { mediaUrl: flatUrl, mediaType: mimeFromFlat };
+    }
+
+    return { mediaUrl: null, mediaType: kind ? mimeFromFlat : null };
   }
 
   const aud = (root.audioMessage ?? root.pttMessage) as
@@ -873,7 +1020,10 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
   const text = extractZappfyText(blob, message);
   if (!text) return null;
 
-  const keyId = key?.id ? String(key.id) : undefined;
+  const keyId =
+    (key?.id ? String(key.id) : undefined) ??
+    asTrimmedString(pickBlobField(blob, "messageId", "messageid")) ??
+    undefined;
   const externalId = String(
     keyId ??
       blob.messageId ??

@@ -67,9 +67,10 @@ export interface IWhatsAppProvider {
   /** Converte payload bruto do webhook em mensagens normalizadas */
   parseWebhook(payload: unknown): NormalizedInbound[];
 
-  /** Evolution: baixa base64 do áudio/vídeo pelo par key + remoteJid após o webhook. */
+  /** Evolution/Zappfy: baixa base64 da mídia após o webhook. */
   fetchInboundMediaBase64?(args: {
     keyId: string;
     remoteJid: string;
+    remoteJidAlt?: string;
   }): Promise<{ base64: string; mimetype?: string } | null>;
 }

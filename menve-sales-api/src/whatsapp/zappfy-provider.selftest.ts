@@ -173,4 +173,35 @@ assert(flatPanel[0]?.body === "Mensagem teste painel", "content como body");
 assert(flatPanel[0]?.from === "5519992105272", "telefone via chatid");
 assert(flatPanel[0]?.externalId === "FLAT_PANEL_1", "messageid como externalId");
 
+const flatAudio = provider.parseWebhook({
+  event: "messages",
+  data: {
+    chatid: "5519992105272@s.whatsapp.net",
+    chatlid: "271361050177610@lid",
+    content: "",
+    fromMe: false,
+    isGroup: false,
+    mediaType: "AudioMessage",
+    messageid: "AUDIO_FLAT_1",
+    messageTimestamp: 1_719_000_000,
+  },
+});
+assert(flatAudio.length === 1, "formato painel audio");
+assert(flatAudio[0]?.body === "[Áudio]", "placeholder audio");
+assert(flatAudio[0]?.whatsappKeyId === "AUDIO_FLAT_1", "messageid como whatsappKeyId");
+assert(flatAudio[0]?.from === "5519992105272", "telefone audio via chatid");
+
+const flatAudioB64 = provider.parseWebhook({
+  event: "messages",
+  data: {
+    chatid: "5519992105272@s.whatsapp.net",
+    fromMe: false,
+    mediaType: "ptt",
+    messageid: "AUDIO_B64",
+    convertOptions: { base64: "ZGF0YQ==", mimetype: "audio/ogg" },
+  },
+});
+assert(flatAudioB64[0]?.mediaUrl?.includes("base64"), "base64 em convertOptions");
+assert(flatAudioB64[0]?.mediaType === "audio/ogg", "mime convertOptions");
+
 console.log("zappfy-provider.selftest: OK");
