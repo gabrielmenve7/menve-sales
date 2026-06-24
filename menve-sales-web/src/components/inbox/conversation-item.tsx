@@ -64,7 +64,7 @@ export function ConversationItem({
   const qualMode = c.qualificationMode ?? "NONE";
   const qualBadge =
     qualMode === "AI_ACTIVE"
-      ? Gabriel
+      ? "Gabriel"
       : qualMode === "HUMAN_HANDOFF"
         ? "Humano"
         : qualMode === "COMPLETED"

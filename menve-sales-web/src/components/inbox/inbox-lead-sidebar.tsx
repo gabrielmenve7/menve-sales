@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   Kanban,
   PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -27,6 +28,7 @@ export function InboxLeadSidebar({
   tenantMembers,
   onLeadChanged,
   onOpenContactInInbox,
+  onCollapse,
 }: {
   contact: InboxContact;
   deals: InboxOpenDeal[];
@@ -34,6 +36,7 @@ export function InboxLeadSidebar({
   tenantMembers: TenantMemberOption[];
   onLeadChanged: () => void;
   onOpenContactInInbox: (contactId: string) => void | Promise<void>;
+  onCollapse?: () => void;
 }) {
   const queryClient = useQueryClient();
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -249,6 +252,28 @@ export function InboxLeadSidebarEmpty({
           Selecione uma conversa para ver ou criar a oportunidade no pipeline.
         </p>
       </div>
+    </aside>
+  );
+}
+
+export function InboxLeadSidebarRail({
+  onExpand,
+}: {
+  onExpand: () => void;
+}) {
+  return (
+    <aside className="flex h-full min-h-0 w-10 shrink-0 flex-col items-center border-l border-border/20 bg-muted/5 pt-3 dark:border-border/30">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-8 rounded-md text-muted-foreground hover:text-foreground"
+        aria-label="Expandir painel de oportunidade"
+        title="Expandir oportunidade"
+        onClick={onExpand}
+      >
+        <PanelRightOpen className="size-4 opacity-85" aria-hidden />
+      </Button>
     </aside>
   );
 }

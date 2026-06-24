@@ -108,7 +108,7 @@ export function AgentesPanel({
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="font-medium">
-                  {data.agent?.displayName ?? Gabriel}
+                  {data.agent?.displayName ?? "Gabriel"}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   {data.agent?.description ??

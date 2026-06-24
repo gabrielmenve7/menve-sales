@@ -15,7 +15,7 @@ export class SkillSyncService {
       create: {
         id: "gabriel-agent-seed",
         key: GABRIEL_KEY,
-        displayName: def?.displayName ?? Gabriel,
+        displayName: def?.displayName ?? "Gabriel",
         description:
           def?.description ?? "Agente SDR de qualificação pós-disparo",
         isActive: true,
