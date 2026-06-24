@@ -181,10 +181,10 @@ model Tenant {
   outreachDefaultTemplate String?  @db.Text
   /// Regras de lead scoring (JSON).
   leadScoringRules        Json?
-  /// Agente Larissa (SDR IA) ativo para qualificação pós-disparo.
-  larissaEnabled          Boolean  @default(false)
-  larissaModel            String?
-  larissaReplyDelayMs     Int      @default(1500)
+  /// Agente Gabriel (SDR IA) ativo para qualificação pós-disparo.
+  gabrielEnabled          Boolean  @default(false)
+  gabrielModel            String?
+  gabrielReplyDelayMs     Int      @default(1500)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -881,7 +881,7 @@ model Message {
   @@index([conversationId, createdAt])
 }
 
-/// Catálogo de agentes IA (MVP: Larissa).
+/// Catálogo de agentes IA (MVP: Gabriel).
 model AiAgent {
   id          String   @id @default(cuid())
   key         String   @unique

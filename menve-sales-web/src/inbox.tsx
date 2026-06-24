@@ -16,6 +16,7 @@ import { ChatEmptyState } from "@/components/inbox/chat-empty-state";
 import {
   InboxLeadSidebar,
   InboxLeadSidebarEmpty,
+  InboxLeadSidebarRail,
 } from "@/components/inbox/inbox-lead-sidebar";
 import type { InboxConversation } from "@/components/inbox/inbox-types";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
@@ -23,6 +24,13 @@ import { inboxQueryKeys } from "@/lib/inbox-query-keys";
 import type { QuickReplyCategoryDTO } from "@/lib/quick-reply-types";
 
 export type { InboxConversation } from "@/components/inbox/inbox-types";
+
+const LS_INBOX_LEAD_SIDEBAR_COLLAPSED = "menve.inbox.leadSidebar.collapsed";
+
+function readLeadSidebarCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(LS_INBOX_LEAD_SIDEBAR_COLLAPSED) === "1";
+}
 
 async function fetchInbox() {
   const b = await fetchInboxBundle();
@@ -96,7 +104,7 @@ function InboxConversationThreadColumn({
   conversationId,
   initialConversationDetail,
   quickReplyCategories,
-  larissaEnabled = false,
+  gabrielEnabled = false,
   onRefetchInbox,
   onConversationDeleted,
 }: {
@@ -104,7 +112,7 @@ function InboxConversationThreadColumn({
   conversationId: string;
   initialConversationDetail: InboxConversation | null | undefined;
   quickReplyCategories: QuickReplyCategoryDTO[];
-  larissaEnabled?: boolean;
+  gabrielEnabled?: boolean;
   onRefetchInbox: () => void;
   onConversationDeleted: () => void;
 }) {
@@ -157,7 +165,7 @@ function InboxConversationThreadColumn({
       <ChatPanel
         conversation={merged}
         quickReplyCategories={quickReplyCategories}
-        larissaEnabled={larissaEnabled}
+        gabrielEnabled={gabrielEnabled}
         onRefetch={onRefetchInbox}
         onDeleted={onConversationDeleted}
       />
@@ -173,7 +181,7 @@ export function InboxClient({
   initialConversationId = null,
   /** Thread completo quando a página já resolveu o deep link (ex.: funil → inbox). */
   initialConversationDetail = null,
-  larissaEnabled = false,
+  gabrielEnabled = false,
   dealCustomFieldDefs,
   tenantMembers,
 }: {
@@ -185,7 +193,7 @@ export function InboxClient({
   /** ID exato retornado por `POST /inbox/ensure-conversation` (canal ativo). */
   initialConversationId?: string | null;
   initialConversationDetail?: InboxConversation | null;
-  larissaEnabled?: boolean;
+  gabrielEnabled?: boolean;
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   canManageConnections?: boolean;
@@ -203,6 +211,29 @@ export function InboxClient({
     if (initialContactId || initialConversationId) return null;
     return initialConversations[0]?.id ?? null;
   });
+  const [leadSidebarCollapsed, setLeadSidebarCollapsed] = useState(false);
+  const [leadSidebarMounted, setLeadSidebarMounted] = useState(false);
+
+  useEffect(() => {
+    setLeadSidebarMounted(true);
+    setLeadSidebarCollapsed(readLeadSidebarCollapsed());
+  }, []);
+
+  useEffect(() => {
+    if (!leadSidebarMounted) return;
+    localStorage.setItem(
+      LS_INBOX_LEAD_SIDEBAR_COLLAPSED,
+      leadSidebarCollapsed ? "1" : "0",
+    );
+  }, [leadSidebarCollapsed, leadSidebarMounted]);
+
+  const collapseLeadSidebar = useCallback(() => {
+    setLeadSidebarCollapsed(true);
+  }, []);
+
+  const expandLeadSidebar = useCallback(() => {
+    setLeadSidebarCollapsed(false);
+  }, []);
 
   const { data: inboxListData, refetch: refetchList } = useQuery({
     queryKey: inboxQueryKeys.list,
@@ -379,7 +410,7 @@ export function InboxClient({
             conversationId={selectedId}
             initialConversationDetail={initialConversationDetail}
             quickReplyCategories={quickReplyCategories}
-            larissaEnabled={larissaEnabled}
+            gabrielEnabled={gabrielEnabled}
             onRefetchInbox={() => void refetchInbox()}
             onConversationDeleted={handleConversationDeleted}
           />
@@ -389,20 +420,27 @@ export function InboxClient({
       </div>
 
       {/* Oportunidade / pipeline (desktop) — mesmo painel editável do funil */}
-      <div className="hidden min-h-0 w-[min(100%,28rem)] min-w-[260px] max-w-[28rem] shrink-0 flex-col overflow-hidden lg:flex">
-        {selectedListRow ? (
-          <InboxLeadSidebar
-            contact={selectedListRow.contact}
-            deals={selectedListRow.contact.deals ?? []}
-            dealCustomFieldDefs={dealCustomFieldDefs}
-            tenantMembers={tenantMembers}
-            onLeadChanged={debouncedLeadRefetch}
-            onOpenContactInInbox={openContactInInbox}
-          />
-        ) : (
-          <InboxLeadSidebarEmpty />
-        )}
-      </div>
+      {leadSidebarCollapsed ? (
+        <div className="hidden min-h-0 shrink-0 overflow-hidden lg:flex">
+          <InboxLeadSidebarRail onExpand={expandLeadSidebar} />
+        </div>
+      ) : (
+        <div className="hidden min-h-0 w-[min(100%,28rem)] min-w-[260px] max-w-[28rem] shrink-0 flex-col overflow-hidden transition-[width] duration-300 ease-in-out motion-reduce:transition-none lg:flex">
+          {selectedListRow ? (
+            <InboxLeadSidebar
+              contact={selectedListRow.contact}
+              deals={selectedListRow.contact.deals ?? []}
+              dealCustomFieldDefs={dealCustomFieldDefs}
+              tenantMembers={tenantMembers}
+              onLeadChanged={debouncedLeadRefetch}
+              onOpenContactInInbox={openContactInInbox}
+              onCollapse={collapseLeadSidebar}
+            />
+          ) : (
+            <InboxLeadSidebarEmpty onCollapse={collapseLeadSidebar} />
+          )}
+        </div>
+      )}
     </div>
   );
 }

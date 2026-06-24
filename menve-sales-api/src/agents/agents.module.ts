@@ -5,11 +5,11 @@ import { AgentsController } from "./agents.controller";
 import { AgentsService } from "./agents.service";
 import { AiOutboundService } from "./ai-outbound.service";
 import { HandoffService } from "./handoff.service";
-import { LarissaEligibilityService } from "./larissa-eligibility.service";
-import { LarissaOrchestratorService } from "./larissa-orchestrator.service";
+import { GabrielEligibilityService } from "./gabriel-eligibility.service";
+import { GabrielOrchestratorService } from "./gabriel-orchestrator.service";
 import { SkillSyncService } from "./skill-sync.service";
 import { AudioTranscriptionService } from "./audio-transcription.service";
-import { LarissaToolsService } from "./tools/larissa-tools.service";
+import { GabrielToolsService } from "./tools/gabriel-tools.service";
 
 @Module({
   imports: [PrismaModule, forwardRef(() => GoogleCalendarModule)],
@@ -17,15 +17,15 @@ import { LarissaToolsService } from "./tools/larissa-tools.service";
   providers: [
     AgentsService,
     SkillSyncService,
-    LarissaEligibilityService,
-    LarissaOrchestratorService,
+    GabrielEligibilityService,
+    GabrielOrchestratorService,
     HandoffService,
-    LarissaToolsService,
+    GabrielToolsService,
     AudioTranscriptionService,
     AiOutboundService,
   ],
   exports: [
-    LarissaOrchestratorService,
+    GabrielOrchestratorService,
     HandoffService,
     AgentsService,
     SkillSyncService,

@@ -1,5 +1,5 @@
 ---
-description: Squad AGENTES - agentes de IA (Larissa SDR) e runtime de qualificação
+description: Squad AGENTES - agentes de IA (Gabriel SDR) e runtime de qualificação
 globs:
   - menve-sales-api/src/agents/**
   - menve-sales-web/src/app/(dashboard)/agentes/**
@@ -13,7 +13,7 @@ alwaysApply: false
 ## Identidade
 
 - **Squad**: squad-agentes
-- **Domínio**: Agentes de IA para qualificação pós-disparo (Larissa)
+- **Domínio**: Agentes de IA para qualificação pós-disparo (Gabriel)
 - **Missão**: runtime LLM, skills versionadas, handoff para humano e integração com Inbox + Calendar + Pipeline
 
 ## Escopo
@@ -21,7 +21,7 @@ alwaysApply: false
 ### Pode alterar
 
 - `menve-sales-api/src/agents/` — orchestrator, LLM, tools, handoff
-- `menve-sales-api/scripts/sync-larissa-skills.ts`
+- `menve-sales-api/scripts/sync-gabriel-skills.ts`
 - `.cursor/rules/agent-*.mdc` — definição completa de cada agente (persona, skills, guardrails)
 - `menve-sales-web/src/app/(dashboard)/agentes/`
 - `menve-sales-web/src/actions/agents.ts`
@@ -34,23 +34,23 @@ alwaysApply: false
 
 ## Padrão de agentes (`.cursor/rules`)
 
-Um arquivo por agente: **`agent-{chave}.mdc`** (ex.: `agent-larissa.mdc`).
+Um arquivo por agente: **`agent-{chave}.mdc`** (ex.: `agent-gabriel.mdc`).
 
 Frontmatter obrigatório:
 
 ```yaml
 ---
 description: Resumo para o Cursor
-agentKey: larissa
-displayName: Larissa
+agentKey: gabriel
+displayName: Gabriel
 ---
 ```
 
 Corpo: seções `##` viram skills no runtime (`## Persona`, `## Qualificação`, …). O sync grava em `AiAgentSkill` por tenant.
 
-Novo agente = copiar `agent-larissa.mdc` → `agent-{nome}.mdc`, ajustar frontmatter e seções.
+Novo agente = copiar `agent-gabriel.mdc` → `agent-{nome}.mdc`, ajustar frontmatter e seções.
 
-Sincronizar: `POST /agents/larissa/sync-skills` ou `npm run sync:larissa-skills`.
+Sincronizar: `POST /agents/gabriel/sync-skills` ou `npm run sync:gabriel-skills`.
 
 ## Dependências
 
@@ -58,5 +58,3 @@ Sincronizar: `POST /agents/larissa/sync-skills` ou `npm run sync:larissa-skills`
 |-------------|-------|-----------|
 | Inbox UI (bolhas, takeover) | squad-inbox | contrato DTO `senderType`, `qualificationMode` |
 | Webhook Zappfy | squad-canais | inbound dispara orchestrator |
-| Google Meet + pipeline | squad-pipeline | tool `schedule_google_meet` |
-| Disparo REPLIED | outreach | `handleInboundReply` ativa qualificação |

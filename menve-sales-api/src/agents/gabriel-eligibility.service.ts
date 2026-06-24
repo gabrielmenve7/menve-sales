@@ -11,7 +11,7 @@ export type EligibilityResult =
   | { eligible: false; reason: string };
 
 @Injectable()
-export class LarissaEligibilityService {
+export class GabrielEligibilityService {
   constructor(private readonly prisma: PrismaService) {}
 
   async shouldRun(args: {
@@ -20,10 +20,10 @@ export class LarissaEligibilityService {
   }): Promise<EligibilityResult> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: args.tenantId },
-      select: { larissaEnabled: true },
+      select: { gabrielEnabled: true },
     });
-    if (!tenant?.larissaEnabled) {
-      return { eligible: false, reason: "larissa_disabled" };
+    if (!tenant?.gabrielEnabled) {
+      return { eligible: false, reason: "gabriel_disabled" };
     }
 
     const conversation = await this.prisma.conversation.findFirst({
@@ -35,6 +35,16 @@ export class LarissaEligibilityService {
     });
     if (!conversation) {
       return { eligible: false, reason: "conversation_not_found" };
+    }
+
+    if (!conversation.outreachRecipientId || !conversation.outreachRecipient) {
+      return { eligible: false, reason: "not_from_disparo" };
+    }
+
+    if (
+      conversation.outreachRecipient.status !== OutreachRecipientStatus.REPLIED
+    ) {
+      return { eligible: false, reason: "disparo_not_replied" };
     }
 
     if (conversation.qualificationMode !== ConversationQualificationMode.AI_ACTIVE) {

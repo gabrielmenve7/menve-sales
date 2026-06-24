@@ -9,7 +9,7 @@ import {
   type WhatsAppConnection,
   WhatsAppProvider,
 } from "@prisma/client";
-import { LarissaOrchestratorService } from "../agents/larissa-orchestrator.service";
+import { GabrielOrchestratorService } from "../agents/gabriel-orchestrator.service";
 import { isInboundAudioMessage } from "../agents/inbound-audio.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { OutreachService } from "../outreach/outreach.service";
@@ -131,8 +131,8 @@ export class MessageProcessingService {
     private readonly prisma: PrismaService,
     @Optional() private readonly outreach?: OutreachService,
     @Optional()
-    @Inject(forwardRef(() => LarissaOrchestratorService))
-    private readonly larissa?: LarissaOrchestratorService,
+    @Inject(forwardRef(() => GabrielOrchestratorService))
+    private readonly gabriel?: GabrielOrchestratorService,
   ) {}
 
   async processInboundWhatsApp(args: {
@@ -389,8 +389,8 @@ export class MessageProcessingService {
         })
         .catch(() => ({ updated: false as const, recipientId: null as string | null }));
 
-      if (reply.updated && this.larissa) {
-        void this.larissa
+      if (reply.updated && this.gabriel) {
+        void this.gabriel
           .activateOnInboundReply({
             tenantId: args.tenantId,
             conversationId: conversation.id,
@@ -404,27 +404,41 @@ export class MessageProcessingService {
             mediaReady: Boolean(mediaUrl),
           })
           .catch(() => undefined);
-      } else if (!outboundFromDevice && this.larissa) {
-        await this.maybeNotifyLarissaInbound({
-          tenantId: args.tenantId,
-          conversationId: conversation.id,
-          contactId: contact.id,
-          messageId: created.id,
-          body: args.inbound.body,
-          mediaType,
-          mediaReady: Boolean(mediaUrl),
+      } else if (this.gabriel) {
+        const convRow = await this.prisma.conversation.findFirst({
+          where: { id: conversation.id, tenantId: args.tenantId },
+          select: { qualificationMode: true, outreachRecipientId: true },
         });
+        if (
+          convRow?.qualificationMode === ConversationQualificationMode.NONE &&
+          convRow.outreachRecipientId
+        ) {
+          void this.gabriel
+            .activateOnInboundReply({
+              tenantId: args.tenantId,
+              conversationId: conversation.id,
+              contactId: contact.id,
+              outreachRecipientId: convRow.outreachRecipientId,
+              triggerMessageId: created.id,
+              isAudio: isInboundAudioMessage({
+                body: args.inbound.body,
+                mediaType,
+              }),
+              mediaReady: Boolean(mediaUrl),
+            })
+            .catch(() => undefined);
+        } else {
+          await this.maybeNotifyGabrielInbound({
+            tenantId: args.tenantId,
+            conversationId: conversation.id,
+            contactId: contact.id,
+            messageId: created.id,
+            body: args.inbound.body,
+            mediaType,
+            mediaReady: Boolean(mediaUrl),
+          });
+        }
       }
-    } else if (!outboundFromDevice && this.larissa) {
-      await this.maybeNotifyLarissaInbound({
-        tenantId: args.tenantId,
-        conversationId: conversation.id,
-        contactId: contact.id,
-        messageId: created.id,
-        body: args.inbound.body,
-        mediaType,
-        mediaReady: Boolean(mediaUrl),
-      });
     }
 
     // Só quando o cliente envia mensagem: marcar mensagens nossas anteriores como lidas por ele.
@@ -573,13 +587,13 @@ export class MessageProcessingService {
     });
 
     if (isInboundAudioMessage({ body: msg.body, mediaType: resolved.mediaType })) {
-      await this.maybeNotifyLarissaAfterAudioHydrate(msg.id).catch(() => undefined);
+      await this.maybeNotifyGabrielAfterAudioHydrate(msg.id).catch(() => undefined);
     }
 
     return true;
   }
 
-  private async maybeNotifyLarissaInbound(args: {
+  private async maybeNotifyGabrielInbound(args: {
     tenantId: string;
     conversationId: string;
     contactId: string;
@@ -588,19 +602,20 @@ export class MessageProcessingService {
     mediaType: string | null;
     mediaReady: boolean;
   }) {
-    if (!this.larissa) return;
+    if (!this.gabriel) return;
     const conv = await this.prisma.conversation.findFirst({
       where: { id: args.conversationId, tenantId: args.tenantId },
-      select: { qualificationMode: true },
+      select: { qualificationMode: true, outreachRecipientId: true },
     });
-    if (conv?.qualificationMode !== ConversationQualificationMode.AI_ACTIVE) {
+    if (!conv?.outreachRecipientId) return;
+    if (conv.qualificationMode !== ConversationQualificationMode.AI_ACTIVE) {
       return;
     }
     const isAudio = isInboundAudioMessage({
       body: args.body,
       mediaType: args.mediaType,
     });
-    this.larissa.notifyInboundMessage({
+    this.gabriel.notifyInboundMessage({
       tenantId: args.tenantId,
       conversationId: args.conversationId,
       contactId: args.contactId,
@@ -610,8 +625,8 @@ export class MessageProcessingService {
     });
   }
 
-  private async maybeNotifyLarissaAfterAudioHydrate(messageId: string) {
-    if (!this.larissa) return;
+  private async maybeNotifyGabrielAfterAudioHydrate(messageId: string) {
+    if (!this.gabriel) return;
     const row = await this.prisma.message.findFirst({
       where: { id: messageId },
       select: {
@@ -627,12 +642,13 @@ export class MessageProcessingService {
     if (!row?.conversationId || !row.mediaUrl) return;
     const conv = await this.prisma.conversation.findFirst({
       where: { id: row.conversationId, tenantId: row.tenantId },
-      select: { qualificationMode: true },
+      select: { qualificationMode: true, outreachRecipientId: true },
     });
-    if (conv?.qualificationMode !== ConversationQualificationMode.AI_ACTIVE) {
+    if (!conv?.outreachRecipientId) return;
+    if (conv.qualificationMode !== ConversationQualificationMode.AI_ACTIVE) {
       return;
     }
-    this.larissa.notifyInboundMessage({
+    this.gabriel.notifyInboundMessage({
       tenantId: row.tenantId,
       conversationId: row.conversationId,
       contactId: row.contactId,

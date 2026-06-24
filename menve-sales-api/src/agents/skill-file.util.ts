@@ -27,7 +27,7 @@ export function resolveRulesDir(): string {
   return CURSOR_RULES_DIR;
 }
 
-/** `agent-larissa.mdc` → `larissa` */
+/** `agent-gabriel.mdc` → `gabriel` */
 export function agentKeyFromFilename(filename: string): string | null {
   const m = /^agent-(.+)\.mdc$/i.exec(filename);
   return m?.[1]?.trim().toLowerCase() ?? null;
@@ -137,8 +137,8 @@ export async function listAgentKeys(): Promise<string[]> {
     .sort();
 }
 
-/** Compat: skills da Larissa a partir de `agent-larissa.mdc`. */
-export async function loadLarissaSkillFiles(): Promise<ParsedSkillFile[]> {
-  const agent = await loadAgentDefinition("larissa");
+/** Compat: skills do Gabriel a partir de `agent-gabriel.mdc`. */
+export async function loadGabrielSkillFiles(): Promise<ParsedSkillFile[]> {
+  const agent = await loadAgentDefinition("gabriel");
   return agent.skills;
 }

@@ -8,11 +8,11 @@ async function main() {
   const tenantId = process.argv[2];
   const all = process.argv.includes("--all-enabled");
 
-  const def = await loadAgentDefinition("larissa");
+  const def = await loadAgentDefinition("gabriel");
   const agent = await prisma.aiAgent.upsert({
     where: { key: def.agentKey },
     create: {
-      id: "larissa-agent-seed",
+      id: "gabriel-agent-seed",
       key: def.agentKey,
       displayName: def.displayName,
       description: def.description || "Agente SDR de qualificação pós-disparo",
@@ -30,7 +30,7 @@ async function main() {
     tenantIds = [tenantId];
   } else if (all) {
     const tenants = await prisma.tenant.findMany({
-      where: { larissaEnabled: true },
+      where: { gabrielEnabled: true },
       select: { id: true },
     });
     tenantIds = tenants.map((t) => t.id);

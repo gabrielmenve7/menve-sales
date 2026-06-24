@@ -593,11 +593,15 @@ export class OutreachService {
       take: 20,
     });
 
-    const recipient = recipients.find(
-      (r) =>
+    const recipient = recipients.find((r) => {
+      const phoneMatch =
         phoneDigits(r.phone) === digits ||
-        phoneDigits(r.phone).endsWith(digits.slice(-11)),
-    );
+        phoneDigits(r.phone).endsWith(digits.slice(-11));
+      if (!phoneMatch) return false;
+      // Evita acionar disparo de outro contato com o mesmo telefone.
+      if (r.contactId && r.contactId !== args.contactId) return false;
+      return true;
+    });
     if (!recipient) return { updated: false, recipientId: null };
 
     const now = new Date();
@@ -610,6 +614,15 @@ export class OutreachService {
         conversationId: args.conversationId,
         messageId: args.messageId ?? recipient.messageId,
       },
+    });
+
+    await this.prisma.conversation.updateMany({
+      where: {
+        id: args.conversationId,
+        tenantId: args.tenantId,
+        outreachRecipientId: null,
+      },
+      data: { outreachRecipientId: recipient.id },
     });
 
     const openDeals = await this.prisma.deal.findMany({

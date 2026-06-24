@@ -7,32 +7,32 @@ import { AgentsService } from "./agents.service";
 export class AgentsController {
   constructor(private readonly agents: AgentsService) {}
 
-  @Get("larissa")
-  getLarissa(@ReqUser() u: RequestUser) {
-    return this.agents.getLarissaConfig(u.tenantId);
+  @Get("gabriel")
+  getGabriel(@ReqUser() u: RequestUser) {
+    return this.agents.getGabrielConfig(u.tenantId);
   }
 
-  @Patch("larissa")
-  patchLarissa(@ReqUser() u: RequestUser, @Body() body: unknown) {
+  @Patch("gabriel")
+  patchGabriel(@ReqUser() u: RequestUser, @Body() body: unknown) {
     const b = body as {
-      larissaEnabled?: boolean;
-      larissaModel?: string | null;
-      larissaReplyDelayMs?: number;
+      gabrielEnabled?: boolean;
+      gabrielModel?: string | null;
+      gabrielReplyDelayMs?: number;
     };
-    return this.agents.updateLarissaConfig(u.tenantId, b);
+    return this.agents.updateGabrielConfig(u.tenantId, b);
   }
 
-  @Post("larissa/sync-skills")
+  @Post("gabriel/sync-skills")
   syncSkills(@ReqUser() u: RequestUser) {
     return this.agents.syncSkills(u.tenantId);
   }
 
   @Post("conversations/:id/activate")
-  activateLarissa(
+  activateGabriel(
     @ReqUser() u: RequestUser,
     @Param("id") conversationId: string,
   ) {
-    return this.agents.activateLarissaOnConversation(u.tenantId, conversationId);
+    return this.agents.activateGabrielOnConversation(u.tenantId, conversationId);
   }
 
   @Post("conversations/:id/takeover")

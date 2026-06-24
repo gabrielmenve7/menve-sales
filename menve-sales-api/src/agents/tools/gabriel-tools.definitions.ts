@@ -1,6 +1,6 @@
 import type { LlmToolDefinition } from "../llm/llm-provider.interface";
 
-export const LARISSA_TOOLS: LlmToolDefinition[] = [
+export const GABRIEL_TOOLS: LlmToolDefinition[] = [
   {
     type: "function",
     function: {

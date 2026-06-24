@@ -48,7 +48,7 @@ export function ConversationItem({
     isOutbound && lastMsg ? (lastMsg.ackStatus ?? "DELIVERED") : null;
   const previewPrefix =
     isOutbound && lastSender === "AI_AGENT"
-      ? "Larissa: "
+      ? "Gabriel: "
       : isOutbound && lastSender === "CAMPAIGN"
         ? "Abordagem: "
         : isOutbound
@@ -64,7 +64,7 @@ export function ConversationItem({
   const qualMode = c.qualificationMode ?? "NONE";
   const qualBadge =
     qualMode === "AI_ACTIVE"
-      ? "Larissa"
+      ? Gabriel
       : qualMode === "HUMAN_HANDOFF"
         ? "Humano"
         : qualMode === "COMPLETED"

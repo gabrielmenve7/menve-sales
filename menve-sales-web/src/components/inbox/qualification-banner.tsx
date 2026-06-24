@@ -3,7 +3,7 @@
 import { Bot, Loader2, Sparkles } from "lucide-react";
 import { useState } from "react";
 import {
-  activateLarissaOnConversation,
+  activateGabrielOnConversation,
   takeoverConversation,
 } from "@/actions/agents";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,11 @@ import type { InboxConversation } from "./inbox-types";
 
 export function QualificationBanner({
   conversation,
-  larissaEnabled = false,
+  gabrielEnabled = false,
   onTakeover,
 }: {
   conversation: InboxConversation;
-  larissaEnabled?: boolean;
+  gabrielEnabled?: boolean;
   onTakeover: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -39,25 +39,25 @@ export function QualificationBanner({
     setBusy(true);
     setError(null);
     try {
-      await activateLarissaOnConversation(conversation.id);
+      await activateGabrielOnConversation(conversation.id);
       onTakeover();
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Não foi possível ativar a Larissa",
+        e instanceof Error ? e.message : "Não foi possível ativar o Gabriel",
       );
     } finally {
       setBusy(false);
     }
   }
 
-  if (mode === "NONE" && larissaEnabled) {
+  if (mode === "NONE" && gabrielEnabled && conversation.outreachRecipientId) {
     return (
       <div className="relative flex shrink-0 items-center justify-between gap-3 border-b border-violet-500/20 bg-violet-500/5 px-4 py-2.5 text-sm dark:bg-violet-500/10">
         <div className="flex min-w-0 items-center gap-2 text-violet-950 dark:text-violet-100">
           <Sparkles className="size-4 shrink-0" aria-hidden />
           <p className="min-w-0">
-            Testar <span className="font-medium">Larissa</span> nesta conversa
-            (texto e áudio).
+            Este lead respondeu ao <span className="font-medium">Disparo</span>.
+            Ative o Gabriel para qualificar (texto e áudio).
           </p>
         </div>
         <Button
@@ -74,7 +74,7 @@ export function QualificationBanner({
               Ativando…
             </>
           ) : (
-            "Ativar Larissa"
+            "Ativar Gabriel"
           )}
         </Button>
         {error ? (
@@ -93,7 +93,7 @@ export function QualificationBanner({
       <div className="flex min-w-0 items-center gap-2 text-violet-950 dark:text-violet-100">
         <Bot className="size-4 shrink-0" aria-hidden />
         <p className="min-w-0">
-          <span className="font-medium">Larissa</span> está qualificando este
+          <span className="font-medium">Gabriel</span> está qualificando este
           lead (lê texto e áudio). Modo somente leitura.
         </p>
       </div>

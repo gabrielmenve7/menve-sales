@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import {
   buildChatHistory,
-  buildLarissaSystemPrompt,
+  buildGabrielSystemPrompt,
 } from "./prompt-builder";
 
 const skills = [
   {
     skillKey: "persona",
-    content: "Seja Larissa.",
+    content: "Seja Gabriel.",
     sortOrder: 1,
   },
   {
@@ -17,7 +17,7 @@ const skills = [
   },
 ];
 
-const prompt = buildLarissaSystemPrompt({
+const prompt = buildGabrielSystemPrompt({
   skills,
   journey: {
     name: "João",
@@ -28,7 +28,7 @@ const prompt = buildLarissaSystemPrompt({
   tenantName: "Menve",
 });
 
-assert.ok(prompt.includes("Larissa"));
+assert.ok(prompt.includes("Gabriel"));
 assert.ok(prompt.includes("João"));
 assert.ok(prompt.includes("Acme"));
 assert.ok(prompt.includes("Skill: persona"));

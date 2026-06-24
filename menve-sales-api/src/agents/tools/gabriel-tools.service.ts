@@ -14,7 +14,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import type { ToolContext, ToolHandler } from "./tool-types";
 
 @Injectable()
-export class LarissaToolsService {
+export class GabrielToolsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiOutbound: AiOutboundService,
@@ -93,7 +93,7 @@ export class LarissaToolsService {
     if (!phone) throw new BadRequestException("Contato sem telefone");
 
     const agent = await this.prisma.aiAgent.findUnique({
-      where: { key: "larissa" },
+      where: { key: "gabriel" },
     });
 
     await this.aiOutbound.sendText({
@@ -178,8 +178,8 @@ export class LarissaToolsService {
       data: {
         customData: {
           ...prev,
-          larissaQualificationNotes: notes,
-          larissaQualificationUpdatedAt: new Date().toISOString(),
+          gabrielQualificationNotes: notes,
+          gabrielQualificationUpdatedAt: new Date().toISOString(),
         } as Prisma.InputJsonValue,
       },
     });
@@ -210,10 +210,10 @@ export class LarissaToolsService {
 
     const farewell =
       String(args.message ?? "").trim() ||
-      "Entendido! Você não receberá mais mensagens. Obrigada pelo retorno.";
+      "Entendido! Você não receberá mais mensagens. Obrigado pelo retorno.";
 
     const agent = await this.prisma.aiAgent.findUnique({
-      where: { key: "larissa" },
+      where: { key: "gabriel" },
     });
 
     if (phone) {

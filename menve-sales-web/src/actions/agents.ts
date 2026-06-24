@@ -3,7 +3,7 @@
 import { apiServer } from "@/lib/api-server";
 import { revalidatePath } from "next/cache";
 
-export type LarissaConfigResponse = {
+export type GabrielConfigResponse = {
   agent: {
     id: string;
     key: string;
@@ -11,9 +11,9 @@ export type LarissaConfigResponse = {
     description: string | null;
   } | null;
   config: {
-    larissaEnabled: boolean;
-    larissaModel: string | null;
-    larissaReplyDelayMs: number;
+    gabrielEnabled: boolean;
+    gabrielModel: string | null;
+    gabrielReplyDelayMs: number;
   };
   skills: {
     skillKey: string;
@@ -31,23 +31,23 @@ export type LarissaConfigResponse = {
   };
 };
 
-export async function getLarissaConfig(): Promise<LarissaConfigResponse> {
-  return apiServer<LarissaConfigResponse>("/agents/larissa");
+export async function getGabrielConfig(): Promise<GabrielConfigResponse> {
+  return apiServer<GabrielConfigResponse>("/agents/gabriel");
 }
 
-export async function updateLarissaConfig(input: {
-  larissaEnabled?: boolean;
-  larissaModel?: string | null;
-  larissaReplyDelayMs?: number;
+export async function updateGabrielConfig(input: {
+  gabrielEnabled?: boolean;
+  gabrielModel?: string | null;
+  gabrielReplyDelayMs?: number;
 }) {
-  await apiServer("/agents/larissa", {
+  await apiServer("/agents/gabriel", {
     method: "PATCH",
     json: input,
   });
 }
 
-export async function syncLarissaSkills() {
-  await apiServer("/agents/larissa/sync-skills", { method: "POST" });
+export async function syncGabrielSkills() {
+  await apiServer("/agents/gabriel/sync-skills", { method: "POST" });
 }
 
 export async function takeoverConversation(conversationId: string) {
@@ -57,7 +57,7 @@ export async function takeoverConversation(conversationId: string) {
   revalidatePath("/inbox");
 }
 
-export async function activateLarissaOnConversation(conversationId: string) {
+export async function activateGabrielOnConversation(conversationId: string) {
   await apiServer(`/agents/conversations/${conversationId}/activate`, {
     method: "POST",
   });

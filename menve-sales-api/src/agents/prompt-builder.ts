@@ -11,7 +11,7 @@ export type SkillBlock = {
   sortOrder: number;
 };
 
-export function buildLarissaSystemPrompt(args: {
+export function buildGabrielSystemPrompt(args: {
   skills: SkillBlock[];
   journey: JourneySnippet;
   tenantName?: string;
@@ -32,7 +32,7 @@ export function buildLarissaSystemPrompt(args: {
     .join("\n");
 
   return [
-    "Você é Larissa, agente de qualificação comercial no WhatsApp.",
+    "Você é Gabriel, agente de qualificação comercial no WhatsApp.",
     "Siga rigorosamente as skills abaixo.",
     "Use as tools disponíveis para agir; não invente ações já cobertas por tools.",
     "",

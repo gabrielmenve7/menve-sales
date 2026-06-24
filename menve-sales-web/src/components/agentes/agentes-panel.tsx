@@ -3,10 +3,10 @@
 import { Bot, Loader2, RefreshCw } from "lucide-react";
 import { useState, useTransition } from "react";
 import {
-  getLarissaConfig,
-  syncLarissaSkills,
-  updateLarissaConfig,
-  type LarissaConfigResponse,
+  getGabrielConfig,
+  syncGabrielSkills,
+  updateGabrielConfig,
+  type GabrielConfigResponse,
 } from "@/actions/agents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ export function AgentesPanel({
   initial,
   embedded = false,
 }: {
-  initial: LarissaConfigResponse;
+  initial: GabrielConfigResponse;
   /** Dentro da aba Prospecção (sem título de página). */
   embedded?: boolean;
 }) {
@@ -29,7 +29,7 @@ export function AgentesPanel({
   function refresh() {
     startTransition(async () => {
       try {
-        setData(await getLarissaConfig());
+        setData(await getGabrielConfig());
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao atualizar");
       }
@@ -39,10 +39,10 @@ export function AgentesPanel({
   async function toggleEnabled(enabled: boolean) {
     setError(null);
     try {
-      await updateLarissaConfig({ larissaEnabled: enabled });
+      await updateGabrielConfig({ gabrielEnabled: enabled });
       setData((d) => ({
         ...d,
-        config: { ...d.config, larissaEnabled: enabled },
+        config: { ...d.config, gabrielEnabled: enabled },
       }));
       refresh();
     } catch (e) {
@@ -53,9 +53,9 @@ export function AgentesPanel({
   async function saveModel() {
     setError(null);
     try {
-      await updateLarissaConfig({
-        larissaModel: data.config.larissaModel,
-        larissaReplyDelayMs: data.config.larissaReplyDelayMs,
+      await updateGabrielConfig({
+        gabrielModel: data.config.gabrielModel,
+        gabrielReplyDelayMs: data.config.gabrielReplyDelayMs,
       });
       refresh();
     } catch (e) {
@@ -67,7 +67,7 @@ export function AgentesPanel({
     setSyncPending(true);
     setError(null);
     try {
-      await syncLarissaSkills();
+      await syncGabrielSkills();
       refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao sincronizar");
@@ -87,16 +87,15 @@ export function AgentesPanel({
         <div>
           <h1 className="text-xl font-semibold">Agentes IA</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Configure a Larissa para qualificar leads após o Disparo no
+            Configure o Gabriel para qualificar leads após o Disparo no
             Atendimento.
           </p>
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Ative a Larissa para qualificar respostas no Atendimento (texto e
-          áudio). As skills vêm dos arquivos{" "}
-          <code className="rounded bg-muted px-1">agent-&#123;chave&#125;.mdc</code>{" "}
-          no repositório.
+          Ative o Gabriel para qualificar respostas ao Disparo no Atendimento
+          (texto e áudio). Ela não responde contatos que não vieram de
+          prospecção ativa.
         </p>
       )}
 
@@ -109,7 +108,7 @@ export function AgentesPanel({
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="font-medium">
-                  {data.agent?.displayName ?? "Larissa"}
+                  {data.agent?.displayName ?? Gabriel}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   {data.agent?.description ??
@@ -118,13 +117,13 @@ export function AgentesPanel({
               </div>
               <div className="flex items-center gap-2">
                 <input
-                  id="larissa-enabled"
+                  id="gabriel-enabled"
                   type="checkbox"
                   className="size-4 rounded border-border"
-                  checked={data.config.larissaEnabled}
+                  checked={data.config.gabrielEnabled}
                   onChange={(e) => void toggleEnabled(e.target.checked)}
                 />
-                <Label htmlFor="larissa-enabled" className="text-sm">
+                <Label htmlFor="gabriel-enabled" className="text-sm">
                   Ativa
                 </Label>
               </div>
@@ -132,36 +131,36 @@ export function AgentesPanel({
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="larissa-model">Modelo LLM</Label>
+                <Label htmlFor="gabriel-model">Modelo LLM</Label>
                 <Input
-                  id="larissa-model"
-                  value={data.config.larissaModel ?? ""}
+                  id="gabriel-model"
+                  value={data.config.gabrielModel ?? ""}
                   placeholder="gpt-4o-mini"
                   onChange={(e) =>
                     setData((d) => ({
                       ...d,
                       config: {
                         ...d.config,
-                        larissaModel: e.target.value || null,
+                        gabrielModel: e.target.value || null,
                       },
                     }))
                   }
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="larissa-delay">Delay resposta (ms)</Label>
+                <Label htmlFor="gabriel-delay">Delay resposta (ms)</Label>
                 <Input
-                  id="larissa-delay"
+                  id="gabriel-delay"
                   type="number"
                   min={0}
                   max={30000}
-                  value={data.config.larissaReplyDelayMs}
+                  value={data.config.gabrielReplyDelayMs}
                   onChange={(e) =>
                     setData((d) => ({
                       ...d,
                       config: {
                         ...d.config,
-                        larissaReplyDelayMs: Number(e.target.value) || 0,
+                        gabrielReplyDelayMs: Number(e.target.value) || 0,
                       },
                     }))
                   }
@@ -231,13 +230,13 @@ export function AgentesPanel({
         <p className="mt-1 text-xs text-muted-foreground">
           Fonte versionada em{" "}
           <code className="rounded bg-muted px-1">
-            src/agents/definitions/agent-larissa.mdc
+            src/agents/definitions/agent-gabriel.mdc
           </code>
         </p>
         <ul className="mt-3 space-y-2">
           {data.skills.length === 0 ? (
             <li className="text-sm text-muted-foreground">
-              Nenhuma skill sincronizada. Ative a Larissa ou clique em
+              Nenhuma skill sincronizada. Ative o Gabriel ou clique em
               Sincronizar.
             </li>
           ) : (

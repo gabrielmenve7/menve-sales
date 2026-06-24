@@ -29,7 +29,7 @@ export class AudioTranscriptionService {
         new Blob([new Uint8Array(audio.bytes)], { type: audio.mimeType }),
         audio.fileName,
       );
-      form.append("model", process.env.LARISSA_WHISPER_MODEL?.trim() || "whisper-1");
+      form.append("model", process.env.GABRIEL_WHISPER_MODEL?.trim() || "whisper-1");
       form.append("language", "pt");
 
       const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {

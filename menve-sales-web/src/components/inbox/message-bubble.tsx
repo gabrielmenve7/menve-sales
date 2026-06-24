@@ -51,7 +51,7 @@ export function MessageBubble({
   const isAi = senderType === "AI_AGENT";
   const isCampaign = senderType === "CAMPAIGN";
   const senderLabel = isAi
-    ? "Larissa · Agente IA"
+    ? "Gabriel · Agente IA"
     : isCampaign
       ? "Abordagem"
       : isOut
@@ -105,7 +105,7 @@ export function MessageBubble({
         {audioTranscript?.trim() ? (
           <p className="mt-1.5 px-1 text-[11px] leading-snug text-muted-foreground">
             <span className="font-medium text-violet-700 dark:text-violet-300">
-              Larissa ouviu:
+              Gabriel ouviu:
             </span>{" "}
             {audioTranscript.trim()}
           </p>

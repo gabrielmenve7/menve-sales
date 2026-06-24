@@ -2,20 +2,20 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { loadAgentDefinition } from "./skill-file.util";
 
-const LARISSA_KEY = "larissa";
+const GABRIEL_KEY = "gabriel";
 
 @Injectable()
 export class SkillSyncService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async ensureLarissaAgent() {
-    const def = await loadAgentDefinition(LARISSA_KEY).catch(() => null);
+  async ensureGabrielAgent() {
+    const def = await loadAgentDefinition(GABRIEL_KEY).catch(() => null);
     return this.prisma.aiAgent.upsert({
-      where: { key: LARISSA_KEY },
+      where: { key: GABRIEL_KEY },
       create: {
-        id: "larissa-agent-seed",
-        key: LARISSA_KEY,
-        displayName: def?.displayName ?? "Larissa",
+        id: "gabriel-agent-seed",
+        key: GABRIEL_KEY,
+        displayName: def?.displayName ?? Gabriel,
         description:
           def?.description ?? "Agente SDR de qualificação pós-disparo",
         isActive: true,
@@ -28,8 +28,8 @@ export class SkillSyncService {
   }
 
   async syncSkillsForTenant(tenantId: string) {
-    const agent = await this.ensureLarissaAgent();
-    const def = await loadAgentDefinition(LARISSA_KEY);
+    const agent = await this.ensureGabrielAgent();
+    const def = await loadAgentDefinition(GABRIEL_KEY);
     const files = def.skills;
     const results: { skillKey: string; version: number }[] = [];
 
@@ -81,7 +81,7 @@ export class SkillSyncService {
 
   async syncAllEnabledTenants() {
     const tenants = await this.prisma.tenant.findMany({
-      where: { larissaEnabled: true },
+      where: { gabrielEnabled: true },
       select: { id: true },
     });
     const synced: string[] = [];

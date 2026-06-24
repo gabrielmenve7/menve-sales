@@ -1,8 +1,8 @@
-import { getLarissaConfig } from "@/actions/agents";
+import { getGabrielConfig } from "@/actions/agents";
 import { getPrimaryProspectList } from "@/actions/prospect-lists";
 import { AgentesPanel } from "@/components/agentes/agentes-panel";
 import { ProspeccaoTabs } from "@/components/prospeccao/prospeccao-tabs";
-import { LARISSA_CONFIG_FALLBACK } from "@/lib/larissa-config-fallback";
+import { GABRIEL_CONFIG_FALLBACK } from "@/lib/gabriel-config-fallback";
 import { canConfigureTenant } from "@/lib/session";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { redirect } from "next/navigation";
@@ -19,9 +19,9 @@ export default async function ListaAgentesPage() {
     redirect("/lista");
   }
 
-  const [primaryList, larissaConfig] = await Promise.all([
+  const [primaryList, gabrielConfig] = await Promise.all([
     getPrimaryProspectList().catch(() => null),
-    getLarissaConfig().catch(() => LARISSA_CONFIG_FALLBACK),
+    getGabrielConfig().catch(() => GABRIEL_CONFIG_FALLBACK),
   ]);
 
   return (
@@ -40,7 +40,7 @@ export default async function ListaAgentesPage() {
           listItemCount={primaryList?.itemCount ?? 0}
         />
 
-        <AgentesPanel initial={larissaConfig} embedded />
+        <AgentesPanel initial={gabrielConfig} embedded />
       </div>
     </div>
   );

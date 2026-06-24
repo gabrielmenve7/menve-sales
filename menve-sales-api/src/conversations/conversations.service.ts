@@ -48,7 +48,7 @@ export class ConversationsService {
     if (!conv) throw new BadRequestException("Conversa não encontrada");
     if (conv.qualificationMode === ConversationQualificationMode.AI_ACTIVE) {
       throw new BadRequestException(
-        "Larissa está qualificando este lead. Use \"Assumir conversa\" para enviar mensagens.",
+        "Gabriel está qualificando este lead. Use \"Assumir conversa\" para enviar mensagens.",
       );
     }
 

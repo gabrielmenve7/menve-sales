@@ -111,13 +111,13 @@ function attachmentKind(file: File): "image" | "document" | null {
 export function ChatPanel({
   conversation,
   quickReplyCategories,
-  larissaEnabled = false,
+  gabrielEnabled = false,
   onRefetch,
   onDeleted,
 }: {
   conversation: InboxConversation;
   quickReplyCategories: QuickReplyCategoryDTO[];
-  larissaEnabled?: boolean;
+  gabrielEnabled?: boolean;
   onRefetch: () => void;
   onDeleted?: () => void;
 }) {
@@ -606,7 +606,7 @@ export function ChatPanel({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <QualificationBanner
             conversation={conversation}
-            larissaEnabled={larissaEnabled}
+            gabrielEnabled={gabrielEnabled}
             onTakeover={onRefetch}
           />
           {/* Messages */}

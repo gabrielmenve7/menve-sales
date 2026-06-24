@@ -5,55 +5,56 @@ import {
 } from "@prisma/client";
 import { resolveJourneyContext } from "../deals/journey-context.util";
 import { PrismaService } from "../prisma/prisma.service";
-import { LarissaEligibilityService } from "./larissa-eligibility.service";
+import { GabrielEligibilityService } from "./gabriel-eligibility.service";
 import { AudioTranscriptionService } from "./audio-transcription.service";
 import { isInboundAudioMessage } from "./inbound-audio.util";
 import { OpenAiLlmProvider } from "./llm/openai.provider";
 import type { LlmMessage } from "./llm/llm-provider.interface";
 import {
   buildChatHistory,
-  buildLarissaSystemPrompt,
+  buildGabrielSystemPrompt,
 } from "./prompt-builder";
-import { LARISSA_TOOLS } from "./tools/larissa-tools.definitions";
-import { LarissaToolsService } from "./tools/larissa-tools.service";
+import { GABRIEL_TOOLS } from "./tools/gabriel-tools.definitions";
+import { GabrielToolsService } from "./tools/gabriel-tools.service";
 import type { ToolContext } from "./tools/tool-types";
 
-const LARISSA_KEY = "larissa";
-const MAX_HISTORY = Number(process.env.LARISSA_MAX_HISTORY_MESSAGES) || 30;
+const GABRIEL_KEY = "gabriel";
+const MAX_HISTORY = Number(process.env.GABRIEL_MAX_HISTORY_MESSAGES) || 30;
 const MAX_TOOL_ROUNDS = 5;
 
 @Injectable()
-export class LarissaOrchestratorService {
-  private readonly log = new Logger(LarissaOrchestratorService.name);
+export class GabrielOrchestratorService {
+  private readonly log = new Logger(GabrielOrchestratorService.name);
   private readonly llm = new OpenAiLlmProvider();
   private readonly pendingTurns = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly eligibility: LarissaEligibilityService,
-    private readonly tools: LarissaToolsService,
+    private readonly eligibility: GabrielEligibilityService,
+    private readonly tools: GabrielToolsService,
     private readonly transcription: AudioTranscriptionService,
   ) {}
 
-  /** Ativa Larissa manualmente (teste / conversa sem disparo). */
+  /** Ativo Gabriel manualmente em conversa com resposta a disparo. */
   async activateOnConversation(args: {
     tenantId: string;
     conversationId: string;
     contactId: string;
+    outreachRecipientId: string;
   }) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: args.tenantId },
-      select: { larissaEnabled: true },
+      select: { gabrielEnabled: true },
     });
-    if (!tenant?.larissaEnabled) {
-      throw new Error("Larissa desativada neste workspace");
+    if (!tenant?.gabrielEnabled) {
+      throw new Error("Gabriel desativado neste workspace");
     }
 
     const agent = await this.prisma.aiAgent.findUnique({
-      where: { key: LARISSA_KEY },
+      where: { key: GABRIEL_KEY },
     });
     if (!agent?.isActive) {
-      throw new Error("Agente Larissa inativo");
+      throw new Error("Agente Gabriel inativo");
     }
 
     await this.prisma.conversation.update({
@@ -61,6 +62,7 @@ export class LarissaOrchestratorService {
       data: {
         qualificationMode: ConversationQualificationMode.AI_ACTIVE,
         aiAgentId: agent.id,
+        outreachRecipientId: args.outreachRecipientId,
       },
     });
 
@@ -82,12 +84,12 @@ export class LarissaOrchestratorService {
   }) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: args.tenantId },
-      select: { larissaEnabled: true },
+      select: { gabrielEnabled: true },
     });
-    if (!tenant?.larissaEnabled) return;
+    if (!tenant?.gabrielEnabled) return;
 
     const agent = await this.prisma.aiAgent.findUnique({
-      where: { key: LARISSA_KEY },
+      where: { key: GABRIEL_KEY },
     });
     if (!agent?.isActive) return;
 
@@ -110,7 +112,7 @@ export class LarissaOrchestratorService {
     });
   }
 
-  /** Reage a nova mensagem inbound com Larissa já ativa. */
+  /** Reage a nova mensagem inbound com Gabriel já ativo. */
   notifyInboundMessage(args: {
     tenantId: string;
     conversationId: string;
@@ -142,10 +144,10 @@ export class LarissaOrchestratorService {
     void this.prisma.tenant
       .findUnique({
         where: { id: args.tenantId },
-        select: { larissaReplyDelayMs: true },
+        select: { gabrielReplyDelayMs: true },
       })
       .then((tenant) => {
-        const baseDelay = tenant?.larissaReplyDelayMs ?? 1500;
+        const baseDelay = tenant?.gabrielReplyDelayMs ?? 1500;
         const delay = baseDelay + Math.max(0, args.waitForAudioMs ?? 0);
         const timer = setTimeout(() => {
           this.pendingTurns.delete(key);
@@ -173,7 +175,7 @@ export class LarissaOrchestratorService {
     if (!check.eligible) return;
 
     const agent = await this.prisma.aiAgent.findUnique({
-      where: { key: LARISSA_KEY },
+      where: { key: GABRIEL_KEY },
     });
     if (!agent) return;
 
@@ -189,7 +191,7 @@ export class LarissaOrchestratorService {
     const [tenant, journey, messagesRaw] = await Promise.all([
       this.prisma.tenant.findUnique({
         where: { id: args.tenantId },
-        select: { name: true, larissaModel: true },
+        select: { name: true, gabrielModel: true },
       }),
       resolveJourneyContext(this.prisma, args.tenantId, args.contactId),
       this.prisma.message.findMany({
@@ -214,8 +216,8 @@ export class LarissaOrchestratorService {
     });
 
     const model =
-      tenant?.larissaModel?.trim() ||
-      process.env.LARISSA_DEFAULT_MODEL?.trim() ||
+      tenant?.gabrielModel?.trim() ||
+      process.env.GABRIEL_DEFAULT_MODEL?.trim() ||
       "gpt-4o-mini";
 
     const agentRun = await this.prisma.agentRun.create({
@@ -239,7 +241,7 @@ export class LarissaOrchestratorService {
       actorUserId: null,
     };
 
-    const systemPrompt = buildLarissaSystemPrompt({
+    const systemPrompt = buildGabrielSystemPrompt({
       skills,
       journey: {
         name: journey.name,
@@ -264,7 +266,7 @@ export class LarissaOrchestratorService {
         const completion = await this.llm.complete({
           model,
           messages: llmMessages,
-          tools: LARISSA_TOOLS,
+          tools: GABRIEL_TOOLS,
         });
 
         if (completion.toolCalls.length === 0) {

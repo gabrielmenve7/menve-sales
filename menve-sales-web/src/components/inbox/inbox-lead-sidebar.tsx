@@ -2,7 +2,13 @@
 
 import type { CustomField } from "@prisma/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Calendar, Kanban } from "lucide-react";
+import {
+  ArrowRight,
+  Calendar,
+  ChevronLeft,
+  Kanban,
+  PanelRightClose,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PipelineDealDetailDialog } from "@/app/(dashboard)/pipeline/pipeline-deal-detail-dialog";
@@ -89,7 +95,20 @@ export function InboxLeadSidebar({
   return (
     <aside className="flex h-full min-h-0 w-full flex-col border-l border-border/20 bg-background dark:border-border/30">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/20 px-3 py-2.5 dark:border-border/30">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {onCollapse ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+              aria-label="Recolher painel de oportunidade"
+              title="Recolher oportunidade"
+              onClick={onCollapse}
+            >
+              <PanelRightClose className="size-4 opacity-85" aria-hidden />
+            </Button>
+          ) : null}
           <Kanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <h2 className="truncate text-sm font-semibold text-foreground">
             Oportunidade
@@ -201,10 +220,27 @@ export function InboxLeadSidebar({
   );
 }
 
-export function InboxLeadSidebarEmpty() {
+export function InboxLeadSidebarEmpty({
+  onCollapse,
+}: {
+  onCollapse?: () => void;
+}) {
   return (
     <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden border-l border-border/20 bg-muted/5 dark:border-border/30">
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/20 px-4 py-3 dark:border-border/30">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-border/20 px-4 py-3 dark:border-border/30">
+        {onCollapse ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+            aria-label="Recolher painel de oportunidade"
+            title="Recolher oportunidade"
+            onClick={onCollapse}
+          >
+            <PanelRightClose className="size-4 opacity-85" aria-hidden />
+          </Button>
+        ) : null}
         <Kanban className="size-4 text-muted-foreground" aria-hidden />
         <h2 className="text-sm font-semibold text-foreground">Oportunidade</h2>
       </div>
