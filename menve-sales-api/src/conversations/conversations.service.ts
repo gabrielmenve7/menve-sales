@@ -43,12 +43,36 @@ export class ConversationsService {
   ) {
     const conv = await this.prisma.conversation.findFirst({
       where: { id: conversationId, tenantId },
-      select: { qualificationMode: true },
+      include: { contact: { select: { phone: true } } },
     });
     if (!conv) throw new BadRequestException("Conversa não encontrada");
     if (conv.qualificationMode === ConversationQualificationMode.AI_ACTIVE) {
       throw new BadRequestException(
         "Larissa está qualificando este lead. Use \"Assumir conversa\" para enviar mensagens.",
+      );
+    }
+
+    const raw =
+      typeof body === "object" && body !== null && !Array.isArray(body)
+        ? (body as Record<string, unknown>)
+        : {};
+    const pickStr = (key: string) => {
+      const v = raw[key];
+      return typeof v === "string" ? v.trim() : "";
+    };
+    const enriched = {
+      ...raw,
+      connectionId: pickStr("connectionId") || conv.whatsappConnectionId,
+      toPhone: pickStr("toPhone") || conv.contact.phone?.trim() || "",
+    };
+    if (!enriched.connectionId) {
+      throw new BadRequestException(
+        "Conexão WhatsApp não encontrada para esta conversa.",
+      );
+    }
+    if (!enriched.toPhone) {
+      throw new BadRequestException(
+        "Contato sem telefone para envio. Atualize o cadastro do contato.",
       );
     }
 
@@ -58,7 +82,7 @@ export class ConversationsService {
         toPhone: z.string().min(1),
         text: z.string().min(1).max(8000),
       })
-      .safeParse(body);
+      .safeParse(enriched);
 
     if (textMsg.success) {
       await this.messages.sendOutboundText({
@@ -80,7 +104,7 @@ export class ConversationsService {
         language: z.string().min(2).max(16),
         components: z.array(z.unknown()).optional(),
       })
-      .safeParse(body);
+      .safeParse(enriched);
 
     if (templateMsg.success) {
       await this.messages.sendOutboundTemplate({
@@ -112,16 +136,27 @@ export class ConversationsService {
         fileName: z.string().max(255).optional(),
         caption: z.string().max(2000).optional(),
       })
-      .safeParse(body);
+      .safeParse(enriched);
 
     if (!mediaMsg.success) {
+      if (pickStr("text")) {
+        throw new BadRequestException(
+          textMsg.error?.issues[0]?.message ?? "Mensagem inválida.",
+        );
+      }
+      if (pickStr("templateName")) {
+        throw new BadRequestException(
+          templateMsg.error?.issues[0]?.message ?? "Template inválido.",
+        );
+      }
       throw new BadRequestException(
-        "Envie `text`, template (`templateName` + `language`), ou mídia (`mediaKind` + `mediaDataUrl`), com `connectionId` e `toPhone`.",
+        mediaMsg.error?.issues[0]?.message ??
+          "Envie texto, template (`templateName` + `language`) ou mídia (`mediaKind` + `mediaDataUrl`).",
       );
     }
 
-    const raw = mediaMsg.data.mediaDataUrl.replace(/\s/g, "");
-    const m = /^data:([^;]+);base64,(.+)$/i.exec(raw);
+    const mediaRaw = mediaMsg.data.mediaDataUrl.replace(/\s/g, "");
+    const m = /^data:([^;]+);base64,(.+)$/i.exec(mediaRaw);
     if (!m) throw new BadRequestException("mediaDataUrl inválido");
     const mimeType = m[1].split(";")[0].trim();
     const b64 = m[2];

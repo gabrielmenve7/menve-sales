@@ -61,6 +61,16 @@ const INBOX_QUERY_KEY = inboxQueryKeys.list;
 
 type InboxQueryData = { conversations: InboxConversation[] };
 
+function resolveInboxSendContext(conversation: InboxConversation) {
+  const phone = conversation.contact?.phone?.trim() ?? "";
+  const connectionId =
+    conversation.whatsappConnection?.id?.trim() ||
+    conversation.whatsappConnectionId?.trim() ||
+    "";
+  const channelActive = conversation.whatsappConnection?.isActive ?? true;
+  return { phone, connectionId, channelActive };
+}
+
 function buildOptimisticOutboundMessage(
   conversation: InboxConversation,
   body: string,
@@ -69,7 +79,7 @@ function buildOptimisticOutboundMessage(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? `pending:${crypto.randomUUID()}`
       : `pending:${Date.now()}`;
-  const isMeta = conversation.whatsappConnection.provider === "META";
+  const isMeta = conversation.whatsappConnection?.provider === "META";
   return {
     id,
     tenantId: conversation.tenantId,
@@ -141,6 +151,8 @@ export function ChatPanel({
   const [olderError, setOlderError] = useState<string | null>(null);
 
   const conn = conversation.whatsappConnection;
+  const { phone, connectionId, channelActive } =
+    resolveInboxSendContext(conversation);
   const aiReadOnly =
     (conversation.qualificationMode ?? "NONE") === "AI_ACTIVE" ||
     (conversation.qualificationMode ?? "NONE") === "AI_PAUSED";
@@ -233,7 +245,6 @@ export function ChatPanel({
   }, [conn?.id, conn?.provider, conn?.isActive]);
 
   const photo = getContactPhotoUrl(conversation.contact);
-  const phone = conversation.contact.phone;
 
   const showQuickReplies = quickRepliesHaveScripts(quickReplyCategories);
   const messagesApi = `/api/inbox/conversations/${encodeURIComponent(conversation.id)}/messages`;
@@ -245,12 +256,21 @@ export function ChatPanel({
       fileName?: string;
       caption?: string;
     }) => {
-      if (!conn?.isActive || !phone) return;
+      if (!channelActive || !connectionId || !phone) {
+        setMediaError(
+          !connectionId
+            ? "Canal WhatsApp não vinculado. Recarregue a página."
+            : !phone
+              ? "Contato sem telefone para envio."
+              : "Canal WhatsApp inativo.",
+        );
+        return;
+      }
       setMediaError(null);
       setMediaBusy(true);
       try {
         await inboxApiPost(messagesApi, {
-          connectionId: conn.id,
+          connectionId,
           toPhone: phone,
           ...args,
         });
@@ -261,7 +281,7 @@ export function ChatPanel({
         setMediaBusy(false);
       }
     },
-    [conn, phone, messagesApi, onRefetch],
+    [channelActive, connectionId, phone, messagesApi, onRefetch],
   );
 
   useEffect(() => {
@@ -292,7 +312,7 @@ export function ChatPanel({
   }
 
   async function toggleRecording() {
-    if (!conn?.isActive || !phone || mediaBusy) return;
+    if (!channelActive || !connectionId || !phone || mediaBusy) return;
     if (isRecording) {
       recorderRef.current?.stop();
       return;
@@ -349,7 +369,19 @@ export function ChatPanel({
   async function onSend(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = text.trim();
-    if (!trimmed || !conn || !phone) return;
+    if (!trimmed) return;
+    if (!connectionId || !phone) {
+      setSendError(
+        !connectionId
+          ? "Canal WhatsApp não vinculado. Recarregue a página."
+          : "Contato sem telefone para envio.",
+      );
+      return;
+    }
+    if (!channelActive) {
+      setSendError("Canal WhatsApp inativo. Reconecte em Configurações.");
+      return;
+    }
     const now = Date.now();
     if (now - lastTextSendAtRef.current < 450) return;
     lastTextSendAtRef.current = now;
@@ -386,7 +418,7 @@ export function ChatPanel({
 
     try {
       await inboxApiPost(messagesApi, {
-        connectionId: conn.id,
+        connectionId,
         toPhone: phone,
         text: trimmed,
       });
@@ -445,13 +477,13 @@ export function ChatPanel({
   }
 
   async function sendSelectedTemplate(t: { name: string; language?: string }) {
-    if (!conn || conn.provider !== "META" || !phone) return;
+    if (conn?.provider !== "META" || !phone || !connectionId) return;
     const lang = (t.language ?? "pt_BR").trim();
     setTemplateSendBusy(true);
     setSendError(null);
     try {
       await inboxApiPost(messagesApi, {
-        connectionId: conn.id,
+        connectionId,
         toPhone: phone,
         templateName: t.name,
         language: lang,
@@ -780,7 +812,7 @@ export function ChatPanel({
                   variant="ghost"
                   size="icon"
                   className="size-9 shrink-0"
-                  disabled={!conn.isActive || mediaBusy}
+                  disabled={!channelActive || !connectionId || mediaBusy}
                   title="Enviar template aprovado"
                   onClick={() => setTemplateDialogOpen(true)}
                 >
@@ -792,7 +824,7 @@ export function ChatPanel({
                 variant="ghost"
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || mediaBusy}
+                disabled={!channelActive || !connectionId || mediaBusy}
                 title="Anexar imagem ou PDF"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -803,7 +835,7 @@ export function ChatPanel({
                 variant={isRecording ? "destructive" : "ghost"}
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || mediaBusy}
+                disabled={!channelActive || !connectionId || mediaBusy}
                 title={
                   isRecording ? "Parar e enviar áudio" : "Gravar áudio"
                 }
@@ -823,18 +855,18 @@ export function ChatPanel({
                   setText(e.target.value);
                 }}
                 placeholder={
-                  conn?.isActive
+                  channelActive && connectionId
                     ? "Digite uma mensagem…"
                     : "Conecte o canal para enviar"
                 }
-                disabled={!conn?.isActive || mediaBusy}
+                disabled={!channelActive || !connectionId || mediaBusy}
                 className="h-9 min-w-0 flex-1 text-sm"
               />
               <Button
                 type="submit"
                 size="icon"
                 className="size-9 shrink-0"
-                disabled={!conn?.isActive || !text.trim() || mediaBusy}
+                disabled={!channelActive || !connectionId || !text.trim() || mediaBusy}
               >
                 <Send className="size-4" />
               </Button>
