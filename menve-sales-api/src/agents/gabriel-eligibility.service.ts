@@ -42,6 +42,12 @@ export class GabrielEligibilityService {
     }
 
     if (
+      conversation.outreachRecipient.status === OutreachRecipientStatus.OPT_OUT
+    ) {
+      return { eligible: false, reason: "opt_out" };
+    }
+
+    if (
       conversation.outreachRecipient.status !== OutreachRecipientStatus.REPLIED
     ) {
       return { eligible: false, reason: "disparo_not_replied" };
@@ -49,12 +55,6 @@ export class GabrielEligibilityService {
 
     if (conversation.qualificationMode !== ConversationQualificationMode.AI_ACTIVE) {
       return { eligible: false, reason: "not_ai_active" };
-    }
-
-    if (
-      conversation.outreachRecipient?.status === OutreachRecipientStatus.OPT_OUT
-    ) {
-      return { eligible: false, reason: "opt_out" };
     }
 
     const visibleDeal = await this.prisma.deal.findFirst({
