@@ -1,11 +1,13 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Optional, Inject, forwardRef } from "@nestjs/common";
 import {
   ConversationStatus,
   MessageAckStatus,
   MessageDirection,
+  MessageSenderType,
   type WhatsAppConnection,
   WhatsAppProvider,
 } from "@prisma/client";
+import { LarissaOrchestratorService } from "../agents/larissa-orchestrator.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { OutreachService } from "../outreach/outreach.service";
 import { extractEvolutionMessageAckUpdates } from "./evolution-provider";
@@ -46,6 +48,9 @@ export class MessageProcessingService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly outreach?: OutreachService,
+    @Optional()
+    @Inject(forwardRef(() => LarissaOrchestratorService))
+    private readonly larissa?: LarissaOrchestratorService,
   ) {}
 
   async processInboundWhatsApp(args: {
@@ -227,6 +232,10 @@ export class MessageProcessingService {
           ? MessageAckStatus.DELIVERED
           : null;
 
+    const senderType = outboundFromDevice
+      ? MessageSenderType.HUMAN_AGENT
+      : MessageSenderType.LEAD;
+
     await this.prisma.message.create({
       data: {
         tenantId: args.tenantId,
@@ -235,6 +244,7 @@ export class MessageProcessingService {
         contactId: contact.id,
         userId: null,
         direction,
+        senderType,
         body: args.inbound.body,
         externalId: args.inbound.externalId,
         mediaUrl,
@@ -245,7 +255,7 @@ export class MessageProcessingService {
     });
 
     if (!outboundFromDevice && this.outreach) {
-      void this.outreach
+      const reply = await this.outreach
         .handleInboundReply({
           tenantId: args.tenantId,
           phone,
@@ -253,9 +263,18 @@ export class MessageProcessingService {
           conversationId: conversation.id,
           messageId: args.inbound.externalId,
         })
-        .catch(() => {
-          /* não bloquear webhook */
-        });
+        .catch(() => ({ updated: false as const, recipientId: null as string | null }));
+
+      if (reply.updated && this.larissa) {
+        void this.larissa
+          .activateOnInboundReply({
+            tenantId: args.tenantId,
+            conversationId: conversation.id,
+            contactId: contact.id,
+            outreachRecipientId: reply.recipientId,
+          })
+          .catch(() => undefined);
+      }
     }
 
     // Só quando o cliente envia mensagem: marcar mensagens nossas anteriores como lidas por ele.
@@ -430,6 +449,7 @@ export class MessageProcessingService {
         contactId,
         userId: args.userId,
         direction: MessageDirection.OUTBOUND,
+        senderType: MessageSenderType.HUMAN_AGENT,
         body: args.body,
         externalId: args.externalId,
         mediaUrl: args.mediaUrl ?? null,

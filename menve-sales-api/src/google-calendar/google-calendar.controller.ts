@@ -37,22 +37,45 @@ export class GoogleCalendarController {
     return res.redirect(`${web}/settings?googleCalendar=connected`);
   }
 
+  @Get("calendar/google/status")
+  googleStatus(@ReqUser() u: RequestUser) {
+    return this.googleCalendar.getConnectionStatus(u.userId);
+  }
+
+  @Get("calendar/google/connect-url")
+  googleConnectUrl(@ReqUser() u: RequestUser) {
+    return { url: this.googleCalendar.getAuthRedirectUrl(u.userId) };
+  }
+
   @Post("calendar/events")
   createEvent(
     @ReqUser() u: RequestUser,
     @Body()
     body: {
       title?: string;
+      description?: string;
       dueAt?: string;
+      durationMinutes?: number;
       attendees?: string[];
       createMeet?: boolean;
+      createGoogleMeet?: boolean;
+      contactId?: string;
+      dealId?: string;
+      type?: string;
     },
   ) {
-    return this.googleCalendar.createEvent(u.userId, {
+    const createMeet =
+      body.createGoogleMeet ?? body.createMeet ?? true;
+    return this.googleCalendar.createMeetingForTenant({
+      tenantId: u.tenantId,
+      userId: u.userId,
       title: body.title ?? "Reunião",
+      description: body.description,
       dueAt: body.dueAt ?? new Date().toISOString(),
-      attendees: body.attendees,
-      createMeet: body.createMeet,
+      durationMinutes: body.durationMinutes,
+      contactId: body.contactId,
+      dealId: body.dealId,
+      createGoogleMeet: createMeet,
     });
   }
 }

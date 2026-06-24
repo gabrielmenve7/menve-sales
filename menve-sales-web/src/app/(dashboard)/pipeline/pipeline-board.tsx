@@ -12,7 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import type { CustomField, Pipeline, Stage, Tag } from "@prisma/client";
-import { MoreVertical, User } from "lucide-react";
+import { MoreVertical, User, Video } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -39,6 +39,7 @@ import {
 } from "./pipeline-new-deal";
 import { columnSurfaceStyle } from "./pipeline-stage-visual";
 import type { DealRow } from "./pipeline-types";
+import { readDealMeetLink, readDealMeetingDueAt } from "./pipeline-types";
 
 export type { DealRow } from "./pipeline-types";
 
@@ -323,6 +324,17 @@ function DealCard({
     deal.contact.contactTags,
   ]);
 
+  const meetLink = readDealMeetLink(deal);
+  const meetingAt = readDealMeetingDueAt(deal);
+  const meetingLabel = meetingAt
+    ? new Date(meetingAt).toLocaleString("pt-BR", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
   function onCardKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -543,6 +555,12 @@ function DealCard({
                     {deal.contact.company.trim()}
                   </p>
                 ) : null}
+                {meetLink && meetingLabel ? (
+                  <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-emerald-700 dark:text-emerald-400">
+                    <Video className="size-3 shrink-0" aria-hidden />
+                    <span className="truncate">{meetingLabel}</span>
+                  </p>
+                ) : null}
               </>
             )}
           </div>
@@ -660,7 +678,7 @@ function StageColumn({
         </div>
         <div className="shrink-0 pt-3">
           <PipelineColumnNewDealFooterTrigger
-            accentHex={stage.color}
+            stageColor={stage.color}
             onClick={() => setNewDealOpen(true)}
           />
         </div>

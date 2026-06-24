@@ -90,6 +90,7 @@ const TRIGGER_GROUPS: { heading: string; types: PipelineAutomationTriggerType[] 
       types: [
         "DEAL_STAGE_TRANSITION",
         "DEAL_CREATED",
+        "DEAL_ENTERED_PIPELINE",
         "DEAL_CUSTOM_FIELD_CHANGED",
         "DEAL_ASSIGNEE_ASSIGNED",
         "DEAL_ASSIGNEE_REMOVED",
@@ -113,6 +114,7 @@ const ACTION_KIND_GROUPS: {
     types: [
       "DEAL_STAGE_TRANSITION",
       "DEAL_CREATED",
+      "DEAL_ENTERED_PIPELINE",
       "DEAL_CUSTOM_FIELD_CHANGED",
       "DEAL_ALTER_ASSIGNEES",
       "DEAL_ENTERED_STAGE",
@@ -295,6 +297,7 @@ function buildTriggerFilterFromStep(
         out.fromStageId = step.legacyStageFilterId.trim();
       break;
     case "DEAL_CREATED":
+    case "DEAL_ENTERED_PIPELINE":
       if (step.selectedCampaignIds.length)
         out.campaignSourceIds = [...step.selectedCampaignIds];
       break;
@@ -432,6 +435,7 @@ function triggerIcon(t: PipelineAutomationTriggerType) {
     case "DEAL_LEFT_STAGE":
       return Target;
     case "DEAL_CREATED":
+    case "DEAL_ENTERED_PIPELINE":
       return CircleDot;
     case "DEAL_CUSTOM_FIELD_CHANGED":
       return ListTree;
@@ -747,6 +751,7 @@ function fillTriggerStepFromFilter(
       if (f.fromStageId) step.legacyStageFilterId = f.fromStageId;
       break;
     case "DEAL_CREATED":
+    case "DEAL_ENTERED_PIPELINE":
       if (f.campaignSourceIds?.length)
         step.selectedCampaignIds = [...f.campaignSourceIds];
       break;
@@ -990,9 +995,13 @@ function AutomationKindConfigFields({
         </div>
       ) : null}
 
-      {kind === "DEAL_CREATED" ? (
+      {(kind === "DEAL_CREATED" || kind === "DEAL_ENTERED_PIPELINE") ? (
         <div className="space-y-2">
-          <p className={lbl}>Origens de criação (vazio = todas)</p>
+          <p className={lbl}>
+            {kind === "DEAL_ENTERED_PIPELINE"
+              ? "Origens do lead na Gestão (vazio = todas)"
+              : "Origens de criação (vazio = todas)"}
+          </p>
           <div
             className={cn(
               "max-h-36 space-y-1.5 overflow-y-auto rounded-md p-2",

@@ -18,6 +18,16 @@ export class OutreachController {
     return this.outreach.listCampaigns(u.tenantId);
   }
 
+  @Get("default-template")
+  getDefaultTemplate(@ReqUser() u: RequestUser) {
+    return this.outreach.getDefaultTemplate(u.tenantId);
+  }
+
+  @Post("default-template")
+  updateDefaultTemplate(@ReqUser() u: RequestUser, @Body() body: unknown) {
+    return this.outreach.updateDefaultTemplate(u, body);
+  }
+
   @Post("campaigns")
   createCampaign(@ReqUser() u: RequestUser, @Body() body: unknown) {
     return this.outreach.createCampaign(u, body);

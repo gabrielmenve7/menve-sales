@@ -256,7 +256,11 @@ export class DashboardQueryService {
     tenantId: string,
     spec: ResolvedWidgetQuerySpec,
   ): Prisma.DealWhereInput {
-    const and: Prisma.DealWhereInput[] = [{ tenantId }, { pipelineId: spec.pipelineId }];
+    const and: Prisma.DealWhereInput[] = [
+      { tenantId },
+      { pipelineId: spec.pipelineId },
+      { pipelineVisible: true },
+    ];
 
     if (spec.filterGroups && spec.filterGroups.length > 0) {
       const grouped = this.buildWhereFromFilterGroups(spec.filterGroups);

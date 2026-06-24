@@ -21,6 +21,8 @@ import type { RequestUser } from "../common/request-user";
 import { resolveBrazilianPhoneFromCandidates } from "../prospecting/phone-utils";
 import { createWhatsAppProvider } from "../whatsapp/factory";
 import { renderOutreachTemplate } from "./outreach-template";
+import { mergeCustomDataWebsite } from "../deals/journey-context.util";
+import { AiOutboundService } from "../agents/ai-outbound.service";
 
 const createCampaignSchema = z.object({
   name: z.string().min(1).max(200),
@@ -29,6 +31,16 @@ const createCampaignSchema = z.object({
   templateBody: z.string().min(1).max(8000),
   scheduledAt: z.string().datetime().optional(),
 });
+
+const updateDefaultTemplateSchema = z.object({
+  templateBody: z.string().min(1).max(8000),
+});
+
+export const DEFAULT_OUTREACH_TEMPLATE = `Olá {{nome}}! Tudo bem?
+
+Somos da Menve e vimos a {{empresa}}. Podemos conversar?
+
+WhatsApp: {{telefone}}`;
 
 function phoneDigits(raw: string) {
   return raw.replace(/\D/g, "");
@@ -46,6 +58,7 @@ export class OutreachService {
 
   constructor(
     private readonly prisma: PrismaService,
+    @Optional() private readonly aiOutbound?: AiOutboundService,
     @Optional()
     @Inject(forwardRef(() => PipelineAutomationEngineService))
     private readonly automationEngine?: PipelineAutomationEngineService,
@@ -352,6 +365,59 @@ export class OutreachService {
     });
   }
 
+  private async enrichContactFromProspectJourney(
+    tenantId: string,
+    contactId: string,
+    campaign: { id: string; listId: string | null },
+    recipientPhone: string,
+  ) {
+    let prospect = await this.prisma.prospectResult.findFirst({
+      where: { tenantId, contactId },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, website: true, contactId: true },
+    });
+
+    if (!prospect && campaign.listId) {
+      prospect = await this.prisma.prospectResult.findFirst({
+        where: {
+          tenantId,
+          prospectListItems: { some: { listId: campaign.listId } },
+          OR: [
+            { phone: recipientPhone },
+            { whatsapp: recipientPhone },
+          ],
+        },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true, website: true, contactId: true },
+      });
+    }
+
+    if (!prospect?.website?.trim()) return;
+
+    const contact = await this.prisma.contact.findFirst({
+      where: { id: contactId, tenantId },
+      select: { customData: true },
+    });
+    if (!contact) return;
+
+    await this.prisma.contact.update({
+      where: { id: contactId },
+      data: {
+        customData: mergeCustomDataWebsite(
+          contact.customData,
+          prospect.website!.trim(),
+        ) as object,
+      },
+    });
+
+    if (!prospect.contactId) {
+      await this.prisma.prospectResult.update({
+        where: { id: prospect.id },
+        data: { contactId },
+      });
+    }
+  }
+
   async sendToRecipient(args: {
     campaign: OutreachCampaign & { connection: WhatsAppConnection };
     recipientId: string;
@@ -379,6 +445,13 @@ export class OutreachService {
       company: recipient.company,
       contactId: recipient.contactId,
     });
+
+    await this.enrichContactFromProspectJourney(
+      args.campaign.tenantId,
+      contact.id,
+      { id: args.campaign.id, listId: args.campaign.listId },
+      recipient.phone,
+    );
 
     const text = renderOutreachTemplate(args.campaign.templateBody, {
       nome: recipient.name,
@@ -410,6 +483,28 @@ export class OutreachService {
         errorMessage: null,
       },
     });
+
+    if (this.aiOutbound) {
+      const conversation = await this.aiOutbound.ensureConversation({
+        tenantId: args.campaign.tenantId,
+        contactId: contact.id,
+        connectionId: args.campaign.connectionId,
+      });
+      await this.aiOutbound.persistCampaignMessage({
+        tenantId: args.campaign.tenantId,
+        conn: args.campaign.connection,
+        contactId: contact.id,
+        conversationId: conversation.id,
+        body: text,
+        externalId: sent.externalId,
+        outreachCampaignId: args.campaign.id,
+        userId: args.userId,
+      });
+      await this.prisma.outreachCampaignRecipient.update({
+        where: { id: recipient.id },
+        data: { conversationId: conversation.id },
+      });
+    }
 
     return { sent: true as const };
   }
@@ -479,9 +574,9 @@ export class OutreachService {
     contactId: string;
     conversationId: string;
     messageId?: string;
-  }): Promise<{ updated: boolean }> {
+  }): Promise<{ updated: boolean; recipientId: string | null }> {
     const digits = phoneDigits(args.phone);
-    if (!digits) return { updated: false };
+    if (!digits) return { updated: false, recipientId: null };
 
     const recipients = await this.prisma.outreachCampaignRecipient.findMany({
       where: {
@@ -503,7 +598,7 @@ export class OutreachService {
         phoneDigits(r.phone) === digits ||
         phoneDigits(r.phone).endsWith(digits.slice(-11)),
     );
-    if (!recipient) return { updated: false };
+    if (!recipient) return { updated: false, recipientId: null };
 
     const now = new Date();
     await this.prisma.outreachCampaignRecipient.update({
@@ -522,6 +617,7 @@ export class OutreachService {
         tenantId: args.tenantId,
         contactId: args.contactId,
         status: "OPEN",
+        pipelineVisible: true,
       },
       select: { id: true, pipelineId: true },
     });
@@ -545,6 +641,27 @@ export class OutreachService {
       }
     }
 
-    return { updated: true };
+    return { updated: true, recipientId: recipient.id };
+  }
+
+  async getDefaultTemplate(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { outreachDefaultTemplate: true },
+    });
+    const saved = tenant?.outreachDefaultTemplate?.trim();
+    return {
+      templateBody: saved && saved.length > 0 ? saved : DEFAULT_OUTREACH_TEMPLATE,
+    };
+  }
+
+  async updateDefaultTemplate(u: RequestUser, raw: unknown) {
+    assertCanConfigureTenant(u.role);
+    const { templateBody } = updateDefaultTemplateSchema.parse(raw);
+    await this.prisma.tenant.update({
+      where: { id: u.tenantId },
+      data: { outreachDefaultTemplate: templateBody.trim() },
+    });
+    return { templateBody: templateBody.trim() };
   }
 }

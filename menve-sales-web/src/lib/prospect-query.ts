@@ -1,4 +1,4 @@
-/** Builds the Google/Serper query string from segmented capture fields. */
+/** Builds the Google Maps query string from segmented capture fields. */
 export function buildProspectQuery(
   segment: string,
   city: string,

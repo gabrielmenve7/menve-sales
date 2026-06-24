@@ -47,7 +47,9 @@ export class DashboardService {
       sources,
     ] = await Promise.all([
       this.prisma.contact.count({ where: { tenantId } }),
-      this.prisma.deal.count({ where: { tenantId, status: "OPEN" } }),
+      this.prisma.deal.count({
+        where: { tenantId, status: "OPEN", pipelineVisible: true },
+      }),
       this.prisma.activity.count({
         where: {
           tenantId,
@@ -56,11 +58,15 @@ export class DashboardService {
         },
       }),
       this.prisma.deal.aggregate({
-        where: { tenantId, status: "OPEN" },
+        where: { tenantId, status: "OPEN", pipelineVisible: true },
         _sum: { value: true },
       }),
       this.prisma.deal.findMany({
-        where: { tenantId, createdAt: { gte: since } },
+        where: {
+          tenantId,
+          pipelineVisible: true,
+          createdAt: { gte: since },
+        },
         select: { createdAt: true },
       }),
       this.prisma.contact.groupBy({
@@ -79,7 +85,12 @@ export class DashboardService {
             pipeline.stages.map(async (s) => ({
               name: s.name,
               count: await this.prisma.deal.count({
-                where: { tenantId, stageId: s.id, status: "OPEN" },
+                where: {
+                  tenantId,
+                  stageId: s.id,
+                  status: "OPEN",
+                  pipelineVisible: true,
+                },
               }),
             })),
           )
@@ -130,6 +141,7 @@ export class DashboardService {
     const deals = await this.prisma.deal.findMany({
       where: {
         tenantId,
+        pipelineVisible: true,
         contact: { campaignSourceId: src.id },
       },
       include: { stage: true },
@@ -187,10 +199,12 @@ export class DashboardService {
         _count: { _all: true },
       }),
       this.prisma.deal.aggregate({
-        where: { tenantId, status: "OPEN" },
+        where: { tenantId, status: "OPEN", pipelineVisible: true },
         _sum: { value: true },
       }),
-      this.prisma.deal.count({ where: { tenantId, status: "OPEN" } }),
+      this.prisma.deal.count({
+        where: { tenantId, status: "OPEN", pipelineVisible: true },
+      }),
       this.prisma.deal.findMany({
         where: {
           tenantId,

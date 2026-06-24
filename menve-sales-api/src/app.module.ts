@@ -30,6 +30,7 @@ import { OutreachModule } from "./outreach/outreach.module";
 import { GoogleCalendarModule } from "./google-calendar/google-calendar.module";
 import { ReportsModule } from "./reports/reports.module";
 import { LeadScoringModule } from "./lead-scoring/lead-scoring.module";
+import { AgentsModule } from "./agents/agents.module";
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { LeadScoringModule } from "./lead-scoring/lead-scoring.module";
     GoogleCalendarModule,
     ReportsModule,
     LeadScoringModule,
+    AgentsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { ConversationQualificationMode } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { MessageProcessingService } from "../whatsapp/message-processing.service";
 import { z } from "zod";
@@ -40,6 +41,17 @@ export class ConversationsService {
     conversationId: string,
     body: unknown,
   ) {
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { qualificationMode: true },
+    });
+    if (!conv) throw new BadRequestException("Conversa não encontrada");
+    if (conv.qualificationMode === ConversationQualificationMode.AI_ACTIVE) {
+      throw new BadRequestException(
+        "Larissa está qualificando este lead. Use \"Assumir conversa\" para enviar mensagens.",
+      );
+    }
+
     const textMsg = z
       .object({
         connectionId: z.string().min(1),

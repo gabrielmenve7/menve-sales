@@ -6,6 +6,7 @@ import {
   createOutreachCampaign,
   listOutreachCampaigns,
   pauseOutreachCampaign,
+  saveOutreachDefaultTemplate,
   startOutreachCampaign,
   type OutreachCampaignStatus,
   type OutreachCampaignSummary,
@@ -29,9 +30,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DEFAULT_OUTREACH_TEMPLATE,
+  previewOutreachTemplate,
+} from "@/lib/outreach-template";
 import { cn } from "@/lib/utils";
 import type { WhatsAppConnection } from "@prisma/client";
-import { Loader2, Pause, Play, Plus, Send } from "lucide-react";
+import { FileText, Loader2, Pause, Play, Plus, Send } from "lucide-react";
 
 const STATUS_LABELS: Record<OutreachCampaignStatus, string> = {
   DRAFT: "Rascunho",
@@ -42,51 +47,90 @@ const STATUS_LABELS: Record<OutreachCampaignStatus, string> = {
   CANCELLED: "Cancelada",
 };
 
-const DEFAULT_TEMPLATE = `Olá {{nome}}! Tudo bem?
+const WIZARD_STEPS = ["Lista", "Conexão", "Iniciar"] as const;
 
-Somos da Menve e vimos a {{empresa}}. Podemos conversar?
-
-WhatsApp: {{telefone}}`;
-
-const WIZARD_STEPS = ["Lista", "Conexão", "Template", "Iniciar"] as const;
+function TemplateEditor({
+  templateBody,
+  onChange,
+}: {
+  templateBody: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Variáveis: {"{{nome}}"}, {"{{empresa}}"}, {"{{telefone}}"}
+      </p>
+      <textarea
+        className="min-h-[160px] w-full rounded-md border border-border bg-background p-3 text-sm"
+        value={templateBody}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-xs font-medium text-muted-foreground">
+            Prévia
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="whitespace-pre-wrap pb-3 text-sm">
+          {previewOutreachTemplate(templateBody)}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export function DisparoClient({
   initialCampaigns,
-  prospectLists,
+  primaryList,
   connections,
+  initialTemplate,
 }: {
   initialCampaigns: OutreachCampaignSummary[];
-  prospectLists: ProspectListSummary[];
+  primaryList: ProspectListSummary | null;
   connections: WhatsAppConnection[];
+  initialTemplate: string;
 }) {
   const router = useRouter();
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
-  const [listId, setListId] = useState("");
+  const [listId, setListId] = useState(primaryList?.id ?? "");
   const [connectionId, setConnectionId] = useState("");
-  const [templateBody, setTemplateBody] = useState(DEFAULT_TEMPLATE);
+  const [templateBody, setTemplateBody] = useState(
+    initialTemplate || DEFAULT_OUTREACH_TEMPLATE,
+  );
+  const [templateDraft, setTemplateDraft] = useState(templateBody);
 
   function resetWizard() {
     setStep(0);
     setName("");
-    setListId("");
+    setListId(primaryList?.id ?? "");
     setConnectionId("");
-    setTemplateBody(DEFAULT_TEMPLATE);
     setError(null);
   }
 
   function openWizard() {
     resetWizard();
+    setListId(primaryList?.id ?? "");
     setWizardOpen(true);
   }
 
-  const selectedList = prospectLists.find((l) => l.id === listId);
+  function openTemplateDialog() {
+    setTemplateError(null);
+    setTemplateDraft(templateBody);
+    setTemplateOpen(true);
+  }
+
+  const selectedList = primaryList;
   const selectedConn = connections.find((c) => c.id === connectionId);
 
   async function refreshCampaigns() {
@@ -95,15 +139,40 @@ export function DisparoClient({
     router.refresh();
   }
 
+  async function onSaveTemplate() {
+    const body = templateDraft.trim();
+    if (!body) {
+      setTemplateError("A mensagem não pode ficar vazia.");
+      return;
+    }
+    setTemplateBusy(true);
+    setTemplateError(null);
+    try {
+      const saved = await saveOutreachDefaultTemplate(body);
+      setTemplateBody(saved.templateBody);
+      setTemplateOpen(false);
+      router.refresh();
+    } catch (e) {
+      setTemplateError(e instanceof Error ? e.message : "Falha ao salvar template");
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
+
   async function onCreateAndMaybeStart(start: boolean) {
+    const body = templateBody.trim();
+    if (!body) {
+      setError("Configure o template de mensagem antes de criar a campanha.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const campaign = await createOutreachCampaign({
         name: name.trim() || `Campanha ${new Date().toLocaleDateString("pt-BR")}`,
-        listId,
+        listId: primaryList?.id ?? listId,
         connectionId,
-        templateBody,
+        templateBody: body,
       });
       if (start) {
         await startOutreachCampaign(campaign.id);
@@ -145,19 +214,25 @@ export function DisparoClient({
             Campanhas de WhatsApp a partir das suas listas de prospecção
           </p>
         </div>
-        <Button type="button" onClick={openWizard} disabled={prospectLists.length === 0}>
-          <Plus className="size-4" />
-          <span className="ml-2">Nova campanha</span>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={openTemplateDialog}>
+            <FileText className="size-4" />
+            <span className="ml-2">Template</span>
+          </Button>
+          <Button type="button" onClick={openWizard} disabled={!primaryList?.id}>
+            <Plus className="size-4" />
+            <span className="ml-2">Nova campanha</span>
+          </Button>
+        </div>
       </div>
 
-      {prospectLists.length === 0 ? (
+      {!primaryList ? (
         <p className="text-sm text-muted-foreground">
-          Crie uma lista em{" "}
+          Faça uma captura em{" "}
           <a href="/lista" className="font-medium text-foreground underline">
             Lista
           </a>{" "}
-          antes de disparar mensagens.
+          para alimentar a lista principal antes de disparar mensagens.
         </p>
       ) : null}
 
@@ -220,6 +295,46 @@ export function DisparoClient({
       )}
 
       <Dialog
+        open={templateOpen}
+        onOpenChange={(o) => {
+          setTemplateOpen(o);
+          if (!o) setTemplateError(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Template de mensagem</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Mensagem padrão usada em novas campanhas. Você pode personalizar por
+            campanha depois, se necessário.
+          </p>
+          {templateError ? (
+            <p className="text-sm text-destructive">{templateError}</p>
+          ) : null}
+          <TemplateEditor templateBody={templateDraft} onChange={setTemplateDraft} />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={templateBusy}
+              onClick={() => setTemplateOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={templateBusy || !templateDraft.trim()}
+              onClick={() => void onSaveTemplate()}
+            >
+              {templateBusy ? <Loader2 className="size-4 animate-spin" /> : null}
+              <span className={templateBusy ? "ml-2" : ""}>Salvar template</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={wizardOpen}
         onOpenChange={(o) => {
           setWizardOpen(o);
@@ -260,22 +375,16 @@ export function DisparoClient({
                   placeholder="Ex.: Clínicas SP — março"
                 />
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="camp-list">Lista de prospects</Label>
-                <select
-                  id="camp-list"
-                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                  value={listId}
-                  onChange={(e) => setListId(e.target.value)}
-                >
-                  <option value="">Selecione…</option>
-                  {prospectLists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name} ({l.itemCount})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {primaryList ? (
+                <Card>
+                  <CardContent className="py-3 text-sm">
+                    <p className="font-medium">{primaryList.name}</p>
+                    <p className="text-muted-foreground">
+                      {primaryList.itemCount} destinatário(s) da lista principal
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : null}
             </div>
           ) : null}
 
@@ -316,32 +425,6 @@ export function DisparoClient({
           ) : null}
 
           {step === 2 ? (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Variáveis: {"{{nome}}"}, {"{{empresa}}"}, {"{{telefone}}"}
-              </p>
-              <textarea
-                className="min-h-[160px] w-full rounded-md border border-border bg-background p-3 text-sm"
-                value={templateBody}
-                onChange={(e) => setTemplateBody(e.target.value)}
-              />
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">
-                    Prévia
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="whitespace-pre-wrap pb-3 text-sm">
-                  {templateBody
-                    .replace(/\{\{nome\}\}/gi, "Maria")
-                    .replace(/\{\{empresa\}\}/gi, "Empresa Exemplo")
-                    .replace(/\{\{telefone\}\}/gi, "(48) 99999-0000")}
-                </CardContent>
-              </Card>
-            </div>
-          ) : null}
-
-          {step === 3 ? (
             <div className="space-y-2 text-sm">
               <p>
                 <strong>Lista:</strong> {selectedList?.name} (
@@ -351,9 +434,15 @@ export function DisparoClient({
                 <strong>Conexão:</strong> {selectedConn?.name}
               </p>
               <p className="text-xs text-muted-foreground">
-                O envio respeita o throttle configurado no workspace (padrão 1
-                msg / 45s). Destinatários podem responder SAIR para opt-out.
+                A mensagem segue o template configurado no workspace. O envio
+                respeita o throttle configurado (padrão 1 msg / 45s).
+                Destinatários podem responder SAIR para opt-out.
               </p>
+              {!templateBody.trim() ? (
+                <p className="text-sm text-destructive">
+                  Configure o template antes de criar a campanha.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -366,14 +455,13 @@ export function DisparoClient({
             >
               Voltar
             </Button>
-            {step < 3 ? (
+            {step < 2 ? (
               <Button
                 type="button"
                 disabled={
                   busy ||
-                  (step === 0 && !listId) ||
-                  (step === 1 && !connectionId) ||
-                  (step === 2 && !templateBody.trim())
+                  (step === 0 && !primaryList?.id) ||
+                  (step === 1 && !connectionId)
                 }
                 onClick={() => setStep((s) => s + 1)}
               >
@@ -384,7 +472,7 @@ export function DisparoClient({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={busy}
+                  disabled={busy || !templateBody.trim()}
                   onClick={() => void onCreateAndMaybeStart(false)}
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -392,7 +480,7 @@ export function DisparoClient({
                 </Button>
                 <Button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || !templateBody.trim()}
                   onClick={() => void onCreateAndMaybeStart(true)}
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : null}

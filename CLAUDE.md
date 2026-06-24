@@ -17,6 +17,7 @@
 - `Workspace` / `WorkspaceMembership` = acesso do usuário ao tenant com papel (`OWNER`, `ADMIN`, `MANAGER`, `SELLER`, …)
 - `Pipeline` + `Stage` = funil; `Deal` = oportunidade na etapa; `Contact` = contato vinculado ao deal
 - WhatsApp: providers via `IWhatsAppProvider` (`whatsapp/provider.interface.ts` + `factory.ts`)
+- Lista / prospecção: captura Google Maps via **SerpApi** (`menve-sales-api/src/prospecting/serpapi-maps.ts`); env `SERPAPI_API_KEY` na API (Railway)
 
 ## Proibido
 

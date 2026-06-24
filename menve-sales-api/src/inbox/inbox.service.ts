@@ -10,7 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 const inboxContactInclude = {
   include: {
     deals: {
-      where: { status: "OPEN" as const },
+      where: { status: "OPEN" as const, pipelineVisible: true },
       orderBy: { updatedAt: "desc" as const },
       take: 8,
       include: {
@@ -146,6 +146,11 @@ export class InboxService {
         whatsappConnectionId: true,
         assignedUserId: true,
         status: true,
+        qualificationMode: true,
+        aiAgentId: true,
+        handoffAt: true,
+        handoffReason: true,
+        aiPausedAt: true,
         lastMessageAt: true,
         createdAt: true,
         updatedAt: true,

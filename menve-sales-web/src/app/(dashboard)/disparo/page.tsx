@@ -1,13 +1,15 @@
 import {
+  getOutreachDefaultTemplate,
   listOutreachCampaigns,
   type OutreachCampaignSummary,
 } from "@/actions/outreach";
-import { listProspectLists } from "@/actions/prospect-lists";
+import { getPrimaryProspectList } from "@/actions/prospect-lists";
 import { apiServer } from "@/lib/api-server";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { redirect } from "next/navigation";
 import { DisparoClient } from "./disparo-client";
 import type { WhatsAppConnection } from "@prisma/client";
+import { DEFAULT_OUTREACH_TEMPLATE } from "@/lib/outreach-template";
 
 export default async function DisparoPage() {
   const tenant = await getTenantFromRequest();
@@ -16,12 +18,15 @@ export default async function DisparoPage() {
     redirect("/dashboard");
   }
 
-  const [campaigns, lists, settings] = await Promise.all([
+  const [campaigns, primaryList, settings, template] = await Promise.all([
     listOutreachCampaigns().catch(() => [] as OutreachCampaignSummary[]),
-    listProspectLists().catch(() => []),
+    getPrimaryProspectList().catch(() => null),
     apiServer<{ whatsAppConnections: WhatsAppConnection[] }>("/settings").catch(
       () => ({ whatsAppConnections: [] as WhatsAppConnection[] }),
     ),
+    getOutreachDefaultTemplate().catch(() => ({
+      templateBody: DEFAULT_OUTREACH_TEMPLATE,
+    })),
   ]);
 
   const connections = (settings.whatsAppConnections ?? []).filter(
@@ -32,8 +37,9 @@ export default async function DisparoPage() {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
       <DisparoClient
         initialCampaigns={campaigns}
-        prospectLists={lists}
+        primaryList={primaryList}
         connections={connections}
+        initialTemplate={template.templateBody}
       />
     </div>
   );

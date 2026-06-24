@@ -42,6 +42,7 @@ type CreatedDealCtx = SimpleDealCtx & {
 
 type AutomationEvent =
   | { kind: "created"; campaignSourceId: string | null }
+  | { kind: "entered_pipeline"; campaignSourceId: string | null }
   | { kind: "stage"; fromStageId: string; toStageId: string }
   | { kind: "won" }
   | { kind: "lost" }
@@ -140,6 +141,13 @@ export class PipelineAutomationEngineService {
     switch (triggerType) {
       case PipelineAutomationTriggerType.DEAL_CREATED:
         if (event.kind !== "created") return false;
+        if (f.campaignSourceIds && f.campaignSourceIds.length > 0) {
+          const c = event.campaignSourceId;
+          if (!c || !f.campaignSourceIds.includes(c)) return false;
+        }
+        return true;
+      case PipelineAutomationTriggerType.DEAL_ENTERED_PIPELINE:
+        if (event.kind !== "entered_pipeline") return false;
         if (f.campaignSourceIds && f.campaignSourceIds.length > 0) {
           const c = event.campaignSourceId;
           if (!c || !f.campaignSourceIds.includes(c)) return false;
@@ -297,6 +305,7 @@ export class PipelineAutomationEngineService {
   ): boolean {
     return (
       t === PipelineAutomationTriggerType.DEAL_CREATED ||
+      t === PipelineAutomationTriggerType.DEAL_ENTERED_PIPELINE ||
       t === PipelineAutomationTriggerType.DEAL_ENTERED_STAGE ||
       t === PipelineAutomationTriggerType.DEAL_LEFT_STAGE ||
       t === PipelineAutomationTriggerType.DEAL_STAGE_TRANSITION ||
@@ -530,6 +539,40 @@ export class PipelineAutomationEngineService {
         ctx.dealId,
         ctx.actorUserId,
         PipelineAutomationTriggerType.DEAL_CREATED,
+        ctx.depth,
+      );
+    }
+  }
+
+  async afterDealEnteredPipeline(ctx: CreatedDealCtx): Promise<void> {
+    if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
+    const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
+    const event: AutomationEvent = {
+      kind: "entered_pipeline",
+      campaignSourceId: ctx.campaignSourceId,
+    };
+    for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
+      if (
+        rule.triggerType !== PipelineAutomationTriggerType.DEAL_ENTERED_PIPELINE
+      )
+        continue;
+      if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
+        continue;
+      await this.executeRule(
+        rule,
+        ctx.dealId,
+        ctx.actorUserId,
+        PipelineAutomationTriggerType.DEAL_ENTERED_PIPELINE,
         ctx.depth,
       );
     }

@@ -49,6 +49,7 @@ export class ReportsService {
       ? await this.prisma.deal.findMany({
           where: {
             tenantId,
+            pipelineVisible: true,
             contactId: { in: contactIds },
             ...(Object.keys(createdAt).length > 0 ? { createdAt } : {}),
           },

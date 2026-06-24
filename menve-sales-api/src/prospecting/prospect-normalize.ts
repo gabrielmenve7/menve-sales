@@ -1,23 +1,24 @@
 import { ProspectSource } from "@prisma/client";
 import { normalizeBrazilianPhone } from "./phone-utils";
 
-export interface SerperWebResult {
+export interface WebSearchResult {
   title: string;
   link: string;
   snippet: string;
   position: number;
 }
 
-export interface SerperMapsResult {
+export interface MapsPlaceResult {
   title: string;
   address: string;
   phone?: string;
   website?: string;
   rating?: number;
   reviewCount?: number;
+  category?: string | null;
+  cid?: string;
   latitude?: number;
   longitude?: number;
-  cid?: string;
 }
 
 export interface NormalizedProspect {
@@ -50,77 +51,9 @@ function mapsUrlFromCid(cid: string | undefined): string | null {
   return `https://www.google.com/maps?cid=${encodeURIComponent(cid)}`;
 }
 
-/** Máximo de resultados orgânicos por requisição (limite usual Serper/Google). */
-export const SERPER_WEB_RESULTS_PER_REQUEST = 100;
-
-export async function searchWeb(
-  query: string,
-  apiKey: string,
-  opts?: { page?: number; num?: number },
-): Promise<SerperWebResult[]> {
-  const page = opts?.page ?? 1;
-  const num = opts?.num ?? SERPER_WEB_RESULTS_PER_REQUEST;
-  const res = await fetch("https://google.serper.dev/search", {
-    method: "POST",
-    headers: {
-      "X-API-KEY": apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      q: query,
-      gl: "br",
-      hl: "pt-br",
-      num,
-      page,
-    }),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Serper web ${res.status}: ${t}`);
-  }
-  const data = (await res.json()) as {
-    organic?: { title?: string; link?: string; snippet?: string; position?: number }[];
-  };
-  const organic = data.organic ?? [];
-  return organic
-    .filter((o) => o.title && o.link)
-    .map((o) => ({
-      title: o.title!,
-      link: o.link!,
-      snippet: o.snippet ?? "",
-      position: o.position ?? 0,
-    }));
-}
-
-export async function searchMaps(
-  query: string,
-  apiKey: string,
-): Promise<SerperMapsResult[]> {
-  const res = await fetch("https://google.serper.dev/maps", {
-    method: "POST",
-    headers: {
-      "X-API-KEY": apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      q: query,
-      gl: "br",
-      hl: "pt-br",
-    }),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Serper maps ${res.status}: ${t}`);
-  }
-  const data = (await res.json()) as {
-    places?: SerperMapsResult[];
-  };
-  return data.places ?? [];
-}
-
 export function normalizeAndDeduplicate(
-  webResults: SerperWebResult[],
-  mapsResults: SerperMapsResult[],
+  webResults: WebSearchResult[],
+  mapsResults: MapsPlaceResult[],
 ): { prospects: NormalizedProspect[]; webCount: number; mapsCount: number } {
   const webCount = webResults.length;
   const mapsCount = mapsResults.length;
@@ -148,7 +81,7 @@ export function normalizeAndDeduplicate(
     else webNoDomain.push(p);
   }
 
-  let mapsOnly: NormalizedProspect[] = [];
+  const mapsOnly: NormalizedProspect[] = [];
 
   for (const m of mapsResults) {
     const site = m.website?.trim() || null;
@@ -165,6 +98,7 @@ export function normalizeAndDeduplicate(
       existing.rating = m.rating ?? existing.rating;
       existing.reviewCount = m.reviewCount ?? existing.reviewCount;
       existing.googleMapsUrl = existing.googleMapsUrl || gUrl;
+      existing.snippet = existing.snippet || m.category || null;
       existing.foundInBothSources = true;
       continue;
     }
@@ -175,7 +109,7 @@ export function normalizeAndDeduplicate(
       hasWebsite: !!site,
       phone: phoneNorm,
       address: m.address || null,
-      snippet: null,
+      snippet: m.category || null,
       rating: m.rating ?? null,
       reviewCount: m.reviewCount ?? null,
       googleMapsUrl: gUrl,
@@ -205,7 +139,9 @@ export function normalizeAndDeduplicate(
     (a, b) => (b.rating ?? 0) - (a.rating ?? 0),
   );
   const mapsPure = fromMap
-    .filter((p) => p.source === ProspectSource.GOOGLE_MAPS && !p.foundInBothSources)
+    .filter(
+      (p) => p.source === ProspectSource.GOOGLE_MAPS && !p.foundInBothSources,
+    )
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 
   const prospects = [...searchFirst, ...mapsPure, ...mapsOnlySorted];

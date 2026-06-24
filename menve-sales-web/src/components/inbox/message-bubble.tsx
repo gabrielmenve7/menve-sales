@@ -7,9 +7,17 @@ import { VoiceMessagePlayer } from "./voice-message-player";
 
 export type { OutboundAckStatus };
 
+type SenderType =
+  | "LEAD"
+  | "HUMAN_AGENT"
+  | "AI_AGENT"
+  | "SYSTEM"
+  | "CAMPAIGN";
+
 export function MessageBubble({
   body,
   direction,
+  senderType,
   createdAt,
   continuation,
   ackStatus,
@@ -21,6 +29,7 @@ export function MessageBubble({
 }: {
   body: string;
   direction: "INBOUND" | "OUTBOUND";
+  senderType?: SenderType;
   createdAt: string | Date;
   continuation?: boolean;
   ackStatus?: OutboundAckStatus | null;
@@ -37,35 +46,51 @@ export function MessageBubble({
   });
 
   const isOut = direction === "OUTBOUND";
+  const isAi = senderType === "AI_AGENT";
+  const isCampaign = senderType === "CAMPAIGN";
+  const senderLabel = isAi
+    ? "Larissa · Agente IA"
+    : isCampaign
+      ? "Abordagem"
+      : isOut
+        ? "Você"
+        : contactName?.trim() || "Lead";
+
+  const outBg = isAi
+    ? "bg-violet-600 text-white"
+    : isCampaign
+      ? "bg-slate-600 text-white"
+      : "bg-primary-solid text-primary-solid-fg";
+
+  const outFg =
+    isAi || isCampaign ? "text-white/70" : "text-primary-solid-fg/65";
+
   const ack: OutboundAckStatus | null = isOut
     ? (ackStatus ?? "DELIVERED")
     : null;
 
   const mt = mediaType?.toLowerCase() ?? "";
-
   const showAudio =
     !!mediaUrl && (mt.startsWith("audio/") || body === "[Áudio]");
-
   const showImage = !!mediaUrl && mt.startsWith("image/");
-
   const showPdf =
-    !!mediaUrl &&
-    (mt.includes("pdf") || mt === "application/x-pdf");
-
+    !!mediaUrl && (mt.includes("pdf") || mt === "application/x-pdf");
   const showTextBody =
     body &&
     (!showAudio || body !== "[Áudio]") &&
     !(showImage && (body === "[Imagem]" || !body.trim())) &&
     !(showPdf && body.startsWith("[Documento]"));
 
+  const label = !continuation ? (
+    <span className="mb-0.5 block px-1 text-[10px] font-medium text-muted-foreground">
+      {senderLabel}
+    </span>
+  ) : null;
+
   if (showAudio && mediaUrl) {
     return (
-      <div
-        className={cn(
-          "w-max max-w-[min(20rem,92%)]",
-          isOut ? "ml-auto" : "mr-auto",
-        )}
-      >
+      <div className={cn(isOut ? "ml-auto" : "mr-auto", "w-max max-w-[min(20rem,92%)]")}>
+        {label}
         <VoiceMessagePlayer
           src={mediaUrl}
           mimeType={mediaType}
@@ -92,6 +117,7 @@ export function MessageBubble({
           isOut ? "ml-auto" : "mr-auto",
         )}
       >
+        {label}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={mediaUrl}
@@ -102,9 +128,7 @@ export function MessageBubble({
           <p
             className={cn(
               "px-2.5 py-1.5 text-sm leading-snug",
-              isOut
-                ? "bg-primary-solid text-primary-solid-fg"
-                : "bg-muted/60 text-foreground dark:bg-muted/35",
+              isOut ? outBg : "bg-muted/60 text-foreground dark:bg-muted/35",
             )}
           >
             {body}
@@ -113,7 +137,7 @@ export function MessageBubble({
         <div
           className={cn(
             "flex items-end justify-end gap-1 px-2 pb-1.5 pt-0.5 text-[11px]",
-            isOut ? "text-primary-solid-fg/65" : "text-muted-foreground",
+            isOut ? outFg : "text-muted-foreground",
           )}
         >
           <span className="select-none tabular-nums">{time}</span>
@@ -128,20 +152,16 @@ export function MessageBubble({
       <div
         className={cn(
           "w-max max-w-[min(21rem,82%)] rounded-xl px-2.5 py-2 text-sm shadow-sm",
-          isOut
-            ? "ml-auto bg-primary-solid text-primary-solid-fg"
-            : "mr-auto bg-muted/60 text-foreground dark:bg-muted/35",
+          isOut ? cn("ml-auto", outBg) : "mr-auto bg-muted/60 text-foreground dark:bg-muted/35",
         )}
       >
+        {label}
         <a
           href={mediaUrl}
           download
           target="_blank"
           rel="noopener noreferrer"
-          className={cn(
-            "font-medium underline underline-offset-2",
-            isOut ? "text-primary-solid-fg" : "text-foreground",
-          )}
+          className="font-medium underline underline-offset-2"
         >
           Abrir PDF
         </a>
@@ -151,7 +171,7 @@ export function MessageBubble({
         <div
           className={cn(
             "mt-1 flex items-end justify-end gap-1 text-[11px]",
-            isOut ? "text-primary-solid-fg/65" : "text-muted-foreground",
+            isOut ? outFg : "text-muted-foreground",
           )}
         >
           <span className="select-none tabular-nums">{time}</span>
@@ -162,40 +182,43 @@ export function MessageBubble({
   }
 
   return (
-    <div
-      className={cn(
-        "w-max max-w-[min(21rem,82%)] px-2.5 py-1.5 text-sm leading-snug shadow-sm",
-        continuation ? "rounded-lg" : null,
-        !continuation && isOut && "rounded-bl-lg rounded-br-lg rounded-tl-lg rounded-tr-sm",
-        !continuation && !isOut && "rounded-br-lg rounded-tl-sm rounded-tr-lg rounded-bl-lg",
-        isOut
-          ? "ml-auto bg-primary-solid text-primary-solid-fg"
-          : "mr-auto bg-muted/60 text-foreground dark:bg-muted/35 dark:text-foreground",
-      )}
-    >
-      <div className="flex flex-col gap-2">
-        {body === "[Áudio]" && !showAudio ? (
-          <p className="text-xs text-muted-foreground">
-            Áudio recebido, mas o arquivo não está disponível. Em Canais, reaplique o
-            webhook na Evolution com envio de mídia em base64 (ou envie outro áudio
-            após atualizar a API).
-          </p>
-        ) : null}
-        {showTextBody ? (
-          <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-            {body}
-          </p>
-        ) : null}
-        <div
-          className={cn(
-            "flex items-end justify-end gap-1",
-            isOut ? "text-primary-solid-fg/65" : "text-muted-foreground",
-          )}
-        >
-          <span className="select-none whitespace-nowrap pb-px text-[11px] tabular-nums leading-none">
-            {time}
-          </span>
-          {ack ? <OutboundAckIcons status={ack} /> : null}
+    <div className={cn(isOut ? "ml-auto" : "mr-auto", "w-max max-w-[min(21rem,82%)]")}>
+      {label}
+      <div
+        className={cn(
+          "px-2.5 py-1.5 text-sm leading-snug shadow-sm",
+          continuation ? "rounded-lg" : null,
+          !continuation &&
+            isOut &&
+            "rounded-bl-lg rounded-br-lg rounded-tl-lg rounded-tr-sm",
+          !continuation &&
+            !isOut &&
+            "rounded-br-lg rounded-tl-sm rounded-tr-lg rounded-bl-lg",
+          isOut ? outBg : "mr-auto bg-muted/60 text-foreground dark:bg-muted/35",
+        )}
+      >
+        <div className="flex flex-col gap-2">
+          {body === "[Áudio]" && !showAudio ? (
+            <p className="text-xs text-muted-foreground">
+              Áudio recebido, mas o arquivo não está disponível.
+            </p>
+          ) : null}
+          {showTextBody ? (
+            <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {body}
+            </p>
+          ) : null}
+          <div
+            className={cn(
+              "flex items-end justify-end gap-1",
+              isOut ? outFg : "text-muted-foreground",
+            )}
+          >
+            <span className="select-none whitespace-nowrap pb-px text-[11px] tabular-nums leading-none">
+              {time}
+            </span>
+            {ack ? <OutboundAckIcons status={ack} /> : null}
+          </div>
         </div>
       </div>
     </div>

@@ -32,13 +32,30 @@ export type InboxMessage = Message & {
   ackStatus?: "SENT" | "DELIVERED" | "READ" | null;
   mediaUrl?: string | null;
   mediaType?: string | null;
+  senderType?:
+    | "LEAD"
+    | "HUMAN_AGENT"
+    | "AI_AGENT"
+    | "SYSTEM"
+    | "CAMPAIGN";
 };
+
+export type ConversationQualificationMode =
+  | "NONE"
+  | "AI_ACTIVE"
+  | "AI_PAUSED"
+  | "HUMAN_HANDOFF"
+  | "COMPLETED";
 
 export type InboxConversation = Conversation & {
   contact: InboxContact;
   whatsappConnection: WhatsAppConnection;
   messages: InboxMessage[];
   internalNotes: NoteRow[];
+  qualificationMode?: ConversationQualificationMode;
+  aiAgentId?: string | null;
+  handoffAt?: Date | string | null;
+  handoffReason?: string | null;
   /** Há mais mensagens anteriores às carregadas (paginação). */
   hasOlderMessages?: boolean;
 };

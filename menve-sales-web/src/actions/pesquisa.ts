@@ -22,6 +22,7 @@ export type ProspectSearchHistory = {
   qualifiedCount: number;
   status: ProspectSearchStatus;
   webExhausted?: boolean;
+  errorMessage?: string | null;
   createdAt: string;
   user: { name: string | null; email: string | null };
 };
@@ -32,13 +33,10 @@ export type ProspectStats = {
   qualified: number;
 };
 
-const engineSchema = z.enum(["maps", "search"]);
-
 const structuredSearchSchema = z.object({
   segment: z.string().min(3).max(200),
   state: z.string().min(2).max(2),
   city: z.string().min(2).max(120),
-  engines: z.array(engineSchema).min(1).max(2),
 });
 
 const legacyQuerySchema = z.object({
@@ -58,7 +56,7 @@ async function wrapProspecting<T>(p: Promise<T>): Promise<T> {
 
 function prospectingErrorMessage(e: unknown): string {
   if (e instanceof z.ZodError) {
-    return e.errors[0]?.message ?? "Preencha segmento, estado, cidade e fontes.";
+    return e.errors[0]?.message ?? "Preencha segmento, estado e cidade.";
   }
   if (e instanceof Error) {
     const m = e.message;
@@ -94,7 +92,7 @@ export async function prospectingSearch(
     const json =
       typeof input === "string"
         ? legacyQuerySchema.parse({ query: input })
-        : structuredSearchSchema.parse(input);
+        : { ...structuredSearchSchema.parse(input), engines: ["maps"] as const };
 
     const res = await wrapProspecting(
       apiServer<{ search: { id: string }; results: unknown[] }>(
@@ -121,15 +119,6 @@ export async function prospectingGetSearch(searchId: string) {
       enrichedCount: number;
       isComplete: boolean;
     }>(`/prospecting/searches/${searchId}`),
-  );
-}
-
-export async function prospectingLoadMoreWeb(searchId: string) {
-  return wrapProspecting(
-    apiServer<{ added: number; exhausted: boolean; totalCount: number }>(
-      `/prospecting/searches/${searchId}/more-web`,
-      { method: "POST" },
-    ),
   );
 }
 

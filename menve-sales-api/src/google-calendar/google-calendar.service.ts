@@ -3,8 +3,12 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  Optional,
 } from "@nestjs/common";
+import { ActivityType } from "@prisma/client";
 import { createHmac, randomBytes } from "node:crypto";
+import { HandoffService } from "../agents/handoff.service";
+import { DealPipelinePromotionService } from "../deals/deal-pipeline-promotion.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -80,7 +84,11 @@ function verifyState(state: string): string {
 
 @Injectable()
 export class GoogleCalendarService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pipelinePromotion: DealPipelinePromotionService,
+    @Optional() private readonly handoff?: HandoffService,
+  ) {}
 
   getAuthRedirectUrl(userId: string): string {
     const { clientId, redirectUri } = googleEnv();
@@ -95,6 +103,18 @@ export class GoogleCalendarService {
       state,
     });
     return `${GOOGLE_AUTH_URL}?${params.toString()}`;
+  }
+
+  async getConnectionStatus(userId: string) {
+    const row = await this.prisma.userGoogleCalendar.findUnique({
+      where: { userId },
+      select: { calendarId: true, connectedAt: true },
+    });
+    return {
+      connected: Boolean(row),
+      calendarId: row?.calendarId ?? null,
+      connectedAt: row?.connectedAt?.toISOString() ?? null,
+    };
   }
 
   async handleOAuthCallback(code: string, state: string) {
@@ -165,11 +185,12 @@ export class GoogleCalendarService {
     return tokens.access_token;
   }
 
-  async createEvent(
+  private async createGoogleEvent(
     userId: string,
     body: {
       title: string;
       dueAt: string;
+      durationMinutes: number;
       attendees?: string[];
       createMeet?: boolean;
     },
@@ -183,7 +204,8 @@ export class GoogleCalendarService {
     if (Number.isNaN(start.getTime())) {
       throw new BadRequestException("dueAt inválido");
     }
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const durationMs = Math.max(15, body.durationMinutes) * 60 * 1000;
+    const end = new Date(start.getTime() + durationMs);
 
     const eventPayload: Record<string, unknown> = {
       summary: body.title,
@@ -198,7 +220,8 @@ export class GoogleCalendarService {
       eventPayload.attendees = attendees.map((email) => ({ email }));
     }
 
-    if (body.createMeet !== false) {
+    const withMeet = body.createMeet !== false;
+    if (withMeet) {
       eventPayload.conferenceData = {
         createRequest: {
           requestId: randomBytes(8).toString("hex"),
@@ -210,7 +233,7 @@ export class GoogleCalendarService {
     const url = new URL(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
     );
-    if (body.createMeet !== false) {
+    if (withMeet) {
       url.searchParams.set("conferenceDataVersion", "1");
     }
 
@@ -238,6 +261,148 @@ export class GoogleCalendarService {
       id: created.id,
       htmlLink: created.htmlLink ?? null,
       meetLink,
+      dueAt: start,
+    };
+  }
+
+  async createEvent(
+    userId: string,
+    body: {
+      title: string;
+      dueAt: string;
+      attendees?: string[];
+      createMeet?: boolean;
+    },
+  ) {
+    return this.createGoogleEvent(userId, {
+      title: body.title,
+      dueAt: body.dueAt,
+      durationMinutes: 60,
+      attendees: body.attendees,
+      createMeet: body.createMeet,
+    });
+  }
+
+  async createMeetingForTenant(args: {
+    tenantId: string;
+    userId: string;
+    title: string;
+    description?: string | null;
+    dueAt: string;
+    durationMinutes?: number;
+    contactId?: string;
+    dealId?: string;
+    createGoogleMeet?: boolean;
+  }) {
+    const withMeet = args.createGoogleMeet !== false;
+    const googleEvent = await this.createGoogleEvent(args.userId, {
+      title: args.title,
+      dueAt: args.dueAt,
+      durationMinutes: args.durationMinutes ?? 30,
+      createMeet: withMeet,
+    });
+
+    if (!args.contactId) {
+      if (withMeet && !googleEvent.meetLink) {
+        throw new BadRequestException(
+          "Não foi possível gerar link do Google Meet",
+        );
+      }
+      const activity = await this.prisma.activity.create({
+        data: {
+          tenantId: args.tenantId,
+          userId: args.userId,
+          dealId: args.dealId ?? null,
+          type: ActivityType.MEETING,
+          title: args.title,
+          description: args.description ?? null,
+          dueAt: googleEvent.dueAt,
+          meetLink: googleEvent.meetLink,
+          googleEventId: googleEvent.id,
+        },
+      });
+      return this.formatActivityResponse(activity.id);
+    }
+
+    if (withMeet) {
+      if (!googleEvent.meetLink) {
+        throw new BadRequestException(
+          "Não foi possível gerar link do Google Meet",
+        );
+      }
+      const promoted = await this.pipelinePromotion.promoteDealToPipelineOnMeetScheduled(
+        {
+          tenantId: args.tenantId,
+          actorUserId: args.userId,
+          contactId: args.contactId,
+          meetLink: googleEvent.meetLink,
+          dueAt: googleEvent.dueAt,
+          googleEventId: googleEvent.id,
+          activityTitle: args.title,
+          activityDescription: args.description ?? null,
+          durationMinutes: args.durationMinutes,
+          dealId: args.dealId ?? null,
+        },
+      );
+
+      const conversation = await this.prisma.conversation.findFirst({
+        where: {
+          tenantId: args.tenantId,
+          contactId: args.contactId,
+        },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true },
+      });
+      if (conversation && this.handoff) {
+        await this.handoff.completeQualification({
+          conversationId: conversation.id,
+          tenantId: args.tenantId,
+          reason: "MEET_SCHEDULED",
+          assignedUserId: args.userId,
+        });
+      }
+
+      return this.formatActivityResponse(promoted.activityId);
+    }
+
+    const activity = await this.prisma.activity.create({
+      data: {
+        tenantId: args.tenantId,
+        userId: args.userId,
+        contactId: args.contactId,
+        dealId: args.dealId ?? null,
+        type: ActivityType.MEETING,
+        title: args.title,
+        description: args.description ?? null,
+        dueAt: googleEvent.dueAt,
+        meetLink: googleEvent.meetLink,
+        googleEventId: googleEvent.id,
+      },
+    });
+    return this.formatActivityResponse(activity.id);
+  }
+
+  private async formatActivityResponse(activityId: string) {
+    const activity = await this.prisma.activity.findUnique({
+      where: { id: activityId },
+      include: {
+        contact: { select: { id: true, name: true } },
+        deal: { select: { id: true, title: true } },
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
+    if (!activity) throw new NotFoundException();
+    return {
+      id: activity.id,
+      type: activity.type,
+      title: activity.title,
+      description: activity.description,
+      dueAt: activity.dueAt?.toISOString() ?? null,
+      completedAt: activity.completedAt?.toISOString() ?? null,
+      meetLink: activity.meetLink,
+      contact: activity.contact,
+      deal: activity.deal,
+      user: activity.user,
     };
   }
 }

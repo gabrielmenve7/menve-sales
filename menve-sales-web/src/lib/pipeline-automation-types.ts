@@ -1,5 +1,6 @@
 export type PipelineAutomationTriggerType =
   | "DEAL_CREATED"
+  | "DEAL_ENTERED_PIPELINE"
   | "DEAL_ENTERED_STAGE"
   | "DEAL_LEFT_STAGE"
   | "DEAL_STAGE_TRANSITION"
@@ -10,6 +11,7 @@ export type PipelineAutomationTriggerType =
   | "CONTACT_TAG_REMOVED"
   | "DEAL_MARKED_WON"
   | "DEAL_MARKED_LOST"
+  | "PROSPECT_REPLIED"
   | "COMPOSITE";
 
 export type PipelineAutomationRunStatus = "SUCCESS" | "FAILED" | "SKIPPED";
@@ -82,6 +84,7 @@ export const PIPELINE_AUTOMATION_TRIGGER_LABELS: Record<
   string
 > = {
   DEAL_CREATED: "Lead criado",
+  DEAL_ENTERED_PIPELINE: "Entrou na Gestão de leads",
   DEAL_ENTERED_STAGE: "Entrou na etapa",
   DEAL_LEFT_STAGE: "Saiu da etapa",
   DEAL_STAGE_TRANSITION: "Alteração de status",
@@ -92,6 +95,7 @@ export const PIPELINE_AUTOMATION_TRIGGER_LABELS: Record<
   CONTACT_TAG_REMOVED: "Tag removida do contato",
   DEAL_MARKED_WON: "Marcada como ganha",
   DEAL_MARKED_LOST: "Marcada como perdida",
+  PROSPECT_REPLIED: "Prospect respondeu",
   COMPOSITE: "Gatilho composto (E/OU)",
 };
 

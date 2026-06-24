@@ -2,204 +2,17 @@
 
 import type { CustomField } from "@prisma/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Kanban, Plus } from "lucide-react";
+import { ArrowRight, Calendar, Kanban } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PipelineDealDetailDialog } from "@/app/(dashboard)/pipeline/pipeline-deal-detail-dialog";
-import { createDeal } from "@/actions/deals";
 import { getNextOpenDealInSameStage } from "@/actions/deal-queue";
-import {
-  fetchPipelinesListForInbox,
-  type InboxPipelineListItem,
-} from "@/actions/inbox-fetch";
+import { ScheduleMeetDialog } from "@/components/schedule-meet-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { inboxOpenDealToDealRow } from "./inbox-deal-stub";
 import type { InboxContact, InboxOpenDeal } from "./inbox-types";
-
-function CreateLeadDialog({
-  open,
-  onOpenChange,
-  contactId,
-  contactName,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  contactId: string;
-  contactName: string;
-  onCreated: () => void;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [pipelineId, setPipelineId] = useState("");
-  const [stageId, setStageId] = useState("");
-
-  const { data: pipelines = [], isLoading: pipelinesLoading } = useQuery({
-    queryKey: ["inbox-pipelines-new-deal"],
-    queryFn: fetchPipelinesListForInbox,
-    enabled: open,
-    staleTime: 60_000,
-  });
-
-  const activePipeline = useMemo(
-    () => pipelines.find((p) => p.id === pipelineId),
-    [pipelines, pipelineId],
-  );
-
-  useEffect(() => {
-    if (!open || pipelines.length === 0) return;
-    const next =
-      pipelines.find((p) => p.isDefault) ?? (pipelines[0] as InboxPipelineListItem);
-    setPipelineId((prev) => {
-      if (prev && pipelines.some((p) => p.id === prev)) return prev;
-      return next.id;
-    });
-  }, [open, pipelines]);
-
-  useEffect(() => {
-    const stages = activePipeline?.stages ?? [];
-    const first = stages[0]?.id ?? "";
-    setStageId((prev) => {
-      if (prev && stages.some((s) => s.id === prev)) return prev;
-      return first;
-    });
-  }, [activePipeline]);
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const title = String(fd.get("title") ?? "").trim();
-    const valueRaw = String(fd.get("value") ?? "").trim();
-    const value = valueRaw ? Number(valueRaw.replace(",", ".")) : undefined;
-    if (!title || !pipelineId || !stageId) return;
-    setLoading(true);
-    try {
-      await createDeal({
-        contactId,
-        pipelineId,
-        stageId,
-        title,
-        value: Number.isFinite(value) ? value : undefined,
-      });
-      onOpenChange(false);
-      e.currentTarget.reset();
-      onCreated();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const noPipelines = !pipelinesLoading && pipelines.length === 0;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={onSubmit}>
-          <DialogHeader>
-            <DialogTitle>Novo lead no pipeline</DialogTitle>
-            <DialogDescription>
-              Contato: <strong>{contactName}</strong>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            {pipelinesLoading ? (
-              <p className="text-sm text-muted-foreground">Carregando funis…</p>
-            ) : null}
-            {noPipelines ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhum funil configurado. Quem tiver permissão pode criar o primeiro funil em{" "}
-                <Link
-                  href="/pipeline"
-                  className="font-medium text-primary-solid underline-offset-4 hover:underline"
-                >
-                  Funil de vendas
-                </Link>
-                .
-              </p>
-            ) : null}
-            {!pipelinesLoading && !noPipelines ? (
-              <>
-                <input type="hidden" name="contactId" value={contactId} />
-                <div className="grid gap-2">
-                  <Label htmlFor="inbox-deal-pipeline">Funil</Label>
-                  <select
-                    id="inbox-deal-pipeline"
-                    name="pipelineId"
-                    required
-                    value={pipelineId}
-                    onChange={(ev) => setPipelineId(ev.target.value)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  >
-                    {pipelines.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                        {p.isDefault ? " (padrão)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="inbox-deal-stage">Etapa</Label>
-                  <select
-                    id="inbox-deal-stage"
-                    name="stageId"
-                    required
-                    value={stageId}
-                    onChange={(ev) => setStageId(ev.target.value)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  >
-                    {(activePipeline?.stages ?? []).map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="inbox-deal-title">Título da oportunidade</Label>
-                  <Input
-                    id="inbox-deal-title"
-                    name="title"
-                    required
-                    placeholder="Ex: Proposta comercial"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="inbox-deal-value">Valor (opcional)</Label>
-                  <Input
-                    id="inbox-deal-value"
-                    name="value"
-                    inputMode="decimal"
-                    placeholder="15000"
-                  />
-                </div>
-              </>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={loading || pipelinesLoading || noPipelines || !stageId}
-            >
-              {loading ? "Criando…" : "Criar lead"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 export function InboxLeadSidebar({
   contact,
@@ -217,7 +30,7 @@ export function InboxLeadSidebar({
   onOpenContactInInbox: (contactId: string) => void | Promise<void>;
 }) {
   const queryClient = useQueryClient();
-  const [createOpen, setCreateOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [activeDealId, setActiveDealId] = useState<string | null>(null);
 
   const openDeals = deals ?? [];
@@ -356,27 +169,33 @@ export function InboxLeadSidebar({
           <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
             <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 dark:border-border/50">
               <p className="text-sm leading-relaxed text-muted-foreground">
-                Este contato ainda não tem oportunidade aberta no pipeline.
+                Este contato está em qualificação. Agende uma reunião com Google
+                Meet para levá-lo à Gestão de leads.
               </p>
               <Button
                 type="button"
                 className="w-full font-medium"
-                onClick={() => setCreateOpen(true)}
+                onClick={() => setScheduleOpen(true)}
               >
-                <Plus className="mr-2 size-4" aria-hidden />
-                Criar lead no pipeline
+                <Calendar className="mr-2 size-4" aria-hidden />
+                Agendar reunião
+              </Button>
+              <Button type="button" variant="outline" className="w-full" asChild>
+                <Link href={`/agenda?contact=${encodeURIComponent(contact.id)}`}>
+                  Abrir na Agenda
+                </Link>
               </Button>
             </div>
           </div>
         )}
       </div>
 
-      <CreateLeadDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+      <ScheduleMeetDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
         contactId={contact.id}
         contactName={contact.name}
-        onCreated={onRefresh}
+        onScheduled={() => onRefresh()}
       />
     </aside>
   );

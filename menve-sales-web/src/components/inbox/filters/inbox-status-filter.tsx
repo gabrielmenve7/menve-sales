@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  Bot,
   Check,
   CircleOff,
   Hourglass,
@@ -26,7 +27,8 @@ export type InboxFilterId =
   | "UNREAD"
   | "WAITING"
   | "PIPELINE"
-  | "NO_PIPELINE";
+  | "NO_PIPELINE"
+  | "QUALIFICATION";
 
 type FilterRow = {
   id: InboxFilterId;
@@ -55,6 +57,11 @@ const FILTER_ROWS: FilterRow[] = [
     label: "Fora do pipeline",
     icon: CircleOff,
   },
+  {
+    id: "QUALIFICATION",
+    label: "Qualificação",
+    icon: Bot,
+  },
 ];
 
 /** Última mensagem da thread é do cliente → precisa atenção (proxy de “não lida”). */
@@ -77,6 +84,10 @@ export function conversationMatchesInboxFilter(
   if (filter === "PIPELINE") return contactHasOpenDealInPipeline(c);
   if (filter === "NO_PIPELINE") return !contactHasOpenDealInPipeline(c);
   if (filter === "UNREAD") return conversationLooksUnread(c);
+  if (filter === "QUALIFICATION") {
+    const mode = c.qualificationMode ?? "NONE";
+    return mode === "AI_ACTIVE" || mode === "AI_PAUSED" || mode === "HUMAN_HANDOFF";
+  }
   return true;
 }
 

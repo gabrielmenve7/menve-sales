@@ -38,14 +38,6 @@ export class ProspectingController {
     return this.prospecting.getSearchStatus(u.tenantId, searchId);
   }
 
-  @Post("searches/:searchId/more-web")
-  loadMoreWeb(
-    @ReqUser() u: RequestUser,
-    @Param("searchId") searchId: string,
-  ) {
-    return this.prospecting.loadMoreWeb(u.tenantId, searchId);
-  }
-
   @Delete("searches/:searchId")
   deleteSearch(
     @ReqUser() u: RequestUser,

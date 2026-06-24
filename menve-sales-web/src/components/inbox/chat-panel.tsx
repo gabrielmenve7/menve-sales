@@ -44,6 +44,7 @@ import type { InboxConversation, InboxMessage } from "./inbox-types";
 import { ContactPhotoAvatar } from "./contact-photo-avatar";
 import { getContactPhotoUrl } from "./inbox-utils";
 import { MessageBubble } from "./message-bubble";
+import { QualificationBanner } from "./qualification-banner";
 
 function readFileAsDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -136,6 +137,9 @@ export function ChatPanel({
   const [olderError, setOlderError] = useState<string | null>(null);
 
   const conn = conversation.whatsappConnection;
+  const aiReadOnly =
+    (conversation.qualificationMode ?? "NONE") === "AI_ACTIVE" ||
+    (conversation.qualificationMode ?? "NONE") === "AI_PAUSED";
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -531,6 +535,7 @@ export function ChatPanel({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <QualificationBanner conversation={conversation} onTakeover={onRefetch} />
           {/* Messages */}
           <div
             ref={scrollRef}
@@ -571,6 +576,7 @@ export function ChatPanel({
                   <MessageBubble
                     body={m.body}
                     direction={m.direction}
+                    senderType={m.senderType}
                     createdAt={m.createdAt}
                     continuation={continuation}
                     ackStatus={m.ackStatus}
@@ -591,7 +597,7 @@ export function ChatPanel({
 
           {/* Quick replies + composer: fixos na base; só as mensagens rolam acima */}
           <div className="shrink-0 border-t border-border/20 bg-card dark:border-border/30">
-            {showQuickReplies ? (
+            {showQuickReplies && !aiReadOnly ? (
               <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
                 {quickReplyCategories.map((cat) =>
                   cat.replies.length === 0 ? null : (
@@ -661,6 +667,11 @@ export function ChatPanel({
             {sendError ? (
               <p className="px-3 pb-0 text-xs text-destructive">{sendError}</p>
             ) : null}
+            {aiReadOnly ? (
+              <p className="border-t border-border/15 px-3 py-3 text-center text-xs text-muted-foreground dark:border-border/25">
+                Assuma a conversa para enviar mensagens.
+              </p>
+            ) : (
             <form
               onSubmit={onSend}
               className={cn(
@@ -793,6 +804,7 @@ export function ChatPanel({
                 <Send className="size-4" />
               </Button>
             </form>
+            )}
           </div>
         </div>
       )}

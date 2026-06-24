@@ -19,6 +19,11 @@ export class ProspectListsController {
     return this.lists.list(u.tenantId);
   }
 
+  @Get("primary")
+  getPrimary(@ReqUser() u: RequestUser) {
+    return this.lists.getPrimary(u.tenantId, u.userId);
+  }
+
   @Post()
   create(@ReqUser() u: RequestUser, @Body() body: unknown) {
     return this.lists.create(u, body);

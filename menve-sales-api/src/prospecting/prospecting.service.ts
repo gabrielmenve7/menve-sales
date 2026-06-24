@@ -1,8 +1,6 @@
 import {
   BadRequestException,
   ForbiddenException,
-  forwardRef,
-  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -13,21 +11,13 @@ import {
   ProspectStatus,
 } from "@prisma/client";
 import { z } from "zod";
-import { DealsService } from "../deals/deals.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { ProspectListsService } from "../prospect-lists/prospect-lists.service";
 import { resolveBrazilianPhoneFromCandidates } from "./phone-utils";
-import {
-  filterBusinessWebResults,
-  sanitizeMapsResults,
-} from "./business-result-filter";
+import { sanitizeMapsResults } from "./business-result-filter";
 import { buildProspectQuery } from "./prospect-query";
-import {
-  baseDomain,
-  normalizeAndDeduplicate,
-  searchMaps,
-  searchWeb,
-  SERPER_WEB_RESULTS_PER_REQUEST,
-} from "./serper";
+import { normalizeAndDeduplicate } from "./prospect-normalize";
+import { searchMapsAllPages } from "./serpapi-maps";
 import { scrapeWebsite } from "./website-scraper";
 
 const engineSchema = z.enum(["maps", "search"]);
@@ -36,7 +26,7 @@ const structuredSearchBody = z.object({
   segment: z.string().min(3).max(200),
   state: z.string().min(2).max(2),
   city: z.string().min(2).max(120),
-  engines: z.array(engineSchema).min(1).max(2),
+  engines: z.array(engineSchema).optional(),
 });
 
 const legacySearchBody = z.object({
@@ -51,7 +41,7 @@ const patchResultSchema = z.object({
 });
 
 const convertBodySchema = z.object({
-  pipelineId: z.string(),
+  pipelineId: z.string().optional(),
   title: z.string().optional(),
   value: z.number().optional(),
   /** Número exibido na Pesquisa (prioridade na resolução do telefone do contato). */
@@ -60,15 +50,14 @@ const convertBodySchema = z.object({
 
 const bulkConvertSchema = z.object({
   resultIds: z.array(z.string()).min(1).max(50),
-  pipelineId: z.string(),
+  pipelineId: z.string().optional(),
 });
 
 @Injectable()
 export class ProspectingService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(forwardRef(() => DealsService))
-    private readonly dealsService: DealsService,
+    private readonly prospectLists: ProspectListsService,
   ) {}
 
   private async ensureResearchEnabled(tenantId: string) {
@@ -83,8 +72,8 @@ export class ProspectingService {
     }
   }
 
-  private serperKey(): string | null {
-    const k = process.env.SERPER_API_KEY?.trim();
+  private serpApiKey(): string | null {
+    const k = process.env.SERPAPI_API_KEY?.trim();
     return k || null;
   }
 
@@ -169,10 +158,10 @@ export class ProspectingService {
       throw e;
     }
 
-    const key = this.serperKey();
+    const key = this.serpApiKey();
     if (!key) {
       throw new BadRequestException(
-        "SERPER_API_KEY não configurada na API. Adicione a chave do Serper nas variáveis de ambiente do serviço da API (Railway).",
+        "SERPAPI_API_KEY não configurada na API. Adicione a chave do SerpApi nas variáveis de ambiente do serviço da API (Railway).",
       );
     }
 
@@ -180,7 +169,7 @@ export class ProspectingService {
     let segment: string | null = null;
     let state: string | null = null;
     let city: string | null = null;
-    let engines: string[] = ["maps", "search"];
+    const engines = ["maps"];
 
     if ("query" in parsed) {
       query = parsed.query;
@@ -189,12 +178,8 @@ export class ProspectingService {
       segment = parsed.segment.trim();
       state = parsed.state.trim().toUpperCase();
       city = parsed.city.trim();
-      engines = [...new Set(parsed.engines)];
       query = buildProspectQuery(segment, city, state);
     }
-
-    const useMaps = engines.includes("maps");
-    const useSearch = engines.includes("search");
 
     const searchRow = await this.prisma.prospectSearch.create({
       data: {
@@ -207,42 +192,29 @@ export class ProspectingService {
         engines,
         status: ProspectSearchStatus.RUNNING,
         lastWebPageFetched: 1,
-        webExhausted: !useSearch,
+        webExhausted: true,
       },
     });
 
     try {
-      const [webRaw, mapsRaw] = await Promise.all([
-        useSearch
-          ? searchWeb(query, key, {
-              page: 1,
-              num: SERPER_WEB_RESULTS_PER_REQUEST,
-            })
-          : Promise.resolve([]),
-        useMaps ? searchMaps(query, key) : Promise.resolve([]),
-      ]);
-      const web = filterBusinessWebResults(webRaw);
-      const maps = sanitizeMapsResults(mapsRaw);
-      const { prospects, webCount, mapsCount } = normalizeAndDeduplicate(
-        web,
-        maps,
+      const mapsRaw = await searchMapsAllPages(
+        query,
+        { city, state },
+        key,
       );
+      const maps = sanitizeMapsResults(mapsRaw);
+      const { prospects, mapsCount } = normalizeAndDeduplicate([], maps);
 
       const qualifiedCount = this.countQualified(prospects);
-      const needsEnrichment = prospects.some(
-        (p) => p.hasWebsite && p.website,
-      );
 
       await this.prisma.prospectSearch.update({
         where: { id: searchRow.id },
         data: {
-          webCount,
+          webCount: 0,
           mapsCount,
           totalCount: prospects.length,
           qualifiedCount,
-          status: needsEnrichment
-            ? ProspectSearchStatus.ENRICHING
-            : ProspectSearchStatus.DONE,
+          status: ProspectSearchStatus.DONE,
         },
       });
 
@@ -274,6 +246,14 @@ export class ProspectingService {
         orderBy: { createdAt: "asc" },
       });
 
+      if (results.length > 0) {
+        await this.prospectLists.addResultsToPrimaryList(
+          tenantId,
+          userId,
+          results.map((r) => r.id),
+        );
+      }
+
       const search = await this.prisma.prospectSearch.findUniqueOrThrow({
         where: { id: searchRow.id },
       });
@@ -285,7 +265,7 @@ export class ProspectingService {
           ? String(e.message)
           : e instanceof Error
             ? e.message
-            : "Falha na busca Serper";
+            : "Falha na busca SerpApi";
       await this.prisma.prospectSearch.update({
         where: { id: searchRow.id },
         data: {
@@ -294,133 +274,11 @@ export class ProspectingService {
         },
       });
       throw new BadRequestException(
-        message.startsWith("Serper")
-          ? `Falha ao consultar o Google (Serper): ${message}`
+        message.startsWith("SerpApi")
+          ? `Falha ao consultar o Google (SerpApi): ${message}`
           : message,
       );
     }
-  }
-
-  /**
-   * Próxima página da busca orgânica (Serper `page`), deduplicada contra resultados já salvos.
-   * Maps não é refeito (evita duplicar créditos e a 1ª leva já cobre a região).
-   */
-  async loadMoreWeb(
-    tenantId: string,
-    searchId: string,
-  ): Promise<{ added: number; exhausted: boolean; totalCount: number }> {
-    await this.ensureResearchEnabled(tenantId);
-    const search = await this.prisma.prospectSearch.findFirst({
-      where: { id: searchId, tenantId },
-    });
-    if (!search) throw new NotFoundException();
-    if (!search.engines.includes("search") && search.engines.length > 0) {
-      throw new BadRequestException(
-        "Esta busca não incluiu a rede de pesquisa.",
-      );
-    }
-    if (search.webExhausted) {
-      throw new BadRequestException(
-        "Não há mais páginas de resultado web para esta busca.",
-      );
-    }
-
-    const key = this.serperKey();
-    if (!key) {
-      throw new BadRequestException(
-        "SERPER_API_KEY não configurada na API",
-      );
-    }
-
-    const nextPage = search.lastWebPageFetched + 1;
-    const webRaw = await searchWeb(search.query, key, {
-      page: nextPage,
-      num: SERPER_WEB_RESULTS_PER_REQUEST,
-    });
-
-    await this.prisma.prospectSearch.update({
-      where: { id: searchId },
-      data: { lastWebPageFetched: nextPage },
-    });
-
-    if (webRaw.length === 0) {
-      await this.prisma.prospectSearch.update({
-        where: { id: searchId },
-        data: { webExhausted: true },
-      });
-      const totalCount = await this.prisma.prospectResult.count({
-        where: { searchId },
-      });
-      await this.syncSearchAggregates(searchId);
-      return { added: 0, exhausted: true, totalCount };
-    }
-
-    const web = filterBusinessWebResults(webRaw);
-    const { prospects } = normalizeAndDeduplicate(web, []);
-
-    const existing = await this.prisma.prospectResult.findMany({
-      where: { searchId, tenantId },
-      select: { website: true, googleMapsUrl: true, phone: true },
-    });
-
-    const seenDomains = new Set<string>();
-    const seenPhones = new Set<string>();
-    for (const r of existing) {
-      const d = baseDomain(r.website);
-      if (d) seenDomains.add(d);
-      if (r.phone) seenPhones.add(r.phone);
-    }
-
-    const fresh: (typeof prospects)[number][] = [];
-    for (const p of prospects) {
-      const d = baseDomain(p.website);
-      if (d && seenDomains.has(d)) continue;
-      if (d) seenDomains.add(d);
-      if (p.phone && seenPhones.has(p.phone)) continue;
-      if (p.phone) seenPhones.add(p.phone);
-      fresh.push(p);
-    }
-
-    if (fresh.length > 0) {
-      await this.prisma.prospectResult.createMany({
-        data: fresh.map((p) => ({
-          tenantId,
-          searchId,
-          source: p.source,
-          position: p.position,
-          name: p.name,
-          website: p.website,
-          hasWebsite: p.hasWebsite,
-          phone: p.phone,
-          address: p.address,
-          snippet: p.snippet,
-          rating: p.rating,
-          reviewCount: p.reviewCount,
-          googleMapsUrl: p.googleMapsUrl,
-          enrichmentData: p.foundInBothSources
-            ? ({ foundInBothSources: true } as Prisma.InputJsonValue)
-            : undefined,
-        })),
-      });
-      const hasNewSites = fresh.some((p) => p.hasWebsite && p.website);
-      if (hasNewSites) {
-        await this.prisma.prospectSearch.update({
-          where: { id: searchId },
-          data: { status: ProspectSearchStatus.ENRICHING },
-        });
-      }
-    }
-
-    const totalCount = await this.prisma.prospectResult.count({
-      where: { searchId },
-    });
-    await this.syncSearchAggregates(searchId);
-
-    return {
-      added: fresh.length,
-      exhausted: false,
-      totalCount,
-    };
   }
 
   async processEnrichmentChunk(
@@ -515,21 +373,40 @@ export class ProspectingService {
     });
     if (!search) throw new NotFoundException();
 
-    if (search.status === ProspectSearchStatus.ENRICHING) {
+    const mapsOnly = !search.engines.includes("search");
+
+    if (
+      search.status === ProspectSearchStatus.ENRICHING &&
+      !mapsOnly
+    ) {
       await this.processEnrichmentChunk(tenantId, searchId, 5);
     }
 
     const results = await this.prisma.prospectResult.findMany({
       where: { searchId },
-      orderBy: { createdAt: "asc" },
+      orderBy: [
+        { hasWebsite: "desc" },
+        { reviewCount: "desc" },
+        { createdAt: "asc" },
+      ],
     });
+
+    const outreachStatuses =
+      await this.prospectLists.resolveOutreachStatusForResults(
+        tenantId,
+        results,
+      );
+    const resultsWithOutreach = results.map((r, i) => ({
+      ...r,
+      outreachStatus: outreachStatuses[i] ?? null,
+    }));
 
     const totalWithSite = results.filter(
       (r) => r.hasWebsite && r.website,
     ).length;
     const enrichedCount = results.filter((r) => r.enrichedAt != null).length;
     const isComplete =
-      totalWithSite === 0 || enrichedCount >= totalWithSite;
+      mapsOnly || totalWithSite === 0 || enrichedCount >= totalWithSite;
 
     const updatedSearch = await this.syncSearchAggregates(
       searchId,
@@ -538,7 +415,7 @@ export class ProspectingService {
 
     return {
       search: updatedSearch,
-      results,
+      results: resultsWithOutreach,
       totalWithSite,
       enrichedCount,
       isComplete,
@@ -606,16 +483,6 @@ export class ProspectingService {
     if (result.status === ProspectStatus.CONVERTED) {
       throw new BadRequestException("Resultado já convertido");
     }
-
-    const pipeline = await this.prisma.pipeline.findFirst({
-      where: { id: data.pipelineId, tenantId },
-      include: { stages: { orderBy: { sortOrder: "asc" } } },
-    });
-    if (!pipeline?.stages.length) {
-      throw new BadRequestException("Pipeline inválido");
-    }
-
-    const stage0 = pipeline.stages[0]!;
 
     const enrichment =
       (result.enrichmentData as Record<string, unknown> | null) ?? null;
@@ -689,24 +556,7 @@ export class ProspectingService {
         ? data.title.trim()
         : `Prospecção: ${result.name}`;
 
-    const assignedToId = await this.assigneeUserIdForTenant(
-      tenantId,
-      actorUserId,
-    );
-
-    const created = await this.dealsService.create(tenantId, actorUserId, {
-      contactId: contact.id,
-      pipelineId: pipeline.id,
-      stageId: stage0.id,
-      title,
-      value: data.value,
-    });
-
-    if (assignedToId) {
-      await this.dealsService.patch(tenantId, actorUserId, created.id, {
-        assignedToId,
-      });
-    }
+    void title;
 
     await this.prisma.prospectResult.update({
       where: { id: resultId },

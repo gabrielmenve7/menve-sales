@@ -53,6 +53,7 @@ export class PipelinesService {
         where: {
           tenantId,
           pipelineId,
+          pipelineVisible: true,
           OR: [{ status: "OPEN" }, { status: "WON" }],
         },
         select: {
@@ -93,6 +94,18 @@ export class PipelinesService {
                   },
                 },
               },
+              customData: true,
+            },
+          },
+          activities: {
+            where: { type: "MEETING" },
+            orderBy: { dueAt: "desc" },
+            take: 1,
+            select: {
+              id: true,
+              dueAt: true,
+              meetLink: true,
+              googleEventId: true,
             },
           },
           stage: {
@@ -120,10 +133,10 @@ export class PipelinesService {
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       }),
       this.prisma.deal.count({
-        where: { tenantId, pipelineId, status: "WON" },
+        where: { tenantId, pipelineId, status: "WON", pipelineVisible: true },
       }),
       this.prisma.deal.count({
-        where: { tenantId, pipelineId, status: "LOST" },
+        where: { tenantId, pipelineId, status: "LOST", pipelineVisible: true },
       }),
     ]);
 
@@ -169,7 +182,7 @@ export class PipelinesService {
     await this.prisma.stage.create({
       data: {
         pipelineId: p.id,
-        name: "Qualificação",
+        name: "Reunião agendada",
         sortOrder: 0,
       },
     });

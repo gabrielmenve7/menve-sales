@@ -22,6 +22,8 @@ export function inboxOpenDealToDealRow(
     lostReason: null,
     assignedToId: null,
     customData: null,
+    pipelineVisible: true,
+    pipelineEnteredAt: epoch,
     createdAt: epoch,
     updatedAt: epoch,
     contact: {

@@ -67,6 +67,20 @@ export async function listOutreachCampaigns() {
   return apiServer<OutreachCampaignSummary[]>("/outreach/campaigns");
 }
 
+export async function getOutreachDefaultTemplate() {
+  return apiServer<{ templateBody: string }>("/outreach/default-template");
+}
+
+export async function saveOutreachDefaultTemplate(templateBody: string) {
+  const body = z.string().min(1).max(4000).parse(templateBody);
+  const res = await apiServer<{ templateBody: string }>(
+    "/outreach/default-template",
+    { method: "POST", json: { templateBody: body } },
+  );
+  revalidatePath("/disparo");
+  return res;
+}
+
 export async function getOutreachCampaign(id: string) {
   if (!id) throw new Error("ID da campanha obrigatório");
   return apiServer<OutreachCampaignDetail>(`/outreach/campaigns/${id}`);

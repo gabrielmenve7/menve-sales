@@ -8,21 +8,46 @@ export type ProspectListSummary = {
   id: string;
   name: string;
   description: string | null;
+  code: string | null;
+  isPrimary: boolean;
   itemCount: number;
   createdAt: string;
   createdBy: { name: string | null; email: string | null };
 };
 
+export type OutreachStatus =
+  | "PENDING"
+  | "SENT"
+  | "DELIVERED"
+  | "REPLIED"
+  | "FAILED"
+  | "OPT_OUT";
+
 export type ProspectListItemRow = {
   id: string;
   createdAt: string;
+  outreachStatus: OutreachStatus | null;
+  outreachCampaignName: string | null;
   prospectResult: {
     id: string;
     name: string;
     phone: string | null;
     whatsapp: string | null;
     website: string | null;
+    hasWebsite?: boolean;
+    address?: string | null;
+    snippet?: string | null;
+    rating?: number | null;
+    reviewCount?: number | null;
+    googleMapsUrl?: string | null;
     status: string;
+    capture?: {
+      segment: string | null;
+      city: string | null;
+      state: string | null;
+      query: string;
+      createdAt: string;
+    } | null;
   } | null;
   contact: { id: string; name: string; phone: string | null } | null;
 };
@@ -30,6 +55,8 @@ export type ProspectListItemRow = {
 export type ProspectListDetail = ProspectListSummary & {
   items: ProspectListItemRow[];
 };
+
+export type PrimaryProspectListDetail = ProspectListDetail;
 
 const createSchema = z.object({
   name: z.string().min(1).max(120),
@@ -43,6 +70,10 @@ const addItemsSchema = z.object({
 
 export async function listProspectLists() {
   return apiServer<ProspectListSummary[]>("/prospect-lists");
+}
+
+export async function getPrimaryProspectList() {
+  return apiServer<PrimaryProspectListDetail>("/prospect-lists/primary");
 }
 
 export async function getProspectList(id: string) {

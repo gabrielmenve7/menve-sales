@@ -3,12 +3,30 @@ import {
   listAgendaActivities,
   type AgendaActivity,
 } from "@/actions/agenda";
+import { apiServer } from "@/lib/api-server";
 import { AgendaClient } from "./agenda-client";
 import { addDays, startOfWeek } from "date-fns";
 
-export default async function AgendaPage() {
+type AgendaPageProps = {
+  searchParams: Promise<{ contact?: string }>;
+};
+
+export default async function AgendaPage({ searchParams }: AgendaPageProps) {
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const weekEnd = addDays(weekStart, 7);
+  const sp = await searchParams;
+
+  let initialContact: { id: string; name: string } | null = null;
+  if (sp.contact?.trim()) {
+    try {
+      const c = await apiServer<{ id: string; name: string }>(
+        `/contacts/${encodeURIComponent(sp.contact.trim())}`,
+      );
+      initialContact = { id: c.id, name: c.name };
+    } catch {
+      initialContact = null;
+    }
+  }
 
   const [activities, googleStatus] = await Promise.all([
     listAgendaActivities({
@@ -28,6 +46,7 @@ export default async function AgendaPage() {
         initialActivities={activities}
         initialWeekStart={weekStart.toISOString()}
         googleConnected={googleStatus.connected}
+        initialContact={initialContact}
       />
     </div>
   );

@@ -639,6 +639,7 @@ export class DealsService {
         title: data.title,
         value: effectiveValue,
         probability: data.probability ?? null,
+        pipelineVisible: false,
       },
     });
 
@@ -688,9 +689,9 @@ export class DealsService {
       });
     }
 
-    /** Não bloquear a resposta HTTP: automações podem levar vários segundos (regras em série). */
+    /** Automações DEAL_CREATED só para deals já visíveis na Gestão de leads. */
     const engine = this.pipelineAutomationEngine;
-    if (engine) {
+    if (engine && deal.pipelineVisible) {
       const dealIdHook = deal.id;
       const pipelineIdHook = deal.pipelineId;
       const contactIdHook = deal.contactId;
@@ -949,6 +950,7 @@ export class DealsService {
         tenantId,
         pipelineId: current.pipelineId,
         status: "OPEN",
+        pipelineVisible: true,
       },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       select: {

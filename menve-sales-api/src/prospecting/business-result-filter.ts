@@ -1,4 +1,4 @@
-import type { SerperMapsResult, SerperWebResult } from "./serper";
+import type { MapsPlaceResult, WebSearchResult } from "./prospect-normalize";
 
 /**
  * Domínios que raramente representam uma empresa-alvo de prospecção
@@ -131,20 +131,20 @@ export function isBusinessLikeUrl(rawUrl: string): boolean {
 }
 
 /** Resultado orgânico da busca web: manter só candidatos a empresa. */
-export function isBusinessLikeWebResult(r: SerperWebResult): boolean {
+export function isBusinessLikeWebResult(r: WebSearchResult): boolean {
   if (!isBusinessLikeUrl(r.link)) return false;
   if (textLooksLikeNewsOrMedia(r.title, r.snippet)) return false;
   return true;
 }
 
 export function filterBusinessWebResults(
-  results: SerperWebResult[],
-): SerperWebResult[] {
+  results: WebSearchResult[],
+): WebSearchResult[] {
   return results.filter(isBusinessLikeWebResult);
 }
 
 /** Remove site do Maps se for portal/redes — mantém o lugar (endereço/telefone). */
-export function sanitizeMapsResult(m: SerperMapsResult): SerperMapsResult {
+export function sanitizeMapsResult(m: MapsPlaceResult): MapsPlaceResult {
   const w = m.website?.trim();
   if (!w) return m;
   if (isBusinessLikeUrl(w)) return m;
@@ -152,7 +152,7 @@ export function sanitizeMapsResult(m: SerperMapsResult): SerperMapsResult {
 }
 
 export function sanitizeMapsResults(
-  places: SerperMapsResult[],
-): SerperMapsResult[] {
+  places: MapsPlaceResult[],
+): MapsPlaceResult[] {
   return places.map(sanitizeMapsResult);
 }

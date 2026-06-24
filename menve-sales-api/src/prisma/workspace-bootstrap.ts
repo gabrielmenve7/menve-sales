@@ -93,11 +93,10 @@ export async function ensureDefaultWorkspace(
         sortOrder: 0,
         stages: {
           create: [
-            { name: "Novo lead", sortOrder: 0, probability: 10 },
-            { name: "Qualificação", sortOrder: 1, probability: 25 },
-            { name: "Proposta", sortOrder: 2, probability: 50 },
-            { name: "Negociação", sortOrder: 3, probability: 75 },
-            { name: "Fechado ganho", sortOrder: 4, probability: 100 },
+            { name: "Reunião agendada", sortOrder: 0, probability: 40 },
+            { name: "Reagendamento", sortOrder: 1, probability: 50 },
+            { name: "Follow-up", sortOrder: 2, probability: 70 },
+            { name: "Venda", sortOrder: 3, probability: 90 },
           ],
         },
       },

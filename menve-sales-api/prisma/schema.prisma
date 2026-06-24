@@ -53,6 +53,7 @@ enum ActivityType {
 
 enum PipelineAutomationTriggerType {
   DEAL_CREATED
+  DEAL_ENTERED_PIPELINE
   DEAL_ENTERED_STAGE
   DEAL_LEFT_STAGE
   DEAL_STAGE_TRANSITION
@@ -116,6 +117,30 @@ enum MessageAckStatus {
   READ
 }
 
+enum MessageSenderType {
+  LEAD
+  HUMAN_AGENT
+  AI_AGENT
+  SYSTEM
+  CAMPAIGN
+}
+
+enum ConversationQualificationMode {
+  NONE
+  AI_ACTIVE
+  AI_PAUSED
+  HUMAN_HANDOFF
+  COMPLETED
+}
+
+enum AgentRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
 enum CustomFieldEntity {
   CONTACT
   DEAL
@@ -152,8 +177,14 @@ model Tenant {
   researchEnabled         Boolean  @default(true)
   /// Segundos entre envios de disparo (throttle por instância).
   outreachThrottleSeconds Int      @default(45)
+  /// Mensagem padrão para novas campanhas de disparo ({{nome}}, {{empresa}}, {{telefone}}).
+  outreachDefaultTemplate String?  @db.Text
   /// Regras de lead scoring (JSON).
   leadScoringRules        Json?
+  /// Agente Larissa (SDR IA) ativo para qualificação pós-disparo.
+  larissaEnabled          Boolean  @default(false)
+  larissaModel            String?
+  larissaReplyDelayMs     Int      @default(1500)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -181,6 +212,8 @@ model Tenant {
   dealItems               DealItem[]
   prospectLists           ProspectList[]
   outreachCampaigns       OutreachCampaign[]
+  aiAgentSkills           AiAgentSkill[]
+  agentRuns               AgentRun[]
 }
 
 /// Coleções do catálogo (agrupamento opcional de produtos por tenant).
@@ -449,6 +482,8 @@ model ProspectList {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String
   description String?
+  /// `primary` = lista principal do workspace (uma por tenant).
+  code        String?
   createdById String
   createdBy   User     @relation("ProspectListsCreated", fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
@@ -458,6 +493,7 @@ model ProspectList {
   campaigns OutreachCampaign[]
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, code])
 }
 
 model ProspectListItem {
@@ -495,6 +531,7 @@ model OutreachCampaign {
 
   recipients   OutreachCampaignRecipient[]
   sequenceSteps OutreachSequenceStep[]
+  messages     Message[]
 
   @@index([tenantId, status])
 }
@@ -517,6 +554,8 @@ model OutreachCampaignRecipient {
   nextSendAt     DateTime?
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
+
+  conversations Conversation[]
 
   @@unique([campaignId, phone])
   @@index([campaignId, status])
@@ -591,6 +630,9 @@ model Deal {
   assignedToId  String?
   assignedTo    User?      @relation("AssignedDeals", fields: [assignedToId], references: [id])
   customData    Json?
+  /// Visível em Gestão de leads (`/pipeline`) após agendar reunião com Google Meet.
+  pipelineVisible   Boolean   @default(false)
+  pipelineEnteredAt DateTime?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -602,6 +644,7 @@ model Deal {
 
   @@index([tenantId, stageId])
   @@index([tenantId, pipelineId, status])
+  @@index([tenantId, pipelineId, pipelineVisible])
 }
 
 model PipelineAutomationRule {
@@ -764,24 +807,34 @@ model WhatsAppConnection {
 }
 
 model Conversation {
-  id                   String             @id @default(cuid())
+  id                   String                        @id @default(cuid())
   tenantId             String
-  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant               Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contactId            String
-  contact              Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact              Contact                       @relation(fields: [contactId], references: [id], onDelete: Cascade)
   whatsappConnectionId String
-  whatsappConnection   WhatsAppConnection @relation(fields: [whatsappConnectionId], references: [id], onDelete: Cascade)
+  whatsappConnection   WhatsAppConnection            @relation(fields: [whatsappConnectionId], references: [id], onDelete: Cascade)
   assignedUserId       String?
-  assignedUser         User?              @relation("AssignedConversations", fields: [assignedUserId], references: [id])
-  status               ConversationStatus @default(WAITING)
+  assignedUser         User?                         @relation("AssignedConversations", fields: [assignedUserId], references: [id])
+  status               ConversationStatus            @default(WAITING)
+  qualificationMode    ConversationQualificationMode @default(NONE)
+  aiAgentId            String?
+  aiAgent              AiAgent?                      @relation(fields: [aiAgentId], references: [id], onDelete: SetNull)
+  aiPausedAt           DateTime?
+  handoffAt            DateTime?
+  handoffReason        String?
+  outreachRecipientId  String?
+  outreachRecipient    OutreachCampaignRecipient?    @relation(fields: [outreachRecipientId], references: [id], onDelete: SetNull)
   lastMessageAt        DateTime?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
 
   messages      Message[]
   internalNotes InternalNote[]
+  agentRuns     AgentRun[]
 
   @@index([tenantId, lastMessageAt])
+  @@index([tenantId, qualificationMode, lastMessageAt])
 }
 
 model InternalNote {
@@ -807,6 +860,13 @@ model Message {
   userId               String?
   user                 User?              @relation(fields: [userId], references: [id])
   direction            MessageDirection
+  senderType           MessageSenderType  @default(LEAD)
+  aiAgentId            String?
+  aiAgent              AiAgent?           @relation(fields: [aiAgentId], references: [id], onDelete: SetNull)
+  agentRunId           String?
+  agentRun             AgentRun?          @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  outreachCampaignId   String?
+  outreachCampaign     OutreachCampaign?  @relation(fields: [outreachCampaignId], references: [id], onDelete: SetNull)
   body                 String
   mediaUrl             String?
   mediaType            String?
@@ -817,4 +877,65 @@ model Message {
 
   @@index([tenantId, contactId, createdAt])
   @@index([conversationId, createdAt])
+}
+
+/// Catálogo de agentes IA (MVP: Larissa).
+model AiAgent {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  displayName String
+  description String?
+  avatarUrl   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  skills        AiAgentSkill[]
+  conversations Conversation[]
+  messages      Message[]
+  agentRuns     AgentRun[]
+}
+
+/// Skills do agente por tenant (espelho de `.cursor/rules/agent-{chave}.mdc`).
+model AiAgentSkill {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentId    String
+  agent      AiAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skillKey   String
+  content    String   @db.Text
+  sourcePath String?
+  version    Int      @default(1)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, agentId, skillKey])
+  @@index([tenantId, agentId])
+}
+
+/// Auditoria de cada turno do agente IA.
+model AgentRun {
+  id                   String         @id @default(cuid())
+  tenantId             String
+  tenant               Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversationId       String
+  conversation         Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agentId              String
+  agent                AiAgent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  triggerMessageId     String?
+  status               AgentRunStatus @default(PENDING)
+  promptTokens         Int?
+  completionTokens     Int?
+  error                String?        @db.Text
+  toolCalls            Json?
+  skillVersionSnapshot Json?
+  startedAt            DateTime       @default(now())
+  finishedAt           DateTime?
+
+  messages Message[]
+
+  @@index([conversationId, startedAt])
+  @@index([tenantId, status, startedAt])
 }

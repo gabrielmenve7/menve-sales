@@ -29,10 +29,12 @@ export function AgendaClient({
   initialActivities,
   initialWeekStart,
   googleConnected,
+  initialContact = null,
 }: {
   initialActivities: AgendaActivity[];
   initialWeekStart: string;
   googleConnected: boolean;
+  initialContact?: { id: string; name: string } | null;
 }) {
   const [weekStart, setWeekStart] = useState(() =>
     startOfWeek(parseISO(initialWeekStart), { weekStartsOn: 1 }),
@@ -49,6 +51,8 @@ export function AgendaClient({
   const [dueAt, setDueAt] = useState("");
   const [duration, setDuration] = useState(30);
   const [description, setDescription] = useState("");
+  const [contactId, setContactId] = useState(initialContact?.id ?? "");
+  const [contactName, setContactName] = useState(initialContact?.name ?? "");
 
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -105,6 +109,7 @@ export function AgendaClient({
         dueAt: new Date(dueAt).toISOString(),
         durationMinutes: duration,
         createGoogleMeet: googleOk,
+        contactId: contactId.trim() || undefined,
       });
       setModalOpen(false);
       setTitle("");
@@ -243,6 +248,21 @@ export function AgendaClient({
           </DialogHeader>
           <form className="space-y-3" onSubmit={(e) => void onCreateMeeting(e)}>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {contactId ? (
+              <p className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                Contato: <strong className="text-foreground">{contactName || contactId}</strong>
+                {googleOk ? (
+                  <span className="block text-xs">
+                    Ao salvar com Meet, o lead entra na Gestão de leads.
+                  </span>
+                ) : null}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Para levar o lead à Gestão de leads, abra a Agenda a partir do
+                Atendimento ou informe o ID do contato na URL (?contact=…).
+              </p>
+            )}
             <div className="grid gap-1.5">
               <Label htmlFor="meet-title">Título</Label>
               <Input

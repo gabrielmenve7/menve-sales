@@ -42,9 +42,18 @@ export function ConversationItem({
   const c = conversation;
   const photo = getContactPhotoUrl(c.contact);
   const lastMsg = c.messages.at(-1);
+  const lastSender = lastMsg?.senderType;
   const isOutbound = lastMsg?.direction === "OUTBOUND";
   const outboundAck: OutboundAckStatus | null =
     isOutbound && lastMsg ? (lastMsg.ackStatus ?? "DELIVERED") : null;
+  const previewPrefix =
+    isOutbound && lastSender === "AI_AGENT"
+      ? "Larissa: "
+      : isOutbound && lastSender === "CAMPAIGN"
+        ? "Abordagem: "
+        : isOutbound
+          ? "Você: "
+          : "";
   const preview = lastMsg?.body
     ? lastMsg.body.length > 40
       ? lastMsg.body.slice(0, 40) + "…"
@@ -52,6 +61,15 @@ export function ConversationItem({
     : null;
   const badge = PROVIDER_BADGE[c.whatsappConnection?.provider ?? ""];
   const campaignLabel = outreachCampaignLabel(c.contact);
+  const qualMode = c.qualificationMode ?? "NONE";
+  const qualBadge =
+    qualMode === "AI_ACTIVE"
+      ? "Larissa"
+      : qualMode === "HUMAN_HANDOFF"
+        ? "Humano"
+        : qualMode === "COMPLETED"
+          ? "Meet"
+          : null;
 
   return (
     <button
@@ -97,6 +115,18 @@ export function ConversationItem({
                   : campaignLabel}
               </Badge>
             ) : null}
+            {qualBadge ? (
+              <Badge
+                variant={qualMode === "AI_ACTIVE" ? "default" : "outline"}
+                className={cn(
+                  "h-4 shrink-0 px-1 text-[9px] font-normal",
+                  qualMode === "AI_ACTIVE" &&
+                    "bg-violet-600 text-white hover:bg-violet-600",
+                )}
+              >
+                {qualBadge}
+              </Badge>
+            ) : null}
           </div>
           <span className="shrink-0 text-[11px] text-muted-foreground">
             {c.lastMessageAt ? relativeTime(new Date(c.lastMessageAt)) : ""}
@@ -107,7 +137,7 @@ export function ConversationItem({
             {outboundAck ? (
               <>
                 <OutboundAckIcons status={outboundAck} variant="onList" />
-                <span className="shrink-0">Você: </span>
+                <span className="shrink-0">{previewPrefix}</span>
               </>
             ) : null}
             <span className="min-w-0 truncate">{preview}</span>

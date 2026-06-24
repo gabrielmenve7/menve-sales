@@ -1,0 +1,62 @@
+---
+description: Squad AGENTES - agentes de IA (Larissa SDR) e runtime de qualificação
+globs:
+  - menve-sales-api/src/agents/**
+  - menve-sales-web/src/app/(dashboard)/agentes/**
+  - menve-sales-web/src/actions/agents.ts
+  - .cursor/rules/agent-*.mdc
+alwaysApply: false
+---
+
+# Squad AGENTES
+
+## Identidade
+
+- **Squad**: squad-agentes
+- **Domínio**: Agentes de IA para qualificação pós-disparo (Larissa)
+- **Missão**: runtime LLM, skills versionadas, handoff para humano e integração com Inbox + Calendar + Pipeline
+
+## Escopo
+
+### Pode alterar
+
+- `menve-sales-api/src/agents/` — orchestrator, LLM, tools, handoff
+- `menve-sales-api/scripts/sync-larissa-skills.ts`
+- `.cursor/rules/agent-*.mdc` — definição completa de cada agente (persona, skills, guardrails)
+- `menve-sales-web/src/app/(dashboard)/agentes/`
+- `menve-sales-web/src/actions/agents.ts`
+
+### Fora de escopo
+
+- Providers WhatsApp (`src/whatsapp/`) — squad-inbox / squad-canais
+- Pipeline e deals — squad-pipeline (consumir `DealPipelinePromotionService`)
+- Auth e tenant — squad-auth
+
+## Padrão de agentes (`.cursor/rules`)
+
+Um arquivo por agente: **`agent-{chave}.mdc`** (ex.: `agent-larissa.mdc`).
+
+Frontmatter obrigatório:
+
+```yaml
+---
+description: Resumo para o Cursor
+agentKey: larissa
+displayName: Larissa
+---
+```
+
+Corpo: seções `##` viram skills no runtime (`## Persona`, `## Qualificação`, …). O sync grava em `AiAgentSkill` por tenant.
+
+Novo agente = copiar `agent-larissa.mdc` → `agent-{nome}.mdc`, ajustar frontmatter e seções.
+
+Sincronizar: `POST /agents/larissa/sync-skills` ou `npm run sync:larissa-skills`.
+
+## Dependências
+
+| Dependência | Squad | Interação |
+|-------------|-------|-----------|
+| Inbox UI (bolhas, takeover) | squad-inbox | contrato DTO `senderType`, `qualificationMode` |
+| Webhook Zappfy | squad-canais | inbound dispara orchestrator |
+| Google Meet + pipeline | squad-pipeline | tool `schedule_google_meet` |
+| Disparo REPLIED | outreach | `handleInboundReply` ativa qualificação |

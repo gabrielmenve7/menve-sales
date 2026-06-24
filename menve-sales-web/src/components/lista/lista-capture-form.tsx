@@ -14,13 +14,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export type CaptureEngines = ("maps" | "search")[];
-
 export type CaptureFormPayload = {
   segment: string;
   state: string;
   city: string;
-  engines: CaptureEngines;
 };
 
 export function ListaCaptureForm({
@@ -35,20 +32,13 @@ export function ListaCaptureForm({
   const [segment, setSegment] = useState("");
   const [state, setState] = useState("");
   const [city, setCity] = useState("");
-  const [useMaps, setUseMaps] = useState(true);
-  const [useSearch, setUseSearch] = useState(true);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const engines: CaptureEngines = [];
-    if (useMaps) engines.push("maps");
-    if (useSearch) engines.push("search");
-    if (engines.length === 0) return;
     onSubmit({
       segment: segment.trim(),
       state: state.trim(),
       city: city.trim(),
-      engines,
     });
   }
 
@@ -57,9 +47,8 @@ export function ListaCaptureForm({
       <CardHeader>
         <CardTitle>Nova captura</CardTitle>
         <CardDescription>
-          Quanto mais específico o segmento, melhor a qualidade da lista. O
-          Menve busca no Google Maps e na rede de pesquisa; sites da rede são
-          enriquecidos com WhatsApp e telefone quando disponíveis.
+          Quanto mais específico o segmento, melhor a qualidade da lista. A busca
+          é feita no Google Maps (telefone, endereço e site quando disponível).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -68,7 +57,7 @@ export function ListaCaptureForm({
             <Label htmlFor="segment">Segmento</Label>
             <Input
               id="segment"
-              placeholder="Ex: clínicas odontológicas, escritórios de advocacia..."
+              placeholder="Ex: alfaiataria, clínicas odontológicas..."
               value={segment}
               onChange={(e) => setSegment(e.target.value)}
               minLength={3}
@@ -112,41 +101,11 @@ export function ListaCaptureForm({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Fontes de busca</Label>
-            <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:gap-6">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={useMaps}
-                  onChange={(e) => setUseMaps(e.target.checked)}
-                  className="size-4"
-                  disabled={pending}
-                />
-                Google Maps (dados ricos: telefone, endereço)
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={useSearch}
-                  onChange={(e) => setUseSearch(e.target.checked)}
-                  className="size-4"
-                  disabled={pending}
-                />
-                Rede de pesquisa (sites de empresas)
-              </label>
-            </div>
-          </div>
-
           {error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : null}
 
-          <Button
-            type="submit"
-            disabled={pending || (!useMaps && !useSearch)}
-            className="w-full sm:w-auto"
-          >
+          <Button type="submit" disabled={pending} className="w-full sm:w-auto">
             {pending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
