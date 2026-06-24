@@ -16,7 +16,7 @@
 - `Tenant` = empresa no CRM (multi-tenant); sessão/header `x-tenant-id` definem o contexto ativo
 - `Workspace` / `WorkspaceMembership` = acesso do usuário ao tenant com papel (`OWNER`, `ADMIN`, `MANAGER`, `SELLER`, …)
 - `Pipeline` + `Stage` = funil; `Deal` = oportunidade na etapa; `Contact` = contato vinculado ao deal
-- WhatsApp: providers via `IWhatsAppProvider` (`whatsapp/provider.interface.ts` + `factory.ts`)
+- WhatsApp: providers via `IWhatsAppProvider` (`whatsapp/provider.interface.ts` + `factory.ts`); Zappfy — docs em https://docs.zappfy.io/ e `menve-sales-api/docs/ZAPPFY-MIGRATION.md`
 - Lista / prospecção: captura Google Maps via **SerpApi** (`menve-sales-api/src/prospecting/serpapi-maps.ts`); env `SERPAPI_API_KEY` na API (Railway)
 
 ## Proibido

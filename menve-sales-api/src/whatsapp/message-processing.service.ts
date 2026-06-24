@@ -90,6 +90,39 @@ function resolveOutboundWhatsAppTarget(
   );
 }
 
+function isInboundMediaPlaceholder(body: string): boolean {
+  return (
+    body === "[Áudio]" ||
+    body === "[Imagem]" ||
+    body === "[Mídia]" ||
+    body === "[Documento]"
+  );
+}
+
+function applyFetchedInboundMedia(
+  fetched: { base64?: string; url?: string; mimetype?: string } | null,
+  fallbackType: string | null,
+): { mediaUrl: string | null; mediaType: string | null } {
+  if (!fetched) return { mediaUrl: null, mediaType: fallbackType };
+  if (fetched.url) {
+    return {
+      mediaUrl: fetched.url,
+      mediaType:
+        fetched.mimetype?.split(";")[0]?.trim() ?? fallbackType ?? "audio/mpeg",
+    };
+  }
+  if (fetched.base64) {
+    const mime =
+      fetched.mimetype?.split(";")[0]?.trim() ?? fallbackType ?? "audio/ogg";
+    const raw = fetched.base64.trim();
+    return {
+      mediaUrl: raw.startsWith("data:") ? raw : `data:${mime};base64,${raw}`,
+      mediaType: mime,
+    };
+  }
+  return { mediaUrl: null, mediaType: fallbackType };
+}
+
 @Injectable()
 export class MessageProcessingService {
   constructor(
@@ -261,18 +294,12 @@ export class MessageProcessingService {
     let mediaUrl: string | null = args.inbound.mediaUrl ?? null;
     let mediaType: string | null = args.inbound.mediaType ?? null;
 
-    const fetchFn = provider.fetchInboundMediaBase64;
-    const needsMediaFetch =
-      !mediaUrl &&
-      (args.inbound.body === "[Áudio]" ||
-        args.inbound.body === "[Imagem]" ||
-        args.inbound.body === "[Mídia]" ||
-        args.inbound.body === "[Documento]");
+    const needsMediaFetch = !mediaUrl && isInboundMediaPlaceholder(args.inbound.body);
     if (
       needsMediaFetch &&
       (conn.provider === WhatsAppProvider.EVOLUTION ||
         conn.provider === WhatsAppProvider.ZAPPFY) &&
-      typeof fetchFn === "function"
+      typeof provider.fetchInboundMediaBase64 === "function"
     ) {
       const keyId =
         args.inbound.whatsappKeyId?.trim() ||
@@ -281,26 +308,19 @@ export class MessageProcessingService {
       const remoteJid = args.inbound.debug?.remoteJid?.trim();
       const remoteJidAlt = args.inbound.debug?.remoteJidAlt?.trim();
       if (keyId && (remoteJid || remoteJidAlt || conn.provider === WhatsAppProvider.ZAPPFY)) {
-        const fetched = await fetchFn({
+        const fetched = await provider.fetchInboundMediaBase64({
           keyId,
           keyIdAlt: args.inbound.debug?.keyIdAlt,
           downloadIds: args.inbound.debug?.downloadIds,
           remoteJid: remoteJid ?? remoteJidAlt ?? "",
           remoteJidAlt,
+          retryDelaysMs:
+            conn.provider === WhatsAppProvider.ZAPPFY ? [500, 2_000] : undefined,
         }).catch(() => null);
-        if (fetched?.url) {
-          mediaUrl = fetched.url;
-          mediaType =
-            fetched.mimetype?.split(";")[0]?.trim() ?? mediaType ?? "audio/mpeg";
-        } else if (fetched?.base64) {
-          const mime =
-            fetched.mimetype?.split(";")[0]?.trim() ?? mediaType ?? "audio/ogg";
-          const raw = fetched.base64.trim();
-          mediaUrl = raw.startsWith("data:")
-            ? raw
-            : `data:${mime};base64,${raw}`;
-          mediaType = mime;
-        } else if (needsMediaFetch) {
+        const resolved = applyFetchedInboundMedia(fetched, mediaType);
+        mediaUrl = resolved.mediaUrl;
+        mediaType = resolved.mediaType;
+        if (!mediaUrl) {
           console.warn("[whatsapp:inbound-media]", {
             tenantId: args.tenantId,
             connectionId: conn.id,
@@ -329,7 +349,7 @@ export class MessageProcessingService {
       ? MessageSenderType.HUMAN_AGENT
       : MessageSenderType.LEAD;
 
-    await this.prisma.message.create({
+    const created = await this.prisma.message.create({
       data: {
         tenantId: args.tenantId,
         whatsappConnectionId: conn.id,
@@ -346,6 +366,15 @@ export class MessageProcessingService {
         createdAt: args.inbound.timestamp,
       },
     });
+
+    if (!mediaUrl && needsMediaFetch) {
+      void this.scheduleInboundMediaHydration({
+        messageId: created.id,
+        tenantId: args.tenantId,
+        connectionId: conn.id,
+        inbound: args.inbound,
+      });
+    }
 
     if (!outboundFromDevice && this.outreach) {
       const reply = await this.outreach
@@ -394,6 +423,127 @@ export class MessageProcessingService {
     }
 
     return { ok: true as const };
+  }
+
+  /** Tenta baixar mídia faltante ao abrir conversa no Inbox. */
+  async hydrateMessagesForConversation(tenantId: string, conversationId: string) {
+    const pending = await this.prisma.message.findMany({
+      where: {
+        tenantId,
+        conversationId,
+        mediaUrl: null,
+        body: { in: ["[Áudio]", "[Imagem]", "[Mídia]", "[Documento]"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        tenantId: true,
+        body: true,
+        externalId: true,
+        mediaType: true,
+        whatsappConnectionId: true,
+      },
+    });
+    for (const msg of pending) {
+      await this.hydrateStoredMessage(msg).catch(() => undefined);
+    }
+  }
+
+  private scheduleInboundMediaHydration(args: {
+    messageId: string;
+    tenantId: string;
+    connectionId: string;
+    inbound: NormalizedInbound;
+  }) {
+    void (async () => {
+      for (const delayMs of [4_000, 10_000, 20_000]) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        const row = await this.prisma.message.findFirst({
+          where: { id: args.messageId, tenantId: args.tenantId },
+          select: { mediaUrl: true },
+        });
+        if (row?.mediaUrl) return;
+
+        const hydrated = await this.hydrateStoredMessage({
+          id: args.messageId,
+          tenantId: args.tenantId,
+          body: args.inbound.body,
+          externalId: args.inbound.externalId,
+          mediaType: args.inbound.mediaType ?? null,
+          whatsappConnectionId: args.connectionId,
+          downloadIds: args.inbound.debug?.downloadIds,
+          remoteJid: args.inbound.debug?.remoteJid,
+          remoteJidAlt: args.inbound.debug?.remoteJidAlt,
+          whatsappKeyId: args.inbound.whatsappKeyId,
+        }).catch(() => false);
+        if (hydrated) return;
+      }
+    })();
+  }
+
+  private async hydrateStoredMessage(msg: {
+    id: string;
+    tenantId: string;
+    body: string;
+    externalId: string | null;
+    mediaType: string | null;
+    whatsappConnectionId: string | null;
+    downloadIds?: string[];
+    remoteJid?: string;
+    remoteJidAlt?: string;
+    whatsappKeyId?: string;
+  }): Promise<boolean> {
+    if (!isInboundMediaPlaceholder(msg.body)) return false;
+
+    const existing = await this.prisma.message.findFirst({
+      where: { id: msg.id, tenantId: msg.tenantId },
+      select: { mediaUrl: true },
+    });
+    if (existing?.mediaUrl) return true;
+
+    const connectionId = msg.whatsappConnectionId;
+    if (!connectionId) return false;
+
+    const conn = await this.prisma.whatsAppConnection.findFirst({
+      where: { id: connectionId, tenantId: msg.tenantId },
+    });
+    if (
+      !conn ||
+      (conn.provider !== WhatsAppProvider.EVOLUTION &&
+        conn.provider !== WhatsAppProvider.ZAPPFY)
+    ) {
+      return false;
+    }
+
+    const provider = createWhatsAppProvider(conn);
+    if (typeof provider.fetchInboundMediaBase64 !== "function") return false;
+
+    const keyId =
+      msg.whatsappKeyId?.trim() || msg.externalId?.trim() || undefined;
+    if (!keyId) return false;
+
+    const fetched = await provider.fetchInboundMediaBase64({
+      keyId,
+      downloadIds:
+        msg.downloadIds ??
+        (msg.externalId?.includes(":") ? [msg.externalId] : undefined),
+      remoteJid: msg.remoteJid ?? "",
+      remoteJidAlt: msg.remoteJidAlt,
+      retryDelaysMs: [0, 1_500, 4_000],
+    }).catch(() => null);
+
+    const resolved = applyFetchedInboundMedia(fetched, msg.mediaType);
+    if (!resolved.mediaUrl) return false;
+
+    await this.prisma.message.update({
+      where: { id: msg.id },
+      data: {
+        mediaUrl: resolved.mediaUrl,
+        mediaType: resolved.mediaType,
+      },
+    });
+    return true;
   }
 
   /** Webhook Evolution `messages.update`: avança ACK só para cima (SENT→DELIVERED→READ). */

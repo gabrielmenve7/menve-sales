@@ -118,6 +118,8 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
     downloadIds?: string[];
     remoteJid: string;
     remoteJidAlt?: string;
+    /** Delays entre tentativas (ms). Padrão cobre mídia ainda não indexada na Zappfy. */
+    retryDelaysMs?: number[];
   }) {
     const ids = orderZappfyDownloadIds(
       args.downloadIds?.length
@@ -127,60 +129,37 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
           ),
     );
 
-    const jids = [args.remoteJid, args.remoteJidAlt].filter(
-      (j, i, arr) => typeof j === "string" && j.trim() && arr.indexOf(j) === i,
-    ) as string[];
+    const delaysMs = args.retryDelaysMs ?? [0, 2_000, 5_000, 12_000];
 
-    const delaysMs = [0, 600, 1500];
     for (const delayMs of delaysMs) {
       if (delayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
       for (const id of ids) {
-        const zappfyDownloadBodies: Record<string, unknown>[] = [
+        for (const body of [
           { id },
           { id, generate_mp3: true },
-          { id, return_link: true, generate_mp3: true },
-          {
-            id,
-            return_base64: true,
-            return_link: true,
-            generate_mp3: true,
-          },
-          { id, return_base64: true, return_link: false, generate_mp3: true },
-          { id, return_base64: true, generate_mp3: false },
-          { id, return_base64: true },
-        ];
-
-        for (const body of zappfyDownloadBodies) {
+          { id, return_base64: true, return_link: true, generate_mp3: true },
+        ]) {
           const parsed = await this.postZappfyMediaDownload("/message/download", body, id);
           if (parsed) return parsed;
         }
+      }
+    }
 
-        for (const jid of jids) {
-          for (const path of [
-            "/chat/getBase64FromMediaMessage",
-            "/message/getBase64FromMediaMessage",
-          ]) {
-            const parsed = await this.postZappfyMediaDownload(
-              path,
-              {
-                message: { key: { id, remoteJid: jid } },
-                convertToMp4: false,
-              },
-              id,
-            );
-            if (parsed) return parsed;
-          }
-        }
+    const jids = [args.remoteJid, args.remoteJidAlt].filter(
+      (j, i, arr) => typeof j === "string" && j.trim() && arr.indexOf(j) === i,
+    ) as string[];
 
+    for (const id of ids) {
+      for (const jid of jids) {
         for (const path of [
           "/chat/getBase64FromMediaMessage",
           "/message/getBase64FromMediaMessage",
         ]) {
           const parsed = await this.postZappfyMediaDownload(
             path,
-            { message: { key: { id } }, convertToMp4: false },
+            { message: { key: { id, remoteJid: jid } }, convertToMp4: false },
             id,
           );
           if (parsed) return parsed;
@@ -827,7 +806,9 @@ function buildZappfyDownloadIds(
   if (messageIdRaw && idRaw?.includes(":")) {
     push(`${idRaw.split(":")[0]}:${messageIdRaw}`);
   }
-  if (messageIdRaw && chatDigits) push(`${chatDigits}:${messageIdRaw}`);
+  if (messageIdRaw && chatDigits && !idRaw?.includes(":")) {
+    push(`${chatDigits}:${messageIdRaw}`);
+  }
   if (hexFromId && messageIdRaw && hexFromId !== messageIdRaw) {
     push(messageIdRaw);
   }
@@ -1153,7 +1134,9 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
   const keyId = downloadIds[0] ?? messageIdRaw ?? idRaw ?? undefined;
   const keyIdAlt = downloadIds.find((id) => id !== keyId);
   const externalId = String(
-    messageIdRaw ?? idRaw ?? keyId ?? `${from}-${Date.now()}`,
+    idRaw?.includes(":")
+      ? idRaw
+      : messageIdRaw ?? idRaw ?? keyId ?? `${from}-${Date.now()}`,
   );
   const fromMe = blob.fromMe === true || key?.fromMe === true;
   const media = extractZappfyMedia(blob, message);

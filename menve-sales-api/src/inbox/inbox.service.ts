@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { ConversationStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { MessageProcessingService } from "../whatsapp/message-processing.service";
 
 /** Contato + deals abertos (lista e detalhe do inbox). */
 const inboxContactInclude = {
@@ -30,7 +31,10 @@ const inboxConversationIncludeBase = {
 
 @Injectable()
 export class InboxService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly messages: MessageProcessingService,
+  ) {}
 
   /**
    * Garante uma linha de `Conversation` para o contato no canal WhatsApp ativo,
@@ -166,11 +170,39 @@ export class InboxService {
     if (!raw) {
       throw new NotFoundException("Conversa não encontrada");
     }
-    const messagesAsc = [...raw.messages].reverse();
+    await this.messages.hydrateMessagesForConversation(tenantId, conversationId);
+    const refreshed = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: {
+        id: true,
+        tenantId: true,
+        contactId: true,
+        whatsappConnectionId: true,
+        assignedUserId: true,
+        status: true,
+        qualificationMode: true,
+        aiAgentId: true,
+        handoffAt: true,
+        handoffReason: true,
+        aiPausedAt: true,
+        lastMessageAt: true,
+        createdAt: true,
+        updatedAt: true,
+        whatsappConnection: true,
+        messages: { orderBy: { createdAt: "desc" }, take: 20 },
+        internalNotes: {
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          include: { user: { select: { name: true, email: true } } },
+        },
+      },
+    });
+    const payload = refreshed ?? raw;
+    const messagesAsc = [...payload.messages].reverse();
     return {
-      ...raw,
+      ...payload,
       messages: messagesAsc,
-      hasOlderMessages: raw.messages.length >= 20,
+      hasOlderMessages: payload.messages.length >= 20,
     };
   }
 

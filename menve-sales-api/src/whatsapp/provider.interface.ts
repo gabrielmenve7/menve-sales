@@ -78,5 +78,6 @@ export interface IWhatsAppProvider {
     downloadIds?: string[];
     remoteJid: string;
     remoteJidAlt?: string;
+    retryDelaysMs?: number[];
   }): Promise<{ base64?: string; url?: string; mimetype?: string } | null>;
 }
