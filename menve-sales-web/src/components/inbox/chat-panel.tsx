@@ -9,17 +9,18 @@ import {
   Mic,
   Paperclip,
   Send,
+  Trash2,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { fetchOlderInboxMessages } from "@/actions/inbox-fetch";
 import { addConversationNote } from "@/actions/conversation-notes";
-import {
-  sendWhatsAppMediaMessage,
-  sendWhatsAppMessage,
-  sendWhatsAppTemplateMessage,
-} from "@/actions/messages";
 import { listMetaTemplates } from "@/actions/whatsapp-meta";
+import {
+  formatInboxSendError,
+  inboxApiDelete,
+  inboxApiPost,
+} from "@/lib/inbox-api-client";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -101,10 +102,12 @@ export function ChatPanel({
   conversation,
   quickReplyCategories,
   onRefetch,
+  onDeleted,
 }: {
   conversation: InboxConversation;
   quickReplyCategories: QuickReplyCategoryDTO[];
   onRefetch: () => void;
+  onDeleted?: () => void;
 }) {
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
@@ -133,6 +136,7 @@ export function ChatPanel({
     null,
   );
   const [templateSendBusy, setTemplateSendBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
 
@@ -232,6 +236,7 @@ export function ChatPanel({
   const phone = conversation.contact.phone;
 
   const showQuickReplies = quickRepliesHaveScripts(quickReplyCategories);
+  const messagesApi = `/api/inbox/conversations/${encodeURIComponent(conversation.id)}/messages`;
 
   const sendMedia = useCallback(
     async (args: {
@@ -244,22 +249,19 @@ export function ChatPanel({
       setMediaError(null);
       setMediaBusy(true);
       try {
-        await sendWhatsAppMediaMessage({
-          conversationId: conversation.id,
+        await inboxApiPost(messagesApi, {
           connectionId: conn.id,
           toPhone: phone,
           ...args,
         });
         onRefetch();
       } catch (e) {
-        setMediaError(
-          e instanceof Error ? e.message : "Falha ao enviar mídia",
-        );
+        setMediaError(formatInboxSendError(e));
       } finally {
         setMediaBusy(false);
       }
     },
-    [conn, phone, conversation.id, onRefetch],
+    [conn, phone, messagesApi, onRefetch],
   );
 
   useEffect(() => {
@@ -383,8 +385,7 @@ export function ChatPanel({
     );
 
     try {
-      await sendWhatsAppMessage({
-        conversationId: conversation.id,
+      await inboxApiPost(messagesApi, {
         connectionId: conn.id,
         toPhone: phone,
         text: trimmed,
@@ -416,9 +417,30 @@ export function ChatPanel({
         },
       );
       setText(trimmed);
-      setSendError(
-        err instanceof Error ? err.message : "Não foi possível enviar a mensagem.",
+      setSendError(formatInboxSendError(err));
+    }
+  }
+
+  async function onDeleteConversation() {
+    if (deleteBusy) return;
+    const label = conversation.contact.name || conversation.contact.phone || "esta conversa";
+    if (
+      !confirm(
+        `Apagar a conversa com ${label}? As mensagens serão removidas do Atendimento (o contato no CRM permanece).`,
+      )
+    ) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      await inboxApiDelete(
+        `/api/inbox/conversations/${encodeURIComponent(conversation.id)}`,
       );
+      onDeleted?.();
+    } catch (e) {
+      alert(formatInboxSendError(e));
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -428,8 +450,7 @@ export function ChatPanel({
     setTemplateSendBusy(true);
     setSendError(null);
     try {
-      await sendWhatsAppTemplateMessage({
-        conversationId: conversation.id,
+      await inboxApiPost(messagesApi, {
         connectionId: conn.id,
         toPhone: phone,
         templateName: t.name,
@@ -438,9 +459,7 @@ export function ChatPanel({
       setTemplateDialogOpen(false);
       onRefetch();
     } catch (e) {
-      setSendError(
-        e instanceof Error ? e.message : "Falha ao enviar template",
-      );
+      setSendError(formatInboxSendError(e));
     } finally {
       setTemplateSendBusy(false);
     }
@@ -479,6 +498,21 @@ export function ChatPanel({
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 text-muted-foreground hover:text-destructive"
+          title="Apagar conversa"
+          disabled={deleteBusy}
+          onClick={() => void onDeleteConversation()}
+        >
+          {deleteBusy ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Trash2 className="size-4" />
+          )}
+        </Button>
         <Button
           variant={showNotes ? "secondary" : "ghost"}
           size="icon"
@@ -488,6 +522,7 @@ export function ChatPanel({
         >
           <FileText className="size-4" />
         </Button>
+        </div>
       </div>
 
       {/* Main area: messages or notes */}

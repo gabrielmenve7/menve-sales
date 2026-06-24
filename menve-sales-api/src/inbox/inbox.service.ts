@@ -218,4 +218,18 @@ export class InboxService {
       hasOlderMessages: rows.length >= 20,
     };
   }
+
+  async deleteConversation(tenantId: string, conversationId: string) {
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { id: true },
+    });
+    if (!conv) {
+      throw new NotFoundException("Conversa não encontrada");
+    }
+    await this.prisma.conversation.delete({
+      where: { id: conversationId },
+    });
+    return { ok: true as const };
+  }
 }

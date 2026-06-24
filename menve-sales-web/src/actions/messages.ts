@@ -1,16 +1,11 @@
 "use server";
 
 import { apiServer } from "@/lib/api-server";
-import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 
-function scheduleInboxRevalidation() {
-  after(() => {
-    revalidatePath("/inbox");
-    revalidatePath("/contacts", "layout");
-  });
-}
-
+/**
+ * Envio pelo Inbox usa POST /api/inbox/conversations/:id/messages (evita digest RSC).
+ * Estas actions permanecem para compatibilidade com outros fluxos.
+ */
 export async function sendWhatsAppMessage(input: {
   conversationId: string;
   connectionId: string;
@@ -25,7 +20,6 @@ export async function sendWhatsAppMessage(input: {
       text: input.text,
     },
   });
-  scheduleInboxRevalidation();
 }
 
 export async function sendWhatsAppMediaMessage(input: {
@@ -48,7 +42,6 @@ export async function sendWhatsAppMediaMessage(input: {
       caption: input.caption,
     },
   });
-  scheduleInboxRevalidation();
 }
 
 export async function sendWhatsAppTemplateMessage(input: {
@@ -69,5 +62,4 @@ export async function sendWhatsAppTemplateMessage(input: {
       components: input.components,
     },
   });
-  scheduleInboxRevalidation();
 }

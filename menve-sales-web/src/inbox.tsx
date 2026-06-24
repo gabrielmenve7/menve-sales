@@ -97,12 +97,14 @@ function InboxConversationThreadColumn({
   initialConversationDetail,
   quickReplyCategories,
   onRefetchInbox,
+  onConversationDeleted,
 }: {
   listRow: InboxConversation;
   conversationId: string;
   initialConversationDetail: InboxConversation | null | undefined;
   quickReplyCategories: QuickReplyCategoryDTO[];
   onRefetchInbox: () => void;
+  onConversationDeleted: () => void;
 }) {
   const threadQuery = useQuery({
     queryKey: inboxQueryKeys.conversation(conversationId),
@@ -154,6 +156,7 @@ function InboxConversationThreadColumn({
         conversation={merged}
         quickReplyCategories={quickReplyCategories}
         onRefetch={onRefetchInbox}
+        onDeleted={onConversationDeleted}
       />
     </div>
   );
@@ -330,6 +333,27 @@ export function InboxClient({
     [conversations, queryClient, refetchList, router],
   );
 
+  const handleConversationDeleted = useCallback(() => {
+    const deletedId = selectedId;
+    queryClient.setQueryData<{ conversations: InboxConversation[] }>(
+      inboxQueryKeys.list,
+      (old) => {
+        if (!old?.conversations) return old;
+        return {
+          conversations: old.conversations.filter((c) => c.id !== deletedId),
+        };
+      },
+    );
+    if (deletedId) {
+      queryClient.removeQueries({
+        queryKey: inboxQueryKeys.conversation(deletedId),
+      });
+    }
+    const remaining = conversations.filter((c) => c.id !== deletedId);
+    setSelectedId(remaining[0]?.id ?? null);
+    void refetchList();
+  }, [conversations, queryClient, refetchList, selectedId]);
+
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Conversation list */}
@@ -351,6 +375,7 @@ export function InboxClient({
             initialConversationDetail={initialConversationDetail}
             quickReplyCategories={quickReplyCategories}
             onRefetchInbox={() => void refetchInbox()}
+            onConversationDeleted={handleConversationDeleted}
           />
         ) : (
           <ChatEmptyState />

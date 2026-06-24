@@ -1,4 +1,4 @@
-import { Injectable, Optional, Inject, forwardRef } from "@nestjs/common";
+import { BadRequestException, Injectable, Optional, Inject, forwardRef } from "@nestjs/common";
 import {
   ConversationStatus,
   MessageAckStatus,
@@ -45,6 +45,48 @@ function normalizePhone(raw: string) {
   const digits = trimmed.replace(/\D/g, "");
   if (digits.length >= 10 && digits.length <= 13) return `+${digits}`;
   return trimmed;
+}
+
+function plausiblePhoneDigits(digits: string): boolean {
+  return digits.length >= 10 && digits.length <= 13;
+}
+
+function digitsFromJidOrPhone(raw: string): string {
+  const s = raw.trim();
+  if (!s) return "";
+  let local = s.includes("@") ? (s.split("@")[0] ?? "") : s;
+  if (local.includes(":")) local = local.split(":")[0] ?? local;
+  return local.replace(/\D/g, "");
+}
+
+/** Quando o contato tem LID ou número errado, usa JID alternativo salvo no inbound. */
+function resolveOutboundWhatsAppTarget(
+  contactPhone: string,
+  customData: unknown,
+  toPhoneHint: string,
+): string {
+  const cd = (customData as Record<string, unknown> | null) ?? {};
+  const normalized = normalizePhone(contactPhone);
+  const digits = normalized.replace(/\D/g, "");
+  const isLid = normalized.startsWith("lid:");
+
+  if (!isLid && plausiblePhoneDigits(digits)) {
+    return digits;
+  }
+
+  for (const key of ["whatsappRemoteJidAlt", "whatsappRemoteJid"] as const) {
+    const jid = cd[key];
+    if (typeof jid !== "string" || !jid.trim()) continue;
+    const d = digitsFromJidOrPhone(jid);
+    if (plausiblePhoneDigits(d)) return d;
+  }
+
+  const hintDigits = toPhoneHint.replace(/\D/g, "");
+  if (plausiblePhoneDigits(hintDigits)) return hintDigits;
+
+  throw new BadRequestException(
+    "Telefone do contato inválido para envio. Apague esta conversa e peça ao cliente para enviar uma nova mensagem.",
+  );
 }
 
 @Injectable()
@@ -148,6 +190,25 @@ export class MessageProcessingService {
               whatsappProfilePhotoUpdatedAt: new Date().toISOString(),
             },
           },
+        });
+      }
+    }
+
+    const remoteJidInbound = args.inbound.debug?.remoteJid?.trim();
+    const remoteJidAltInbound = args.inbound.debug?.remoteJidAlt?.trim();
+    if (remoteJidInbound || remoteJidAltInbound) {
+      const prev =
+        (contact.customData as Record<string, unknown> | null) ?? {};
+      const patch: Record<string, unknown> = { ...prev };
+      if (remoteJidInbound) patch.whatsappRemoteJid = remoteJidInbound;
+      if (remoteJidAltInbound) patch.whatsappRemoteJidAlt = remoteJidAltInbound;
+      if (
+        patch.whatsappRemoteJid !== prev.whatsappRemoteJid ||
+        patch.whatsappRemoteJidAlt !== prev.whatsappRemoteJidAlt
+      ) {
+        contact = await this.prisma.contact.update({
+          where: { id: contact.id },
+          data: { customData: patch },
         });
       }
     }
@@ -368,18 +429,21 @@ export class MessageProcessingService {
           whatsappConnectionId: args.conn.id,
         },
         include: {
-          contact: { select: { id: true, phone: true } },
+          contact: { select: { id: true, phone: true, customData: true } },
         },
       });
       if (!row) {
-        throw new Error("Conversa não encontrada");
+        throw new BadRequestException("Conversa não encontrada");
       }
       if (!row.contact.phone?.trim()) {
-        throw new Error("Contato sem telefone");
+        throw new BadRequestException("Contato sem telefone");
       }
       const rowPhone = normalizePhone(row.contact.phone);
-      if (rowPhone !== phone) {
-        throw new Error("Telefone não confere com o contato da conversa");
+      const requestedPhone = normalizePhone(args.toPhone);
+      if (rowPhone !== requestedPhone && !rowPhone.startsWith("lid:")) {
+        throw new BadRequestException(
+          "Telefone não confere com o contato da conversa",
+        );
       }
       await this.prisma.conversation.update({
         where: { id: row.id },
@@ -466,6 +530,37 @@ export class MessageProcessingService {
     return { ok: true as const };
   }
 
+  private async resolveSendTarget(args: {
+    tenantId: string;
+    connectionId: string;
+    toPhone: string;
+    conversationId?: string;
+  }): Promise<string> {
+    if (!args.conversationId) {
+      const d = args.toPhone.replace(/\D/g, "");
+      if (!plausiblePhoneDigits(d)) {
+        throw new BadRequestException("Telefone de destino inválido");
+      }
+      return d;
+    }
+    const row = await this.prisma.conversation.findFirst({
+      where: {
+        id: args.conversationId,
+        tenantId: args.tenantId,
+        whatsappConnectionId: args.connectionId,
+      },
+      include: { contact: { select: { phone: true, customData: true } } },
+    });
+    if (!row?.contact.phone?.trim()) {
+      throw new BadRequestException("Conversa ou contato não encontrado");
+    }
+    return resolveOutboundWhatsAppTarget(
+      row.contact.phone,
+      row.contact.customData,
+      args.toPhone,
+    );
+  }
+
   async sendOutboundText(args: {
     tenantId: string;
     connectionId: string;
@@ -481,16 +576,25 @@ export class MessageProcessingService {
         isActive: true,
       },
     });
-    if (!conn) throw new Error("Conexão não encontrada");
+    if (!conn) throw new BadRequestException("Conexão não encontrada");
+
+    const sendTo = await this.resolveSendTarget({
+      tenantId: args.tenantId,
+      connectionId: args.connectionId,
+      toPhone: args.toPhone,
+      conversationId: args.conversationId,
+    });
 
     const provider = createWhatsAppProvider(conn);
-    const sent = await provider.sendTextMessage(args.toPhone, args.text);
-    if (!sent.ok) throw new Error(sent.error ?? "Falha ao enviar");
+    const sent = await provider.sendTextMessage(sendTo, args.text);
+    if (!sent.ok) {
+      throw new BadRequestException(sent.error ?? "Falha ao enviar");
+    }
 
     return this.recordOutboundMessage({
       tenantId: args.tenantId,
       userId: args.userId,
-      toPhone: args.toPhone,
+      toPhone: `+${sendTo}`,
       conn,
       body: args.text,
       externalId: sent.externalId,
@@ -517,22 +621,31 @@ export class MessageProcessingService {
         isActive: true,
       },
     });
-    if (!conn) throw new Error("Conexão não encontrada");
+    if (!conn) throw new BadRequestException("Conexão não encontrada");
+
+    const sendTo = await this.resolveSendTarget({
+      tenantId: args.tenantId,
+      connectionId: args.connectionId,
+      toPhone: args.toPhone,
+      conversationId: args.conversationId,
+    });
 
     const provider = createWhatsAppProvider(conn);
     if (!provider.sendOutboundMedia) {
-      throw new Error("Este canal não suporta envio de áudio ou anexos");
+      throw new BadRequestException("Este canal não suporta envio de áudio ou anexos");
     }
 
     const sent = await provider.sendOutboundMedia({
-      to: args.toPhone,
+      to: sendTo,
       kind: args.kind,
       base64: args.base64,
       mimeType: args.mimeType,
       fileName: args.fileName,
       caption: args.caption,
     });
-    if (!sent.ok) throw new Error(sent.error ?? "Falha ao enviar mídia");
+    if (!sent.ok) {
+      throw new BadRequestException(sent.error ?? "Falha ao enviar mídia");
+    }
 
     const body =
       args.kind === "audio"
@@ -547,7 +660,7 @@ export class MessageProcessingService {
     return this.recordOutboundMessage({
       tenantId: args.tenantId,
       userId: args.userId,
-      toPhone: args.toPhone,
+      toPhone: `+${sendTo}`,
       conn,
       body,
       externalId: sent.externalId,

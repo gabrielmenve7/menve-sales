@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -55,5 +56,13 @@ export class InboxController {
       u.userId,
       contactId,
     );
+  }
+
+  @Delete("conversations/:conversationId")
+  deleteConversation(
+    @ReqUser() u: RequestUser,
+    @Param("conversationId") conversationId: string,
+  ) {
+    return this.inbox.deleteConversation(u.tenantId, conversationId);
   }
 }
