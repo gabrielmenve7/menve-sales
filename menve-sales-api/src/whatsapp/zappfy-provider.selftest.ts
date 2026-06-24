@@ -72,4 +72,57 @@ assert(inboundText.length === 1, "NEW-MESSAGE texto recebido");
 assert(inboundText[0]?.body === "Opa, beleza?", "conversation texto");
 assert(inboundText[0]?.from === "5527997320619", "from digits");
 
+const uazapiBody = provider.parseWebhook({
+  fromMe: false,
+  body: "Oi pelo body",
+  number: "5511987654321",
+});
+assert(uazapiBody.length === 1, "Uazapi body+number");
+assert(uazapiBody[0]?.body === "Oi pelo body", "body uazapi");
+assert(uazapiBody[0]?.from === "5511987654321", "from number");
+
+const isOnWa = provider.parseWebhook({
+  data: {
+    fromMe: false,
+    body: "Texto sem key",
+    isOnWhatsApp: [{ exists: true, jid: "5527997320619@s.whatsapp.net" }],
+    messageTimestamp: 1674318916,
+  },
+});
+assert(isOnWa.length === 1, "isOnWhatsApp jid");
+assert(isOnWa[0]?.from === "5527997320619", "from isOnWhatsApp");
+
+const nestedMessage = provider.parseWebhook({
+  data: {
+    fromMe: false,
+    message: {
+      key: {
+        remoteJid: "5527997320619@s.whatsapp.net",
+        fromMe: false,
+        id: "NESTED1",
+      },
+      message: { conversation: "Proto aninhado" },
+      pushName: "Lead",
+    },
+  },
+});
+assert(nestedMessage.length === 1, "message.key aninhado");
+assert(nestedMessage[0]?.body === "Proto aninhado", "texto aninhado");
+
+const messageBody = provider.parseWebhook({
+  event: "messages",
+  data: {
+    messages: {
+      key: {
+        remoteJid: "5527997320619@s.whatsapp.net",
+        fromMe: false,
+        id: "MB1",
+      },
+      messageBody: "Via messageBody",
+    },
+  },
+});
+assert(messageBody.length === 1, "messageBody");
+assert(messageBody[0]?.body === "Via messageBody", "body messageBody");
+
 console.log("zappfy-provider.selftest: OK");

@@ -17,6 +17,7 @@ import { Public } from "../common/public.decorator";
 import { createWhatsAppProvider } from "../whatsapp/factory";
 import { getEvolutionWebhookParseMeta } from "../whatsapp/evolution-provider";
 import {
+  getZappfyWebhookBlobKeys,
   getZappfyWebhookInboxSample,
   getZappfyWebhookParseMeta,
 } from "../whatsapp/zappfy-provider";
@@ -314,8 +315,9 @@ export class WebhooksController {
       `zappfy webhook tenantId=${conn.tenantId} connectionId=${connectionId} event=${String(meta.event)} blobs=${meta.blobCount} parsed=${items.length} processed=${processed} duplicated=${duplicated}`,
     );
     if (items.length === 0 && meta.blobCount > 0) {
+      const blobKeys = getZappfyWebhookBlobKeys(payload);
       this.log.warn(
-        `zappfy webhook: ${meta.blobCount} blob(s) mas nenhuma mensagem inbound (${meta.rejectReason ?? "motivo desconhecido"}). tenantId=${conn.tenantId} connectionId=${connectionId}`,
+        `zappfy webhook: ${meta.blobCount} blob(s) mas nenhuma mensagem inbound (${meta.rejectReason ?? "motivo desconhecido"}). tenantId=${conn.tenantId} connectionId=${connectionId} blobKeys=${blobKeys}`,
       );
     } else if (items.length === 0 && meta.rejectReason) {
       this.log.warn(

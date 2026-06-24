@@ -168,12 +168,22 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
 }
 
 function zappfyEventIsMessages(payload: Record<string, unknown>): boolean {
-  const ev = payload.event ?? payload.type ?? payload.action;
+  const ev =
+    payload.event ??
+    payload.type ??
+    payload.action ??
+    payload.EventType ??
+    payload.eventType;
   if (ev == null) return true;
   if (typeof ev !== "string") return true;
   const n = ev.trim().replace(/[.-]/g, "_").toUpperCase();
   if (n === "MESSAGE_UPDATED" || n === "MESSAGES_UPDATE") return false;
-  return n === "MESSAGES" || n === "MESSAGE" || n === "NEW_MESSAGE";
+  return (
+    n === "MESSAGES" ||
+    n === "MESSAGE" ||
+    n === "NEW_MESSAGE" ||
+    n === "MESSAGES_RECEIVED"
+  );
 }
 
 function tryParseJsonObject(raw: string): Record<string, unknown> | null {
@@ -188,33 +198,164 @@ function tryParseJsonObject(raw: string): Record<string, unknown> | null {
   return null;
 }
 
+function pickZappfyJidFromIsOnWhatsApp(blob: Record<string, unknown>): string | null {
+  const onWa = blob.isOnWhatsApp;
+  if (!Array.isArray(onWa)) return null;
+  for (const item of onWa) {
+    if (!item || typeof item !== "object") continue;
+    const jid = (item as Record<string, unknown>).jid;
+    if (typeof jid === "string" && jid.trim()) return jid.trim();
+  }
+  return null;
+}
+
+/** Normaliza variações Uazapi/Zappfy (proto aninhado, number, isOnWhatsApp, messageBody). */
+function normalizeZappfyMessageBlob(raw: Record<string, unknown>): Record<string, unknown> {
+  let blob = raw;
+
+  const wrapped = blob.message;
+  if (wrapped && typeof wrapped === "object" && !Array.isArray(wrapped)) {
+    const w = wrapped as Record<string, unknown>;
+    if (w.key && typeof w.key === "object") {
+      blob = {
+        ...blob,
+        ...w,
+        message: w.message ?? blob.message,
+        key: w.key,
+        pushName:
+          w.pushName ??
+          blob.pushName ??
+          (typeof blob.pushName === "string" ? blob.pushName : undefined),
+        messageTimestamp:
+          w.messageTimestamp ?? blob.messageTimestamp ?? w.timestamp,
+      };
+    }
+  }
+
+  const messagesNode = blob.messages;
+  if (messagesNode && typeof messagesNode === "object" && !Array.isArray(messagesNode)) {
+    const m = messagesNode as Record<string, unknown>;
+    blob = {
+      ...blob,
+      ...m,
+      message: m.message ?? blob.message,
+      key: m.key ?? blob.key,
+      messageBody:
+        typeof m.messageBody === "string"
+          ? m.messageBody
+          : blob.messageBody,
+    };
+  }
+
+  const key = (
+    blob.key && typeof blob.key === "object" && !Array.isArray(blob.key)
+      ? (blob.key as Record<string, unknown>)
+      : {}
+  ) as Record<string, unknown>;
+
+  const remoteFromKey =
+    typeof key.remoteJid === "string"
+      ? key.remoteJid
+      : typeof key.remoteJidAlt === "string"
+        ? key.remoteJidAlt
+        : typeof key.participant === "string"
+          ? key.participant
+          : typeof key.participantAlt === "string"
+            ? key.participantAlt
+            : null;
+
+  const jidFallback =
+    remoteFromKey ??
+    (typeof blob.remoteJid === "string" ? blob.remoteJid : null) ??
+    (typeof blob.chatId === "string" ? blob.chatId : null) ??
+    pickZappfyJidFromIsOnWhatsApp(blob);
+
+  const phoneRaw =
+    blob.from ??
+    blob.number ??
+    blob.phone ??
+    blob.sender ??
+    blob.senderPn ??
+    key.cleanedSenderPn ??
+    key.cleanedParticipantPn;
+
+  if (jidFallback && !remoteFromKey) {
+    blob = {
+      ...blob,
+      key: { ...key, remoteJid: jidFallback, fromMe: key.fromMe ?? blob.fromMe },
+    };
+  }
+
+  if (!blob.from && phoneRaw != null) {
+    blob = { ...blob, from: phoneRaw };
+  }
+
+  if (
+    typeof blob.messageBody === "string" &&
+    blob.messageBody.trim() &&
+    blob.text == null &&
+    (typeof blob.body !== "string" || !String(blob.body).trim())
+  ) {
+    blob = { ...blob, text: blob.messageBody.trim() };
+  }
+
+  return blob;
+}
+
+function hasZappfySenderHint(blob: Record<string, unknown>): boolean {
+  const key = blob.key as Record<string, unknown> | undefined;
+  return !!(
+    blob.from ??
+    blob.number ??
+    blob.phone ??
+    blob.chatId ??
+    blob.remoteJid ??
+    key?.remoteJid ??
+    key?.cleanedSenderPn ??
+    key?.cleanedParticipantPn ??
+    pickZappfyJidFromIsOnWhatsApp(blob)
+  );
+}
+
 function extractZappfyMessageBlobs(payload: unknown): Record<string, unknown>[] {
   let p = payload as Record<string, unknown>;
 
   const bodyRaw = p.body;
   if (typeof bodyRaw === "string") {
     const parsed = tryParseJsonObject(bodyRaw.trim());
-    if (parsed && (parsed.data != null || parsed.event != null || parsed.type != null)) {
+    if (
+      parsed &&
+      (parsed.data != null ||
+        parsed.event != null ||
+        parsed.type != null ||
+        parsed.message != null ||
+        parsed.messages != null)
+    ) {
       p = parsed;
     }
   } else if (bodyRaw && typeof bodyRaw === "object" && !Array.isArray(bodyRaw)) {
     const b = bodyRaw as Record<string, unknown>;
-    if (b.data != null || b.event != null || b.type != null) p = b;
+    if (b.data != null || b.event != null || b.type != null || b.message != null) {
+      p = b;
+    }
   }
 
   if (!zappfyEventIsMessages(p)) return [];
 
-  let d: unknown = p.data ?? p.message ?? p.payload;
+  let d: unknown =
+    p.data ?? p.message ?? p.payload ?? p.messages;
   if (typeof d === "string") {
     const parsed = tryParseJsonObject(d.trim());
     d = parsed ?? d;
   }
 
+  const normalizeAll = (items: Record<string, unknown>[]) =>
+    items.map((item) => normalizeZappfyMessageBlob(item));
+
   if (Array.isArray(d)) {
-    return d.filter((x) => x && typeof x === "object") as Record<
-      string,
-      unknown
-    >[];
+    return normalizeAll(
+      d.filter((x) => x && typeof x === "object") as Record<string, unknown>[],
+    );
   }
 
   if (d && typeof d === "object") {
@@ -222,17 +363,25 @@ function extractZappfyMessageBlobs(payload: unknown): Record<string, unknown>[] 
     if (inner.messages != null) {
       const msgs = Array.isArray(inner.messages)
         ? inner.messages
-        : Object.values(inner.messages);
+        : typeof inner.messages === "object"
+          ? [inner.messages]
+          : Object.values(inner.messages);
       const fromMessages = msgs.filter(
         (x) => x && typeof x === "object",
       ) as Record<string, unknown>[];
-      if (fromMessages.length > 0) return fromMessages;
+      if (fromMessages.length > 0) return normalizeAll(fromMessages);
     }
-    return [inner];
+    return normalizeAll([inner]);
   }
 
-  if (p.text != null || p.body != null || p.from != null || p.chatId != null) {
-    return [p];
+  if (
+    hasZappfySenderHint(p) &&
+    (p.text != null ||
+      typeof p.body === "string" ||
+      p.message != null ||
+      typeof p.messageBody === "string")
+  ) {
+    return normalizeAll([p]);
   }
 
   return [];
@@ -246,27 +395,26 @@ export function getZappfyWebhookInboxSample(payload: unknown): {
   remoteJid: string | null;
 } {
   const p = payload as Record<string, unknown>;
-  const event = p.event ?? p.type ?? p.action;
-  let data: Record<string, unknown> | null = null;
-  const d = p.data ?? p.message ?? p.payload;
-  if (d && typeof d === "object" && !Array.isArray(d)) {
-    data = d as Record<string, unknown>;
-  } else if (Array.isArray(d) && d[0] && typeof d[0] === "object") {
-    data = d[0] as Record<string, unknown>;
-  }
-  const key = data?.key as Record<string, unknown> | undefined;
+  const event =
+    p.event ?? p.type ?? p.action ?? p.EventType ?? p.eventType;
+  const blobs = extractZappfyMessageBlobs(payload);
+  const sampleBlob = blobs[0];
+  const key = sampleBlob?.key as Record<string, unknown> | undefined;
   const hasDataKey = !!(key && typeof key === "object");
-  const fromMe = key?.fromMe ?? data?.fromMe ?? p.fromMe;
+  const fromMe = key?.fromMe ?? sampleBlob?.fromMe ?? p.fromMe;
   const remoteJid =
     typeof key?.remoteJid === "string"
       ? key.remoteJid
-      : typeof data?.remoteJid === "string"
-        ? data.remoteJid
-        : typeof data?.chatId === "string"
-          ? data.chatId
-          : typeof data?.from === "string"
-            ? data.from
-            : null;
+      : typeof sampleBlob?.remoteJid === "string"
+        ? sampleBlob.remoteJid
+        : typeof sampleBlob?.chatId === "string"
+          ? sampleBlob.chatId
+          : typeof sampleBlob?.from === "string"
+            ? sampleBlob.from
+            : typeof sampleBlob?.number === "string"
+              ? sampleBlob.number
+              : pickZappfyJidFromIsOnWhatsApp(sampleBlob ?? {}) ??
+                (sampleBlob ? pickZappfyJidFromIsOnWhatsApp(sampleBlob) : null);
   return { event, hasDataKey, fromMe, remoteJid };
 }
 
@@ -306,25 +454,43 @@ export function getZappfyWebhookParseMeta(payload: unknown): {
   return { event, blobCount: blobs.length };
 }
 
+/** Chaves do primeiro blob (diagnóstico sem expor conteúdo). */
+export function getZappfyWebhookBlobKeys(payload: unknown): string {
+  const blobs = extractZappfyMessageBlobs(payload);
+  if (!blobs[0]) {
+    const p = payload as Record<string, unknown>;
+    return Object.keys(p).slice(0, 14).join(",");
+  }
+  return Object.keys(blobs[0]).slice(0, 18).join(",");
+}
+
 function describeZappfyParseFailure(blob: Record<string, unknown> | undefined): string {
   if (!blob) return "blob vazio";
-  const key = blob.key as Record<string, unknown> | undefined;
+  const normalized = normalizeZappfyMessageBlob(blob);
+  const key = normalized.key as Record<string, unknown> | undefined;
   const remoteJid = String(
-    key?.remoteJid ?? blob.chatId ?? blob.from ?? blob.remoteJid ?? "",
+    key?.remoteJid ??
+      normalized.chatId ??
+      normalized.from ??
+      normalized.remoteJid ??
+      normalized.number ??
+      pickZappfyJidFromIsOnWhatsApp(normalized) ??
+      "",
   );
-  if (!remoteJid && !String(blob.from ?? "").replace(/\D/g, "")) {
-    return "sem remoteJid/from";
+  if (!remoteJid && !String(normalized.from ?? normalized.number ?? "").replace(/\D/g, "")) {
+    return `sem remoteJid/from (keys=${Object.keys(normalized).slice(0, 10).join(",")})`;
   }
-  const msg = blob.message;
+  const msg = normalized.message;
   const hasProto = msg && typeof msg === "object";
   const hasFlatText =
-    typeof blob.text === "string" ||
-    typeof blob.body === "string" ||
-    typeof blob.messageText === "string";
+    typeof normalized.text === "string" ||
+    typeof normalized.body === "string" ||
+    typeof normalized.messageText === "string" ||
+    typeof normalized.messageBody === "string";
   if (!hasFlatText && !hasProto) {
     return "sem texto nem message proto";
   }
-  if (hasProto && !extractZappfyText(blob, msg as Record<string, unknown>)) {
+  if (hasProto && !extractZappfyText(normalized, msg as Record<string, unknown>)) {
     return "message proto sem texto/mídia reconhecida";
   }
   return "filtro fromMe/grupo/JID";
@@ -386,6 +552,7 @@ function extractZappfyText(
     data.text ??
     data.body ??
     data.messageText ??
+    data.messageBody ??
     (message ? extractTextFromProto(message) : undefined);
   if (typeof textRaw === "string" && textRaw.trim()) return textRaw.trim();
 
@@ -486,13 +653,25 @@ function extractZappfyMedia(
 }
 
 function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound | null {
-  const key = data.key as Record<string, unknown> | undefined;
+  const blob = normalizeZappfyMessageBlob(data);
+  const key = blob.key as Record<string, unknown> | undefined;
   const remoteJid = String(
-    key?.remoteJid ?? data.chatId ?? data.from ?? data.remoteJid ?? "",
+    key?.remoteJid ??
+      blob.chatId ??
+      blob.from ??
+      blob.remoteJid ??
+      blob.number ??
+      blob.phone ??
+      pickZappfyJidFromIsOnWhatsApp(blob) ??
+      "",
   );
   const fromDigits =
-    digitsFromJidOrPhone(data.from) ||
-    digitsFromJidOrPhone(data.chatId) ||
+    digitsFromJidOrPhone(blob.from) ||
+    digitsFromJidOrPhone(blob.number) ||
+    digitsFromJidOrPhone(blob.phone) ||
+    digitsFromJidOrPhone(blob.chatId) ||
+    digitsFromJidOrPhone(key?.cleanedSenderPn) ||
+    digitsFromJidOrPhone(key?.cleanedParticipantPn) ||
     digitsFromJidOrPhone(remoteJid);
 
   if (!fromDigits && !remoteJid.endsWith("@lid")) return null;
@@ -508,7 +687,7 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
     : fromDigits;
   if (!from) return null;
 
-  const rawMsg = data.message ?? data.msg;
+  const rawMsg = blob.message ?? blob.msg;
   let message: Record<string, unknown> | undefined;
   if (rawMsg && typeof rawMsg === "object" && !Array.isArray(rawMsg)) {
     message = rawMsg as Record<string, unknown>;
@@ -516,18 +695,18 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
     message = tryParseJsonObject(rawMsg.trim()) ?? undefined;
   }
 
-  const text = extractZappfyText(data, message);
+  const text = extractZappfyText(blob, message);
   if (!text) return null;
 
   const keyId = key?.id ? String(key.id) : undefined;
   const externalId = String(
     keyId ??
-      data.messageId ??
-      data.id ??
+      blob.messageId ??
+      blob.id ??
       `${from}-${Date.now()}`,
   );
-  const fromMe = data.fromMe === true || key?.fromMe === true;
-  const media = extractZappfyMedia(data, message);
+  const fromMe = blob.fromMe === true || key?.fromMe === true;
+  const media = extractZappfyMedia(blob, message);
 
   return {
     externalId,
@@ -535,13 +714,13 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
     from,
     body: text,
     timestamp: parseTimestamp(
-      data.messageTimestamp ?? data.timestamp ?? key?.messageTimestamp,
+      blob.messageTimestamp ?? blob.timestamp ?? key?.messageTimestamp,
     ),
     profileName:
-      typeof data.pushName === "string"
-        ? data.pushName
-        : typeof data.profileName === "string"
-          ? data.profileName
+      typeof blob.pushName === "string"
+        ? blob.pushName
+        : typeof blob.profileName === "string"
+          ? blob.profileName
           : undefined,
     fromMe,
     mediaUrl: media.mediaUrl,
