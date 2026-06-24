@@ -198,6 +198,29 @@ function tryParseJsonObject(raw: string): Record<string, unknown> | null {
   return null;
 }
 
+/** Lê campo com fallback case-insensitive (painel Zappfy usa `chatid`, `content`, etc.). */
+function pickBlobField(
+  blob: Record<string, unknown>,
+  ...names: string[]
+): unknown {
+  for (const name of names) {
+    if (blob[name] !== undefined) return blob[name];
+    const lower = name.toLowerCase();
+    for (const k of Object.keys(blob)) {
+      if (k.toLowerCase() === lower) return blob[k];
+    }
+  }
+  return undefined;
+}
+
+function asTrimmedString(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+function ensureJidSuffix(jid: string, suffix: string): string {
+  return jid.includes("@") ? jid : `${jid}${suffix}`;
+}
+
 function pickZappfyJidFromIsOnWhatsApp(blob: Record<string, unknown>): string | null {
   const onWa = blob.isOnWhatsApp;
   if (!Array.isArray(onWa)) return null;
@@ -209,9 +232,16 @@ function pickZappfyJidFromIsOnWhatsApp(blob: Record<string, unknown>): string | 
   return null;
 }
 
-/** Normaliza variações Uazapi/Zappfy (proto aninhado, number, isOnWhatsApp, messageBody). */
+/** Normaliza variações Uazapi/Zappfy (proto aninhado, number, isOnWhatsApp, messageBody, chatid/content). */
 function normalizeZappfyMessageBlob(raw: Record<string, unknown>): Record<string, unknown> {
   let blob = raw;
+
+  const flatChatId = asTrimmedString(pickBlobField(blob, "chatId", "chatid"));
+  const flatChatLid = asTrimmedString(pickBlobField(blob, "chatLid", "chatlid"));
+  const flatContent = asTrimmedString(pickBlobField(blob, "content"));
+  const flatMessageId = asTrimmedString(
+    pickBlobField(blob, "messageId", "messageid", "id"),
+  );
 
   const wrapped = blob.message;
   if (wrapped && typeof wrapped === "object" && !Array.isArray(wrapped)) {
@@ -267,7 +297,9 @@ function normalizeZappfyMessageBlob(raw: Record<string, unknown>): Record<string
   const jidFallback =
     remoteFromKey ??
     (typeof blob.remoteJid === "string" ? blob.remoteJid : null) ??
+    flatChatLid ??
     (typeof blob.chatId === "string" ? blob.chatId : null) ??
+    flatChatId ??
     pickZappfyJidFromIsOnWhatsApp(blob);
 
   const phoneRaw =
@@ -279,15 +311,58 @@ function normalizeZappfyMessageBlob(raw: Record<string, unknown>): Record<string
     key.cleanedSenderPn ??
     key.cleanedParticipantPn;
 
+  const remoteJidAltFromFlat =
+    flatChatId && flatChatLid && flatChatId !== flatChatLid ? flatChatId : null;
+
   if (jidFallback && !remoteFromKey) {
+    const remoteJidNorm = isLidJid(jidFallback)
+      ? ensureJidSuffix(jidFallback.split("@")[0] ?? jidFallback, "@lid")
+      : jidFallback.includes("@")
+        ? jidFallback
+        : ensureJidSuffix(jidFallback.replace(/\D/g, ""), "@s.whatsapp.net");
     blob = {
       ...blob,
-      key: { ...key, remoteJid: jidFallback, fromMe: key.fromMe ?? blob.fromMe },
+      key: {
+        ...key,
+        remoteJid: remoteJidNorm,
+        remoteJidAlt:
+          (typeof key.remoteJidAlt === "string" ? key.remoteJidAlt : null) ??
+          remoteJidAltFromFlat ??
+          (flatChatId && !isLidJid(flatChatId) ? flatChatId : undefined),
+        fromMe: key.fromMe ?? blob.fromMe,
+        id: key.id ?? flatMessageId ?? undefined,
+      },
+    };
+  } else if (remoteJidAltFromFlat && !key.remoteJidAlt) {
+    blob = {
+      ...blob,
+      key: {
+        ...key,
+        remoteJidAlt: remoteJidAltFromFlat,
+        id: key.id ?? flatMessageId ?? undefined,
+      },
+    };
+  } else if (flatMessageId && !key.id) {
+    blob = {
+      ...blob,
+      key: { ...key, id: flatMessageId },
+      messageId: blob.messageId ?? flatMessageId,
     };
   }
 
   if (!blob.from && phoneRaw != null) {
-    blob = { ...blob, from: phoneRaw };
+    const phoneStr = String(phoneRaw).trim();
+    if (!isLidJid(phoneStr) && !phoneStr.startsWith("lid:")) {
+      blob = { ...blob, from: phoneRaw };
+    }
+  }
+
+  if (
+    flatContent &&
+    blob.text == null &&
+    (typeof blob.body !== "string" || !String(blob.body).trim())
+  ) {
+    blob = { ...blob, text: flatContent };
   }
 
   if (
@@ -309,6 +384,8 @@ function hasZappfySenderHint(blob: Record<string, unknown>): boolean {
     blob.number ??
     blob.phone ??
     blob.chatId ??
+    pickBlobField(blob, "chatid", "chatId") ??
+    pickBlobField(blob, "chatlid", "chatLid") ??
     blob.remoteJid ??
     key?.remoteJid ??
     key?.cleanedSenderPn ??
@@ -379,12 +456,32 @@ function extractZappfyMessageBlobs(payload: unknown): Record<string, unknown>[] 
     (p.text != null ||
       typeof p.body === "string" ||
       p.message != null ||
-      typeof p.messageBody === "string")
+      typeof p.messageBody === "string" ||
+      pickBlobField(p, "content") != null)
   ) {
     return normalizeAll([p]);
   }
 
   return [];
+}
+
+function pickZappfyDisplayRemoteJid(
+  blob: Record<string, unknown> | undefined,
+): string | null {
+  if (!blob) return null;
+  const key = blob.key as Record<string, unknown> | undefined;
+  if (typeof key?.remoteJid === "string") return key.remoteJid;
+  if (typeof blob.remoteJid === "string") return blob.remoteJid;
+  const chatLid = asTrimmedString(pickBlobField(blob, "chatLid", "chatlid"));
+  if (chatLid) return chatLid.includes("@") ? chatLid : `${chatLid}@lid`;
+  if (typeof blob.chatId === "string") return blob.chatId;
+  const chatId = asTrimmedString(pickBlobField(blob, "chatId", "chatid"));
+  if (chatId) return chatId;
+  const from = asTrimmedString(blob.from);
+  if (from && !isLidJid(from) && !from.startsWith("lid:")) return from;
+  const number = asTrimmedString(blob.number);
+  if (number) return number;
+  return pickZappfyJidFromIsOnWhatsApp(blob);
 }
 
 /** Campos úteis para log/diagnóstico sem serializar o body inteiro. */
@@ -402,19 +499,7 @@ export function getZappfyWebhookInboxSample(payload: unknown): {
   const key = sampleBlob?.key as Record<string, unknown> | undefined;
   const hasDataKey = !!(key && typeof key === "object");
   const fromMe = key?.fromMe ?? sampleBlob?.fromMe ?? p.fromMe;
-  const remoteJid =
-    typeof key?.remoteJid === "string"
-      ? key.remoteJid
-      : typeof sampleBlob?.remoteJid === "string"
-        ? sampleBlob.remoteJid
-        : typeof sampleBlob?.chatId === "string"
-          ? sampleBlob.chatId
-          : typeof sampleBlob?.from === "string"
-            ? sampleBlob.from
-            : typeof sampleBlob?.number === "string"
-              ? sampleBlob.number
-              : pickZappfyJidFromIsOnWhatsApp(sampleBlob ?? {}) ??
-                (sampleBlob ? pickZappfyJidFromIsOnWhatsApp(sampleBlob) : null);
+  const remoteJid = pickZappfyDisplayRemoteJid(sampleBlob);
   return { event, hasDataKey, fromMe, remoteJid };
 }
 
@@ -486,7 +571,8 @@ function describeZappfyParseFailure(blob: Record<string, unknown> | undefined): 
     typeof normalized.text === "string" ||
     typeof normalized.body === "string" ||
     typeof normalized.messageText === "string" ||
-    typeof normalized.messageBody === "string";
+    typeof normalized.messageBody === "string" ||
+    !!asTrimmedString(pickBlobField(normalized, "content"));
   if (!hasFlatText && !hasProto) {
     return "sem texto nem message proto";
   }
@@ -552,11 +638,19 @@ function resolveZappfySenderIdentity(blob: Record<string, unknown>): {
       : {}
   ) as Record<string, unknown>;
 
+  const flatChatId = asTrimmedString(pickBlobField(blob, "chatId", "chatid"));
+  const flatChatLid = asTrimmedString(pickBlobField(blob, "chatLid", "chatlid"));
+
   const remoteJid = String(
-    key.remoteJid ?? blob.remoteJid ?? pickZappfyJidFromIsOnWhatsApp(blob) ?? "",
+    key.remoteJid ??
+      blob.remoteJid ??
+      flatChatLid ??
+      pickZappfyJidFromIsOnWhatsApp(blob) ??
+      "",
   );
   const remoteJidAlt =
-    typeof key.remoteJidAlt === "string" ? key.remoteJidAlt.trim() : "";
+    (typeof key.remoteJidAlt === "string" ? key.remoteJidAlt.trim() : "") ||
+    (flatChatId && !isLidJid(flatChatId) ? flatChatId : "");
   const participantAlt =
     typeof key.participantAlt === "string" ? key.participantAlt.trim() : "";
   const participant =
@@ -565,12 +659,20 @@ function resolveZappfySenderIdentity(blob: Record<string, unknown>): {
   const explicitPhoneCandidates: unknown[] = [
     key.cleanedSenderPn,
     key.cleanedParticipantPn,
-    blob.from,
+    flatChatId,
     blob.number,
     blob.phone,
     blob.sender,
     blob.senderPn,
   ];
+
+  const fromRaw = blob.from;
+  if (fromRaw != null) {
+    const fromStr = String(fromRaw).trim();
+    if (fromStr && !isLidJid(fromStr) && !fromStr.startsWith("lid:")) {
+      explicitPhoneCandidates.unshift(fromRaw);
+    }
+  }
 
   for (const c of explicitPhoneCandidates) {
     const d = digitsFromJidOrPhone(c);
@@ -642,6 +744,7 @@ function extractZappfyText(
     data.body ??
     data.messageText ??
     data.messageBody ??
+    pickBlobField(data, "content") ??
     (message ? extractTextFromProto(message) : undefined);
   if (typeof textRaw === "string" && textRaw.trim()) return textRaw.trim();
 
@@ -750,8 +853,12 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
   const { from, remoteJid } = sender;
   if (remoteJid.includes("status@broadcast")) return null;
 
+  const isGroupFlag = pickBlobField(blob, "isGroup", "is_group");
   const isGroupLike =
     remoteJid.includes("@g.us") ||
+    isGroupFlag === true ||
+    isGroupFlag === "true" ||
+    isGroupFlag === 1 ||
     String(key?.participant ?? "").includes("@g.us");
   if (isGroupLike && !ALLOW_GROUPS) return null;
 

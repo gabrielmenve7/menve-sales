@@ -155,4 +155,22 @@ const cleanedPn = provider.parseWebhook({
 });
 assert(cleanedPn[0]?.from === "5519992105272", "telefone via cleanedSenderPn");
 
+const flatPanel = provider.parseWebhook({
+  event: "messages",
+  data: {
+    chatid: "5519992105272@s.whatsapp.net",
+    chatlid: "271361050177610@lid",
+    content: "Mensagem teste painel",
+    fromMe: false,
+    isGroup: false,
+    messageid: "FLAT_PANEL_1",
+    messageType: "Conversation",
+    messageTimestamp: 1_719_000_000,
+  },
+});
+assert(flatPanel.length === 1, "formato painel chatid/chatlid/content");
+assert(flatPanel[0]?.body === "Mensagem teste painel", "content como body");
+assert(flatPanel[0]?.from === "5519992105272", "telefone via chatid");
+assert(flatPanel[0]?.externalId === "FLAT_PANEL_1", "messageid como externalId");
+
 console.log("zappfy-provider.selftest: OK");
