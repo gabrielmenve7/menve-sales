@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import {
   Prisma,
+  ProspectSearchStatus,
   ProspectSource,
   ProspectStatus,
 } from "@prisma/client";
@@ -19,6 +20,7 @@ import {
   filterBusinessWebResults,
   sanitizeMapsResults,
 } from "./business-result-filter";
+import { buildProspectQuery } from "./prospect-query";
 import {
   baseDomain,
   normalizeAndDeduplicate,
@@ -28,9 +30,20 @@ import {
 } from "./serper";
 import { scrapeWebsite } from "./website-scraper";
 
-const searchBody = z.object({
+const engineSchema = z.enum(["maps", "search"]);
+
+const structuredSearchBody = z.object({
+  segment: z.string().min(3).max(200),
+  state: z.string().min(2).max(2),
+  city: z.string().min(2).max(120),
+  engines: z.array(engineSchema).min(1).max(2),
+});
+
+const legacySearchBody = z.object({
   query: z.string().min(3).max(200),
 });
+
+const searchBody = z.union([structuredSearchBody, legacySearchBody]);
 
 const patchResultSchema = z.object({
   status: z.nativeEnum(ProspectStatus).optional(),
@@ -91,9 +104,59 @@ export class ProspectingService {
     return s;
   }
 
+  async getStats(tenantId: string) {
+    await this.ensureResearchEnabled(tenantId);
+    const [searches, companies, qualified] = await Promise.all([
+      this.prisma.prospectSearch.count({ where: { tenantId } }),
+      this.prisma.prospectResult.count({ where: { tenantId } }),
+      this.prisma.prospectResult.count({
+        where: { tenantId, hasWebsite: true },
+      }),
+    ]);
+    return { searches, companies, qualified };
+  }
+
+  private countQualified(results: { hasWebsite: boolean }[]): number {
+    return results.filter((r) => r.hasWebsite).length;
+  }
+
+  private async syncSearchAggregates(
+    searchId: string,
+    status?: ProspectSearchStatus,
+  ) {
+    const results = await this.prisma.prospectResult.findMany({
+      where: { searchId },
+      select: { hasWebsite: true, enrichedAt: true, website: true },
+    });
+    const totalCount = results.length;
+    const qualifiedCount = this.countQualified(results);
+    const totalWithSite = results.filter(
+      (r) => r.hasWebsite && r.website,
+    ).length;
+    const enrichedCount = results.filter((r) => r.enrichedAt != null).length;
+    const isComplete =
+      totalWithSite === 0 || enrichedCount >= totalWithSite;
+
+    let nextStatus = status;
+    if (nextStatus == null) {
+      nextStatus = isComplete
+        ? ProspectSearchStatus.DONE
+        : ProspectSearchStatus.ENRICHING;
+    }
+
+    return this.prisma.prospectSearch.update({
+      where: { id: searchId },
+      data: {
+        totalCount,
+        qualifiedCount,
+        status: nextStatus,
+      },
+    });
+  }
+
   async search(tenantId: string, userId: string, raw: unknown) {
     await this.ensureResearchEnabled(tenantId);
-    const { query } = searchBody.parse(raw);
+    const parsed = searchBody.parse(raw);
     const key = this.serperKey();
     if (!key) {
       throw new BadRequestException(
@@ -101,62 +164,121 @@ export class ProspectingService {
       );
     }
 
-    const [webRaw, mapsRaw] = await Promise.all([
-      searchWeb(query, key, {
-        page: 1,
-        num: SERPER_WEB_RESULTS_PER_REQUEST,
-      }),
-      searchMaps(query, key),
-    ]);
-    const web = filterBusinessWebResults(webRaw);
-    const maps = sanitizeMapsResults(mapsRaw);
-    const { prospects, webCount, mapsCount } = normalizeAndDeduplicate(
-      web,
-      maps,
-    );
+    let query: string;
+    let segment: string | null = null;
+    let state: string | null = null;
+    let city: string | null = null;
+    let engines: string[] = ["maps", "search"];
+
+    if ("query" in parsed) {
+      query = parsed.query;
+      segment = parsed.query;
+    } else {
+      segment = parsed.segment.trim();
+      state = parsed.state.trim().toUpperCase();
+      city = parsed.city.trim();
+      engines = [...new Set(parsed.engines)];
+      query = buildProspectQuery(segment, city, state);
+    }
+
+    const useMaps = engines.includes("maps");
+    const useSearch = engines.includes("search");
 
     const searchRow = await this.prisma.prospectSearch.create({
       data: {
         tenantId,
         userId,
         query,
-        webCount,
-        mapsCount,
-        totalCount: prospects.length,
+        segment,
+        state,
+        city,
+        engines,
+        status: ProspectSearchStatus.RUNNING,
         lastWebPageFetched: 1,
-        webExhausted: false,
+        webExhausted: !useSearch,
       },
     });
 
-    if (prospects.length > 0) {
-      await this.prisma.prospectResult.createMany({
-        data: prospects.map((p) => ({
-          tenantId,
-          searchId: searchRow.id,
-          source: p.source,
-          position: p.position,
-          name: p.name,
-          website: p.website,
-          hasWebsite: p.hasWebsite,
-          phone: p.phone,
-          address: p.address,
-          snippet: p.snippet,
-          rating: p.rating,
-          reviewCount: p.reviewCount,
-          googleMapsUrl: p.googleMapsUrl,
-          enrichmentData: p.foundInBothSources
-            ? ({ foundInBothSources: true } as Prisma.InputJsonValue)
-            : undefined,
-        })),
+    try {
+      const [webRaw, mapsRaw] = await Promise.all([
+        useSearch
+          ? searchWeb(query, key, {
+              page: 1,
+              num: SERPER_WEB_RESULTS_PER_REQUEST,
+            })
+          : Promise.resolve([]),
+        useMaps ? searchMaps(query, key) : Promise.resolve([]),
+      ]);
+      const web = filterBusinessWebResults(webRaw);
+      const maps = sanitizeMapsResults(mapsRaw);
+      const { prospects, webCount, mapsCount } = normalizeAndDeduplicate(
+        web,
+        maps,
+      );
+
+      const qualifiedCount = this.countQualified(prospects);
+      const needsEnrichment = prospects.some(
+        (p) => p.hasWebsite && p.website,
+      );
+
+      await this.prisma.prospectSearch.update({
+        where: { id: searchRow.id },
+        data: {
+          webCount,
+          mapsCount,
+          totalCount: prospects.length,
+          qualifiedCount,
+          status: needsEnrichment
+            ? ProspectSearchStatus.ENRICHING
+            : ProspectSearchStatus.DONE,
+        },
       });
+
+      if (prospects.length > 0) {
+        await this.prisma.prospectResult.createMany({
+          data: prospects.map((p) => ({
+            tenantId,
+            searchId: searchRow.id,
+            source: p.source,
+            position: p.position,
+            name: p.name,
+            website: p.website,
+            hasWebsite: p.hasWebsite,
+            phone: p.phone,
+            address: p.address,
+            snippet: p.snippet,
+            rating: p.rating,
+            reviewCount: p.reviewCount,
+            googleMapsUrl: p.googleMapsUrl,
+            enrichmentData: p.foundInBothSources
+              ? ({ foundInBothSources: true } as Prisma.InputJsonValue)
+              : undefined,
+          })),
+        });
+      }
+
+      const results = await this.prisma.prospectResult.findMany({
+        where: { searchId: searchRow.id },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const search = await this.prisma.prospectSearch.findUniqueOrThrow({
+        where: { id: searchRow.id },
+      });
+
+      return { search, results };
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "Falha na busca Serper";
+      await this.prisma.prospectSearch.update({
+        where: { id: searchRow.id },
+        data: {
+          status: ProspectSearchStatus.ERROR,
+          errorMessage: message,
+        },
+      });
+      throw e;
     }
-
-    const results = await this.prisma.prospectResult.findMany({
-      where: { searchId: searchRow.id },
-      orderBy: { createdAt: "asc" },
-    });
-
-    return { search: searchRow, results };
   }
 
   /**
@@ -172,6 +294,11 @@ export class ProspectingService {
       where: { id: searchId, tenantId },
     });
     if (!search) throw new NotFoundException();
+    if (!search.engines.includes("search")) {
+      throw new BadRequestException(
+        "Esta busca não incluiu a rede de pesquisa.",
+      );
+    }
     if (search.webExhausted) {
       throw new BadRequestException(
         "Não há mais páginas de resultado web para esta busca.",
@@ -204,10 +331,7 @@ export class ProspectingService {
       const totalCount = await this.prisma.prospectResult.count({
         where: { searchId },
       });
-      await this.prisma.prospectSearch.update({
-        where: { id: searchId },
-        data: { totalCount },
-      });
+      await this.syncSearchAggregates(searchId);
       return { added: 0, exhausted: true, totalCount };
     }
 
@@ -258,15 +382,19 @@ export class ProspectingService {
             : undefined,
         })),
       });
+      const hasNewSites = fresh.some((p) => p.hasWebsite && p.website);
+      if (hasNewSites) {
+        await this.prisma.prospectSearch.update({
+          where: { id: searchId },
+          data: { status: ProspectSearchStatus.ENRICHING },
+        });
+      }
     }
 
     const totalCount = await this.prisma.prospectResult.count({
       where: { searchId },
     });
-    await this.prisma.prospectSearch.update({
-      where: { id: searchId },
-      data: { totalCount },
-    });
+    await this.syncSearchAggregates(searchId);
 
     return {
       added: fresh.length,
@@ -280,7 +408,7 @@ export class ProspectingService {
     searchId: string,
     batchSize = 5,
   ) {
-    const batch = await this.prisma.prospectResult.findMany({
+    const pending = await this.prisma.prospectResult.findMany({
       where: {
         tenantId,
         searchId,
@@ -288,8 +416,25 @@ export class ProspectingService {
         website: { not: null },
         enrichedAt: null,
       },
-      take: batchSize,
+      orderBy: [
+        { source: "asc" },
+        { phone: "asc" },
+        { createdAt: "asc" },
+      ],
     });
+
+    // Prioriza rede de pesquisa sem telefone (diferencial do enriquecimento)
+    pending.sort((a, b) => {
+      const score = (r: typeof a) => {
+        let s = 0;
+        if (r.source === ProspectSource.GOOGLE_SEARCH) s += 2;
+        if (!r.phone) s += 1;
+        return s;
+      };
+      return score(b) - score(a);
+    });
+
+    const batch = pending.slice(0, batchSize);
 
     for (const r of batch) {
       const url = r.website!;
@@ -312,6 +457,7 @@ export class ProspectingService {
             enrichedAt: new Date(),
             whatsapp: scraped.whatsapp,
             email: scraped.emails[0] ?? undefined,
+            phone: r.phone ?? scraped.phones[0] ?? undefined,
             enrichmentData,
           },
         });
@@ -335,7 +481,7 @@ export class ProspectingService {
     return this.prisma.prospectSearch.findMany({
       where: { tenantId },
       orderBy: { createdAt: "desc" },
-      take: 25,
+      take: 100,
       include: {
         user: { select: { name: true, email: true } },
       },
@@ -349,7 +495,9 @@ export class ProspectingService {
     });
     if (!search) throw new NotFoundException();
 
-    await this.processEnrichmentChunk(tenantId, searchId, 5);
+    if (search.status === ProspectSearchStatus.ENRICHING) {
+      await this.processEnrichmentChunk(tenantId, searchId, 5);
+    }
 
     const results = await this.prisma.prospectResult.findMany({
       where: { searchId },
@@ -363,8 +511,13 @@ export class ProspectingService {
     const isComplete =
       totalWithSite === 0 || enrichedCount >= totalWithSite;
 
+    const updatedSearch = await this.syncSearchAggregates(
+      searchId,
+      isComplete ? ProspectSearchStatus.DONE : ProspectSearchStatus.ENRICHING,
+    );
+
     return {
-      search,
+      search: updatedSearch,
       results,
       totalWithSite,
       enrichedCount,

@@ -4,7 +4,44 @@ import { apiServer } from "@/lib/api-server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-const querySchema = z.object({
+export type ProspectSearchStatus =
+  | "RUNNING"
+  | "ENRICHING"
+  | "DONE"
+  | "ERROR";
+
+export type ProspectSearchHistory = {
+  id: string;
+  query: string;
+  segment: string | null;
+  state: string | null;
+  city: string | null;
+  location: string | null;
+  engines: string[];
+  totalCount: number;
+  qualifiedCount: number;
+  status: ProspectSearchStatus;
+  webExhausted?: boolean;
+  createdAt: string;
+  user: { name: string | null; email: string | null };
+};
+
+export type ProspectStats = {
+  searches: number;
+  companies: number;
+  qualified: number;
+};
+
+const engineSchema = z.enum(["maps", "search"]);
+
+const structuredSearchSchema = z.object({
+  segment: z.string().min(3).max(200),
+  state: z.string().min(2).max(2),
+  city: z.string().min(2).max(120),
+  engines: z.array(engineSchema).min(1).max(2),
+});
+
+const legacyQuerySchema = z.object({
   query: z.string().min(3).max(200),
 });
 
@@ -19,14 +56,27 @@ async function wrapProspecting<T>(p: Promise<T>): Promise<T> {
   }
 }
 
-export async function prospectingSearch(query: string) {
-  const { query: q } = querySchema.parse({ query });
-  return wrapProspecting(
+export async function prospectingGetStats(): Promise<ProspectStats> {
+  return wrapProspecting(apiServer<ProspectStats>("/prospecting/stats"));
+}
+
+export async function prospectingSearch(
+  input: z.infer<typeof structuredSearchSchema> | string,
+) {
+  const json =
+    typeof input === "string"
+      ? legacyQuerySchema.parse({ query: input })
+      : structuredSearchSchema.parse(input);
+
+  const res = await wrapProspecting(
     apiServer<{ search: unknown; results: unknown[] }>(
       "/prospecting/search",
-      { method: "POST", json: { query: q } },
+      { method: "POST", json },
     ),
   );
+  revalidatePath("/lista");
+  revalidatePath("/pesquisa");
+  return res;
 }
 
 export async function prospectingGetSearch(searchId: string) {

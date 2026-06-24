@@ -134,6 +134,13 @@ enum ProspectStatus {
   DISCARDED
 }
 
+enum ProspectSearchStatus {
+  RUNNING
+  ENRICHING
+  DONE
+  ERROR
+}
+
 model Tenant {
   id              String   @id @default(cuid())
   name            String
@@ -388,6 +395,13 @@ model ProspectSearch {
    * Não há mais páginas orgânicas no Google para esta query.
    */
   webExhausted       Boolean  @default(false)
+  segment            String?
+  state              String?
+  city               String?
+  engines            String[] @default([])
+  status             ProspectSearchStatus @default(RUNNING)
+  qualifiedCount     Int      @default(0)
+  errorMessage       String?
   createdAt          DateTime @default(now())
 
   results ProspectResult[]

@@ -11,6 +11,8 @@ import {
   prospectingGetSearch,
   prospectingLoadMoreWeb,
   prospectingSearch,
+  type ProspectSearchHistory,
+  type ProspectStats,
 } from "@/actions/pesquisa";
 import {
   addProspectResultsToList,
@@ -18,6 +20,12 @@ import {
   listProspectLists,
   type ProspectListSummary,
 } from "@/actions/prospect-lists";
+import {
+  ListaCaptureForm,
+  type CaptureFormPayload,
+} from "@/components/lista/lista-capture-form";
+import { ListaHistoryDialog } from "@/components/lista/lista-history-dialog";
+import { ListaStatsCards } from "@/components/lista/lista-stats-cards";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { ExternalLink, List, Loader2, MessageCircle, Search, Trash2 } from "lucide-react";
+import { ExternalLink, Clock, List, Loader2, Search, Trash2 } from "lucide-react";
 import type { Pipeline, Stage } from "@prisma/client";
 
 type ProspectRow = {
@@ -54,31 +62,26 @@ type ProspectRow = {
   contactId: string | null;
 };
 
-type SearchHistory = {
-  id: string;
-  query: string;
-  totalCount: number;
-  webExhausted?: boolean;
-  createdAt: string;
-  user: { name: string | null; email: string | null };
-};
-
 type FilterKey = "all" | "site" | "nosite" | "wa";
 
 export function PesquisaClient({
+  initialStats,
   initialSearches,
   initialProspectLists = [],
   pipelines,
   existingPhones,
   title = "Pesquisa",
 }: {
-  initialSearches: SearchHistory[];
+  initialStats?: ProspectStats;
+  initialSearches: ProspectSearchHistory[];
   initialProspectLists?: ProspectListSummary[];
   pipelines: (Pipeline & { stages: Stage[] })[];
   existingPhones: Set<string>;
   title?: string;
 }) {
   const [viewTab, setViewTab] = useState<"search" | "lists">("search");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [searches, setSearches] = useState(initialSearches);
   const [prospectLists, setProspectLists] = useState(initialProspectLists);
   const [saveListOpen, setSaveListOpen] = useState(false);
   const [saveListMode, setSaveListMode] = useState<"existing" | "new">("existing");
@@ -99,12 +102,42 @@ export function PesquisaClient({
   } | null>(null);
   const router = useRouter();
 
+  useEffect(() => {
+    setSearches(initialSearches);
+  }, [initialSearches]);
+
   const searchMut = useMutation({
-    mutationFn: (q: string) => prospectingSearch(q),
+    mutationFn: (payload: CaptureFormPayload) => prospectingSearch(payload),
     onSuccess: (data) => {
-      setActiveSearchId((data.search as { id: string }).id);
+      const raw = data.search as Record<string, unknown>;
+      const search: ProspectSearchHistory = {
+        id: String(raw.id),
+        query: String(raw.query ?? ""),
+        segment: (raw.segment as string | null) ?? null,
+        state: (raw.state as string | null) ?? null,
+        city: (raw.city as string | null) ?? null,
+        location: (raw.location as string | null) ?? null,
+        engines: Array.isArray(raw.engines) ? (raw.engines as string[]) : [],
+        totalCount: Number(raw.totalCount ?? 0),
+        qualifiedCount: Number(raw.qualifiedCount ?? 0),
+        status: (raw.status as ProspectSearchHistory["status"]) ?? "ENRICHING",
+        webExhausted: raw.webExhausted === true,
+        createdAt:
+          typeof raw.createdAt === "string"
+            ? raw.createdAt
+            : new Date().toISOString(),
+        user: { name: null, email: null },
+      };
+      setActiveSearchId(search.id);
       setSelected(new Set());
+      setSearches((prev) => {
+        const rest = prev.filter((s) => s.id !== search.id);
+        return [{ ...search, user: search.user ?? { name: null, email: null } }, ...rest];
+      });
       router.refresh();
+      requestAnimationFrame(() => {
+        document.getElementById("lista-results")?.scrollIntoView({ behavior: "smooth" });
+      });
     },
   });
 
@@ -127,14 +160,29 @@ export function PesquisaClient({
     loadMoreMut.reset();
   }, [activeSearchId]);
 
+  useEffect(() => {
+    const raw = statusQ.data?.search;
+    if (!raw || typeof raw !== "object" || !("id" in raw)) return;
+    const updated = raw as ProspectSearchHistory;
+    setSearches((prev) =>
+      prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)),
+    );
+  }, [statusQ.data?.search]);
+
   const results = (statusQ.data?.results ?? []) as ProspectRow[];
   const totalWithSite = statusQ.data?.totalWithSite ?? 0;
   const enrichedCount = statusQ.data?.enrichedCount ?? 0;
   const isComplete = statusQ.data?.isComplete ?? true;
   const searchMeta = statusQ.data?.search as
-    | { webExhausted?: boolean; lastWebPageFetched?: number }
+    | {
+        webExhausted?: boolean;
+        lastWebPageFetched?: number;
+        engines?: string[];
+        status?: ProspectSearchHistory["status"];
+      }
     | undefined;
   const webExhausted = searchMeta?.webExhausted === true;
+  const hasSearchEngine = (searchMeta?.engines ?? ["search"]).includes("search");
 
   const filtered = useMemo(() => {
     let rows = results;
@@ -285,24 +333,51 @@ export function PesquisaClient({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-        <p className="text-sm text-muted-foreground">
-          Encontre empresas no Google e envie para o{" "}
-          <strong className="font-medium text-foreground">pipeline padrão</strong>{" "}
-          (1º estágio) com origem rastreável — sem confirmação.
-        </p>
-        <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          A <strong className="font-medium text-foreground">1ª leva</strong> traz
-          até <strong className="font-medium text-foreground">100</strong>{" "}
-          resultados orgânicos do Google, mais o que vier do Maps; em seguida
-          removemos duplicatas, notícias e páginas que não parecem empresas — o
-          total na tela pode ser um pouco menor. Use{" "}
-          <strong className="font-medium text-foreground">Carregar mais +100</strong>{" "}
-          na mesma busca para anexar a próxima leva (mais 100 do Google), sem
-          repetir domínios que já estão na lista.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          <p className="text-sm text-muted-foreground">
+            Defina o segmento e a localização. O Menve busca no Google Maps e na
+            rede de pesquisa, prioriza empresas com site e enriquece sites com
+            WhatsApp e telefone.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setHistoryOpen(true)}
+        >
+          <Clock className="size-4" />
+          <span className="ml-2">Histórico</span>
+        </Button>
       </div>
+
+      {initialStats ? <ListaStatsCards stats={initialStats} /> : null}
+
+      <ListaCaptureForm
+        pending={searchMut.isPending}
+        error={
+          searchMut.isError
+            ? ((searchMut.error as Error)?.message ?? "Erro na captura")
+            : null
+        }
+        onSubmit={(payload) => searchMut.mutate(payload)}
+      />
+
+      <ListaHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        searches={searches}
+        onView={(id) => {
+          setActiveSearchId(id);
+          setSelected(new Set());
+          setViewTab("search");
+          requestAnimationFrame(() => {
+            document.getElementById("lista-results")?.scrollIntoView({ behavior: "smooth" });
+          });
+        }}
+      />
 
       <div className="flex gap-2 border-b border-border/60 pb-2">
         <Button
@@ -355,68 +430,7 @@ export function PesquisaClient({
           )}
         </div>
       ) : (
-        <>
-      <form
-        className="flex flex-col gap-2 sm:flex-row sm:items-end"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const fd = new FormData(e.currentTarget);
-          const q = String(fd.get("q") ?? "").trim();
-          if (q.length >= 3) searchMut.mutate(q);
-        }}
-      >
-        <div className="grid flex-1 gap-1.5">
-          <Label htmlFor="q">Buscar empresas</Label>
-          <Input
-            id="q"
-            name="q"
-            placeholder="Ex.: advogado em Florianópolis"
-            minLength={3}
-            maxLength={200}
-            disabled={searchMut.isPending}
-          />
-        </div>
-        <Button type="submit" disabled={searchMut.isPending} className="shrink-0">
-          {searchMut.isPending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Search className="size-4" />
-          )}
-          <span className="ml-2">Pesquisar</span>
-        </Button>
-      </form>
-
-      {searchMut.isError ? (
-        <p className="text-sm text-destructive">
-          {(searchMut.error as Error)?.message ?? "Erro na busca"}
-        </p>
-      ) : null}
-
-      {initialSearches.length > 0 ? (
-        <div>
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            Buscas recentes
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {initialSearches.map((s) => (
-              <Button
-                key={s.id}
-                type="button"
-                variant={activeSearchId === s.id ? "secondary" : "outline"}
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => {
-                  setActiveSearchId(s.id);
-                  setSelected(new Set());
-                }}
-              >
-                {s.query} ({s.totalCount})
-              </Button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
+        <div id="lista-results" className="space-y-4">
       {activeSearchId && statusQ.isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando resultados…</p>
       ) : null}
@@ -473,7 +487,7 @@ export function PesquisaClient({
           {!isComplete && totalWithSite > 0 ? (
             <div className="rounded-lg border border-border/60 bg-card p-3 text-sm">
               <div className="mb-1 flex justify-between text-muted-foreground">
-                <span>Enriquecendo sites…</span>
+                <span>Buscando WhatsApp e telefone nos sites…</span>
                 <span>
                   {enrichedCount}/{totalWithSite}
                 </span>
@@ -495,6 +509,7 @@ export function PesquisaClient({
               className="h-9"
               disabled={
                 !activeSearchId ||
+                !hasSearchEngine ||
                 webExhausted ||
                 loadMoreMut.isPending ||
                 searchMut.isPending
@@ -633,7 +648,24 @@ export function PesquisaClient({
                         </Badge>
                       )}
                       {r.whatsapp ? (
-                        <MessageCircle className="size-4 text-green-600" aria-label="WhatsApp" />
+                        <Badge
+                          variant="secondary"
+                          className="bg-green-500/15 text-green-700 dark:text-green-400"
+                        >
+                          {r.enrichedAt && r.source === "GOOGLE_SEARCH"
+                            ? "WhatsApp no site"
+                            : "WhatsApp"}
+                        </Badge>
+                      ) : null}
+                      {r.phone && r.source === "GOOGLE_MAPS" ? (
+                        <Badge variant="secondary" className="bg-amber-500/15 text-amber-800 dark:text-amber-300">
+                          Telefone Maps
+                        </Badge>
+                      ) : null}
+                      {r.phone && r.enrichedAt && !r.whatsapp && r.source === "GOOGLE_SEARCH" ? (
+                        <Badge variant="secondary" className="bg-blue-500/15 text-blue-700 dark:text-blue-300">
+                          Telefone no site
+                        </Badge>
                       ) : null}
                       {r.status === "CONVERTED" ? (
                         <Badge variant="outline">No pipeline</Badge>
@@ -728,7 +760,7 @@ export function PesquisaClient({
       ) : activeSearchId && !statusQ.isLoading ? (
         <p className="text-sm text-muted-foreground">Nenhum resultado nesta busca.</p>
       ) : null}
-        </>
+        </div>
       )}
 
       <Dialog open={saveListOpen} onOpenChange={setSaveListOpen}>

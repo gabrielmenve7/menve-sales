@@ -1,16 +1,12 @@
 import { apiServer } from "@/lib/api-server";
+import {
+  prospectingGetStats,
+  type ProspectSearchHistory,
+} from "@/actions/pesquisa";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { PesquisaClient } from "./pesquisa-client";
 import type { Pipeline, Stage } from "@prisma/client";
 import { redirect } from "next/navigation";
-
-type SearchHistory = {
-  id: string;
-  query: string;
-  totalCount: number;
-  createdAt: string;
-  user: { name: string | null; email: string | null };
-};
 
 type ContactRow = {
   phone: string | null;
@@ -23,8 +19,13 @@ export default async function PesquisaPage() {
     redirect("/dashboard");
   }
 
-  const [searches, pipelines, contacts] = await Promise.all([
-    apiServer<SearchHistory[]>("/prospecting/searches"),
+  const [stats, searches, pipelines, contacts] = await Promise.all([
+    prospectingGetStats().catch(() => ({
+      searches: 0,
+      companies: 0,
+      qualified: 0,
+    })),
+    apiServer<ProspectSearchHistory[]>("/prospecting/searches"),
     apiServer<(Pipeline & { stages: Stage[] })[]>("/pipelines"),
     apiServer<ContactRow[]>("/contacts"),
   ]);
@@ -36,6 +37,7 @@ export default async function PesquisaPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
       <PesquisaClient
+        initialStats={stats}
         initialSearches={searches}
         pipelines={pipelines}
         existingPhones={existingPhones}

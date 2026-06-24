@@ -15,6 +15,11 @@ import { ProspectingService } from "./prospecting.service";
 export class ProspectingController {
   constructor(private readonly prospecting: ProspectingService) {}
 
+  @Get("stats")
+  stats(@ReqUser() u: RequestUser) {
+    return this.prospecting.getStats(u.tenantId);
+  }
+
   @Post("search")
   search(@ReqUser() u: RequestUser, @Body() body: unknown) {
     return this.prospecting.search(u.tenantId, u.userId, body);
