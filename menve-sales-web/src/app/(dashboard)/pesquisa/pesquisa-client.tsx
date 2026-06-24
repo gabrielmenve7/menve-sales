@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   prospectingDeleteSearch,
   prospectingGetSearch,
@@ -25,11 +25,10 @@ import {
 import { ListaHistoryDialog } from "@/components/lista/lista-history-dialog";
 import { ListaPrincipalPanel } from "@/components/lista/lista-principal-panel";
 import { ListaStatsCards } from "@/components/lista/lista-stats-cards";
+import { ProspeccaoTabs } from "@/components/prospeccao/prospeccao-tabs";
 import { Button } from "@/components/ui/button";
-import { Clock, List, Bot } from "lucide-react";
+import { Clock } from "lucide-react";
 import type { OutreachStatus } from "@/actions/prospect-lists";
-import type { LarissaConfigResponse } from "@/actions/agents";
-import { AgentesPanel } from "@/components/agentes/agentes-panel";
 
 type ProspectRow = CaptureResultRow & {
   enrichmentData?: Record<string, unknown> | null;
@@ -79,62 +78,29 @@ function normalizeSearch(raw: unknown): ProspectSearchHistory | null {
   };
 }
 
-type ViewTab = "capture" | "lists" | "agents";
+type ViewTab = "capture" | "lists";
 
 export function PesquisaClient({
   initialStats,
   initialSearches,
   initialPrimaryList = null,
-  initialLarissaConfig = null,
   initialTab,
   showAgentsTab = false,
-  agentsPath = "/lista/agentes",
-  listaPath = "/lista",
   title = "Pesquisa",
 }: {
   initialStats?: ProspectStats;
   initialSearches: ProspectSearchHistory[];
   initialPrimaryList?: PrimaryProspectListDetail | null;
-  initialLarissaConfig?: LarissaConfigResponse | null;
   initialTab?: ViewTab;
   showAgentsTab?: boolean;
-  agentsPath?: string;
-  listaPath?: string;
   title?: string;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [viewTab, setViewTab] = useState<ViewTab>(
-    initialTab ?? (searchParams.get("tab") === "agentes" ? "agents" : "capture"),
-  );
+  const [viewTab, setViewTab] = useState<ViewTab>(initialTab ?? "capture");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [searches, setSearches] = useState(initialSearches);
   const [activeSearchId, setActiveSearchId] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
-
-  function selectTab(tab: ViewTab) {
-    setViewTab(tab);
-    if (tab === "agents") {
-      router.replace(agentsPath, { scroll: false });
-    } else {
-      router.replace(listaPath, { scroll: false });
-    }
-  }
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const path = window.location.pathname.replace(/\/$/, "");
-      const agents = agentsPath.replace(/\/$/, "");
-      if (path === agents || path.endsWith("/agentes")) {
-        if (showAgentsTab) setViewTab("agents");
-        return;
-      }
-    }
-    const t = searchParams.get("tab");
-    if (t === "agentes" && showAgentsTab) {
-      setViewTab("agents");
-    }
-  }, [searchParams, showAgentsTab, agentsPath]);
 
   useEffect(() => {
     setSearches(initialSearches);
@@ -245,42 +211,15 @@ export function PesquisaClient({
 
       {initialStats ? <ListaStatsCards stats={initialStats} /> : null}
 
-      <div className="flex flex-wrap gap-2 border-b border-border/60 pb-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={viewTab === "capture" ? "secondary" : "ghost"}
-          onClick={() => selectTab("capture")}
-        >
-          Capturar
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={viewTab === "lists" ? "secondary" : "ghost"}
-          onClick={() => selectTab("lists")}
-        >
-          <List className="size-4" />
-          <span className="ml-2">
-            Minha lista ({primaryListQ.data?.itemCount ?? 0})
-          </span>
-        </Button>
-        {showAgentsTab ? (
-          <Button
-            type="button"
-            size="sm"
-            variant={viewTab === "agents" ? "secondary" : "ghost"}
-            onClick={() => selectTab("agents")}
-          >
-            <Bot className="size-4" />
-            <span className="ml-2">Agentes IA</span>
-          </Button>
-        ) : null}
-      </div>
+      <ProspeccaoTabs
+        active={viewTab}
+        listItemCount={primaryListQ.data?.itemCount ?? 0}
+        showAgentsTab={showAgentsTab}
+        onSelectCapture={() => setViewTab("capture")}
+        onSelectLists={() => setViewTab("lists")}
+      />
 
-      {viewTab === "agents" && initialLarissaConfig ? (
-        <AgentesPanel initial={initialLarissaConfig} embedded />
-      ) : viewTab === "lists" ? (
+      {viewTab === "lists" ? (
         <ListaPrincipalPanel
           list={primaryListQ.data ?? null}
           loading={primaryListQ.isLoading}

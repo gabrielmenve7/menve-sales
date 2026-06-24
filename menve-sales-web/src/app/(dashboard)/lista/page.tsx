@@ -1,4 +1,3 @@
-import { getLarissaConfig } from "@/actions/agents";
 import { apiServer } from "@/lib/api-server";
 import { getPrimaryProspectList } from "@/actions/prospect-lists";
 import {
@@ -6,7 +5,6 @@ import {
   type ProspectSearchHistory,
   type ProspectStats,
 } from "@/actions/pesquisa";
-import { LARISSA_CONFIG_FALLBACK } from "@/lib/larissa-config-fallback";
 import { canConfigureTenant } from "@/lib/session";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { PesquisaClient } from "../pesquisa/pesquisa-client";
@@ -26,15 +24,16 @@ export default async function ListaPage({
   const { tab } = await searchParams;
   const canManageAgents = await canConfigureTenant();
 
-  const [stats, searches, primaryList, larissaConfig] = await Promise.all([
+  if (tab === "agentes" && canManageAgents) {
+    redirect("/lista/agentes");
+  }
+
+  const [stats, searches, primaryList] = await Promise.all([
     prospectingGetStats().catch(
       (): ProspectStats => ({ searches: 0, companies: 0, qualified: 0 }),
     ),
     apiServer<ProspectSearchHistory[]>("/prospecting/searches"),
     getPrimaryProspectList().catch(() => null),
-    canManageAgents
-      ? getLarissaConfig().catch(() => LARISSA_CONFIG_FALLBACK)
-      : Promise.resolve(null),
   ]);
 
   return (
@@ -44,11 +43,8 @@ export default async function ListaPage({
         initialStats={stats}
         initialSearches={searches}
         initialPrimaryList={primaryList}
-        initialTab={tab === "agentes" && canManageAgents ? "agents" : undefined}
-        initialLarissaConfig={larissaConfig}
+        initialTab={tab === "lista" ? "lists" : undefined}
         showAgentsTab={canManageAgents}
-        agentsPath="/lista/agentes"
-        listaPath="/lista"
       />
     </div>
   );

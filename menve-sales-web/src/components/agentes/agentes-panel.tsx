@@ -231,7 +231,7 @@ export function AgentesPanel({
         <p className="mt-1 text-xs text-muted-foreground">
           Fonte versionada em{" "}
           <code className="rounded bg-muted px-1">
-            .cursor/rules/agent-larissa.mdc
+            src/agents/definitions/agent-larissa.mdc
           </code>
         </p>
         <ul className="mt-3 space-y-2">

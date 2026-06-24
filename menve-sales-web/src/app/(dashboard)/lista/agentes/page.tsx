@@ -1,15 +1,10 @@
 import { getLarissaConfig } from "@/actions/agents";
-import { apiServer } from "@/lib/api-server";
 import { getPrimaryProspectList } from "@/actions/prospect-lists";
-import {
-  prospectingGetStats,
-  type ProspectSearchHistory,
-  type ProspectStats,
-} from "@/actions/pesquisa";
+import { AgentesPanel } from "@/components/agentes/agentes-panel";
+import { ProspeccaoTabs } from "@/components/prospeccao/prospeccao-tabs";
 import { LARISSA_CONFIG_FALLBACK } from "@/lib/larissa-config-fallback";
 import { canConfigureTenant } from "@/lib/session";
 import { getTenantFromRequest } from "@/lib/tenant";
-import { PesquisaClient } from "../../pesquisa/pesquisa-client";
 import { redirect } from "next/navigation";
 
 export default async function ListaAgentesPage() {
@@ -24,28 +19,29 @@ export default async function ListaAgentesPage() {
     redirect("/lista");
   }
 
-  const [stats, searches, primaryList, larissaConfig] = await Promise.all([
-    prospectingGetStats().catch(
-      (): ProspectStats => ({ searches: 0, companies: 0, qualified: 0 }),
-    ),
-    apiServer<ProspectSearchHistory[]>("/prospecting/searches"),
+  const [primaryList, larissaConfig] = await Promise.all([
     getPrimaryProspectList().catch(() => null),
     getLarissaConfig().catch(() => LARISSA_CONFIG_FALLBACK),
   ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-3">
-      <PesquisaClient
-        title="Lista"
-        initialStats={stats}
-        initialSearches={searches}
-        initialPrimaryList={primaryList}
-        initialTab="agents"
-        initialLarissaConfig={larissaConfig}
-        showAgentsTab
-        agentsPath="/lista/agentes"
-        listaPath="/lista"
-      />
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Agentes IA</h1>
+          <p className="text-sm text-muted-foreground">
+            Configure agentes para qualificar leads no Atendimento após o
+            Disparo.
+          </p>
+        </div>
+
+        <ProspeccaoTabs
+          active="agents"
+          listItemCount={primaryList?.itemCount ?? 0}
+        />
+
+        <AgentesPanel initial={larissaConfig} embedded />
+      </div>
     </div>
   );
 }

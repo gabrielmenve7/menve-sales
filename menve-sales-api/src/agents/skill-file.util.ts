@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { parseFrontmatter } from "./skill-file-parse";
 
@@ -17,10 +17,14 @@ export type ParsedAgentDefinition = {
   skills: ParsedSkillFile[];
 };
 
-const RULES_DIR = path.join(process.cwd(), "..", ".cursor", "rules");
+const CURSOR_RULES_DIR = path.join(process.cwd(), "..", ".cursor", "rules");
+
+function bundledDefinitionsDir(): string {
+  return path.join(__dirname, "definitions");
+}
 
 export function resolveRulesDir(): string {
-  return RULES_DIR;
+  return CURSOR_RULES_DIR;
 }
 
 /** `agent-larissa.mdc` → `larissa` */
@@ -81,15 +85,29 @@ export function parseAgentSections(
   return skills;
 }
 
+async function resolveAgentFilePath(
+  agentKey: string,
+): Promise<{ fullPath: string; sourcePath: string }> {
+  const filename = `agent-${agentKey}.mdc`;
+  const bundled = path.join(bundledDefinitionsDir(), filename);
+  try {
+    await access(bundled);
+    return {
+      fullPath: bundled,
+      sourcePath: `src/agents/definitions/${filename}`,
+    };
+  } catch {
+    const cursor = path.join(CURSOR_RULES_DIR, filename);
+    return { fullPath: cursor, sourcePath: `.cursor/rules/${filename}` };
+  }
+}
+
 export async function loadAgentDefinition(
   agentKey: string,
 ): Promise<ParsedAgentDefinition> {
-  const rulesDir = resolveRulesDir();
-  const filename = `agent-${agentKey}.mdc`;
-  const fullPath = path.join(rulesDir, filename);
+  const { fullPath, sourcePath } = await resolveAgentFilePath(agentKey);
   const raw = await readFile(fullPath, "utf8");
   const { meta, body } = parseFrontmatter(raw);
-  const sourcePath = `.cursor/rules/${filename}`;
 
   return {
     agentKey: meta.agentKey?.trim() || agentKey,
@@ -101,8 +119,18 @@ export async function loadAgentDefinition(
 }
 
 export async function listAgentKeys(): Promise<string[]> {
-  const rulesDir = resolveRulesDir();
-  const files = await readdir(rulesDir);
+  try {
+    const bundled = bundledDefinitionsDir();
+    const files = await readdir(bundled);
+    const keys = files
+      .map(agentKeyFromFilename)
+      .filter((k): k is string => Boolean(k));
+    if (keys.length > 0) return keys.sort();
+  } catch {
+    // fallback para dev local com .cursor/rules
+  }
+
+  const files = await readdir(CURSOR_RULES_DIR);
   return files
     .map(agentKeyFromFilename)
     .filter((k): k is string => Boolean(k))
