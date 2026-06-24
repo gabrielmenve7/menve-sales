@@ -115,61 +115,76 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
   async fetchInboundMediaBase64(args: {
     keyId: string;
     keyIdAlt?: string;
+    downloadIds?: string[];
     remoteJid: string;
     remoteJidAlt?: string;
   }) {
-    const ids = [args.keyId, args.keyIdAlt].filter(
-      (id, i, arr) => typeof id === "string" && id.trim() && arr.indexOf(id) === i,
-    ) as string[];
+    const ids = orderZappfyDownloadIds(
+      args.downloadIds?.length
+        ? args.downloadIds
+        : [args.keyIdAlt, args.keyId].filter(
+            (id): id is string => typeof id === "string" && !!id.trim(),
+          ),
+    );
 
     const jids = [args.remoteJid, args.remoteJidAlt].filter(
       (j, i, arr) => typeof j === "string" && j.trim() && arr.indexOf(j) === i,
     ) as string[];
 
-    for (const id of ids) {
-      const zappfyDownloadBodies: Record<string, unknown>[] = [
-        {
-          id,
-          return_base64: true,
-          return_link: true,
-          generate_mp3: true,
-        },
-        { id, return_base64: true, return_link: false, generate_mp3: true },
-        { id, return_base64: true },
-      ];
-
-      for (const body of zappfyDownloadBodies) {
-        const parsed = await this.postZappfyMediaDownload("/message/download", body);
-        if (parsed) return parsed;
+    const delaysMs = [0, 600, 1500];
+    for (const delayMs of delaysMs) {
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-
-      for (const jid of jids) {
-        const evolutionBodies = [
+      for (const id of ids) {
+        const zappfyDownloadBodies: Record<string, unknown>[] = [
+          { id },
+          { id, generate_mp3: true },
+          { id, return_link: true, generate_mp3: true },
           {
-            message: { key: { id, remoteJid: jid } },
-            convertToMp4: false,
+            id,
+            return_base64: true,
+            return_link: true,
+            generate_mp3: true,
           },
+          { id, return_base64: true, return_link: false, generate_mp3: true },
+          { id, return_base64: true, generate_mp3: false },
+          { id, return_base64: true },
         ];
+
+        for (const body of zappfyDownloadBodies) {
+          const parsed = await this.postZappfyMediaDownload("/message/download", body, id);
+          if (parsed) return parsed;
+        }
+
+        for (const jid of jids) {
+          for (const path of [
+            "/chat/getBase64FromMediaMessage",
+            "/message/getBase64FromMediaMessage",
+          ]) {
+            const parsed = await this.postZappfyMediaDownload(
+              path,
+              {
+                message: { key: { id, remoteJid: jid } },
+                convertToMp4: false,
+              },
+              id,
+            );
+            if (parsed) return parsed;
+          }
+        }
+
         for (const path of [
           "/chat/getBase64FromMediaMessage",
           "/message/getBase64FromMediaMessage",
         ]) {
-          for (const body of evolutionBodies) {
-            const parsed = await this.postZappfyMediaDownload(path, body);
-            if (parsed) return parsed;
-          }
+          const parsed = await this.postZappfyMediaDownload(
+            path,
+            { message: { key: { id } }, convertToMp4: false },
+            id,
+          );
+          if (parsed) return parsed;
         }
-      }
-
-      for (const path of [
-        "/chat/getBase64FromMediaMessage",
-        "/message/getBase64FromMediaMessage",
-      ]) {
-        const parsed = await this.postZappfyMediaDownload(path, {
-          message: { key: { id } },
-          convertToMp4: false,
-        });
-        if (parsed) return parsed;
       }
     }
 
@@ -179,6 +194,7 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
   private async postZappfyMediaDownload(
     path: string,
     body: Record<string, unknown>,
+    messageId: string,
   ): Promise<{ base64?: string; url?: string; mimetype?: string } | null> {
     try {
       const res = await fetch(`${this.base()}${path}`, {
@@ -186,10 +202,37 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
         headers: this.headers(),
         body: JSON.stringify(body),
       });
-      if (!res.ok) return null;
       const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      return extractZappfyDownloadPayload(json);
-    } catch {
+      if (!res.ok) {
+        console.warn("[zappfy:media-download]", {
+          path,
+          status: res.status,
+          messageId,
+          error:
+            typeof json.error === "string"
+              ? json.error
+              : typeof json.message === "string"
+                ? json.message
+                : null,
+        });
+        return null;
+      }
+      const parsed = extractZappfyDownloadPayload(json);
+      if (!parsed) {
+        console.warn("[zappfy:media-download]", {
+          path,
+          status: res.status,
+          messageId,
+          keys: Object.keys(json).slice(0, 12).join(","),
+        });
+      }
+      return parsed;
+    } catch (e) {
+      console.warn("[zappfy:media-download]", {
+        path,
+        messageId,
+        error: e instanceof Error ? e.message : String(e),
+      });
       return null;
     }
   }
@@ -750,26 +793,92 @@ function resolveZappfySenderIdentity(blob: Record<string, unknown>): {
   return null;
 }
 
+function orderZappfyDownloadIds(ids: string[]): string[] {
+  const unique = ids
+    .map((id) => id.trim())
+    .filter((id, i, arr) => id && arr.indexOf(id) === i);
+  return unique.sort((a, b) => {
+    const aComposite = a.includes(":");
+    const bComposite = b.includes(":");
+    if (aComposite && !bComposite) return -1;
+    if (!aComposite && bComposite) return 1;
+    return b.length - a.length;
+  });
+}
+
+function buildZappfyDownloadIds(
+  blob: Record<string, unknown>,
+  key?: Record<string, unknown>,
+): string[] {
+  const messageIdRaw = asTrimmedString(pickBlobField(blob, "messageId", "messageid"));
+  const idRaw = asTrimmedString(pickBlobField(blob, "id"));
+  const keyIdStr = key?.id ? String(key.id) : undefined;
+  const flatChatId = asTrimmedString(pickBlobField(blob, "chatId", "chatid"));
+  const chatDigits = flatChatId ? digitsFromJidOrPhone(flatChatId) : "";
+  const hexFromId = idRaw?.includes(":") ? (idRaw.split(":")[1] ?? "") : "";
+
+  const candidates: string[] = [];
+  const push = (v?: string | null) => {
+    const t = v?.trim();
+    if (t) candidates.push(t);
+  };
+
+  push(idRaw?.includes(":") ? idRaw : undefined);
+  if (messageIdRaw && idRaw?.includes(":")) {
+    push(`${idRaw.split(":")[0]}:${messageIdRaw}`);
+  }
+  if (messageIdRaw && chatDigits) push(`${chatDigits}:${messageIdRaw}`);
+  if (hexFromId && messageIdRaw && hexFromId !== messageIdRaw) {
+    push(messageIdRaw);
+  }
+  push(idRaw);
+  push(messageIdRaw);
+  push(keyIdStr);
+
+  return orderZappfyDownloadIds(candidates);
+}
+
+function collectZappfyResponseNodes(
+  json: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const nodes: Record<string, unknown>[] = [];
+  const seen = new Set<Record<string, unknown>>();
+  const visit = (node: Record<string, unknown>) => {
+    if (seen.has(node)) return;
+    seen.add(node);
+    nodes.push(node);
+    for (const key of [
+      "data",
+      "result",
+      "response",
+      "file",
+      "media",
+      "message",
+      "payload",
+    ]) {
+      const child = node[key];
+      if (child && typeof child === "object" && !Array.isArray(child)) {
+        visit(child as Record<string, unknown>);
+      }
+    }
+  };
+  visit(json);
+  return nodes;
+}
+
 function extractZappfyDownloadPayload(
   json: Record<string, unknown>,
 ): { base64?: string; url?: string; mimetype?: string } | null {
   const pick = (v: unknown): string | undefined =>
     typeof v === "string" && v.trim() ? v.trim() : undefined;
 
-  const nodes: Record<string, unknown>[] = [json];
-  if (json.data && typeof json.data === "object" && !Array.isArray(json.data)) {
-    nodes.push(json.data as Record<string, unknown>);
-  }
-  if (json.result && typeof json.result === "object" && !Array.isArray(json.result)) {
-    nodes.push(json.result as Record<string, unknown>);
-  }
-
-  for (const node of nodes) {
+  for (const node of collectZappfyResponseNodes(json)) {
     const url =
       pick(node.fileURL) ||
       pick(node.fileUrl) ||
       pick(node.url) ||
-      pick(node.mediaUrl);
+      pick(node.mediaUrl) ||
+      pick(node.link);
     const b64 =
       pick(node.base64Data) ||
       pick(node.base64) ||
@@ -1038,18 +1147,13 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
   const text = extractZappfyText(blob, message);
   if (!text) return null;
 
+  const downloadIds = buildZappfyDownloadIds(blob, key);
   const messageIdRaw = asTrimmedString(pickBlobField(blob, "messageId", "messageid"));
   const idRaw = asTrimmedString(pickBlobField(blob, "id"));
-  const keyId =
-    (key?.id ? String(key.id) : undefined) ?? messageIdRaw ?? idRaw ?? undefined;
-  const keyIdAlt = [messageIdRaw, idRaw, key?.id ? String(key.id) : undefined].find(
-    (v) => v && v !== keyId,
-  );
+  const keyId = downloadIds[0] ?? messageIdRaw ?? idRaw ?? undefined;
+  const keyIdAlt = downloadIds.find((id) => id !== keyId);
   const externalId = String(
-    keyId ??
-      blob.messageId ??
-      blob.id ??
-      `${from}-${Date.now()}`,
+    messageIdRaw ?? idRaw ?? keyId ?? `${from}-${Date.now()}`,
   );
   const fromMe = blob.fromMe === true || key?.fromMe === true;
   const media = extractZappfyMedia(blob, message);
@@ -1077,6 +1181,7 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
       remoteJidAlt:
         typeof key?.remoteJidAlt === "string" ? key.remoteJidAlt : undefined,
       keyIdAlt: keyIdAlt || undefined,
+      downloadIds: downloadIds.length > 0 ? downloadIds : undefined,
     },
   };
 }

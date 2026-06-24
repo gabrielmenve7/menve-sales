@@ -21,6 +21,8 @@ export type NormalizedInbound = {
     remoteJidAlt?: string;
     /** ID alternativo da mensagem (ex.: `id` vs `messageid` no webhook flat). */
     keyIdAlt?: string;
+    /** IDs candidatos para POST /message/download (ordem importa). */
+    downloadIds?: string[];
   };
 };
 
@@ -73,6 +75,7 @@ export interface IWhatsAppProvider {
   fetchInboundMediaBase64?(args: {
     keyId: string;
     keyIdAlt?: string;
+    downloadIds?: string[];
     remoteJid: string;
     remoteJidAlt?: string;
   }): Promise<{ base64?: string; url?: string; mimetype?: string } | null>;

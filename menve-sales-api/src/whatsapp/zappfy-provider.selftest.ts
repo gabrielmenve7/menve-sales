@@ -188,8 +188,35 @@ const flatAudio = provider.parseWebhook({
 });
 assert(flatAudio.length === 1, "formato painel audio");
 assert(flatAudio[0]?.body === "[Áudio]", "placeholder audio");
-assert(flatAudio[0]?.whatsappKeyId === "AUDIO_FLAT_1", "messageid como whatsappKeyId");
+assert(
+  flatAudio[0]?.debug?.downloadIds?.some((id) => id.includes("AUDIO_FLAT_1")),
+  "messageid nos downloadIds",
+);
 assert(flatAudio[0]?.from === "5519992105272", "telefone audio via chatid");
+
+const flatAudioComposite = provider.parseWebhook({
+  event: "messages",
+  data: {
+    chatid: "5519992105272@s.whatsapp.net",
+    chatlid: "271361050177610@lid",
+    content: "",
+    fromMe: false,
+    mediaType: "AudioMessage",
+    messageid: "3AE67FADDA1309FABC05",
+    id: "5519989854940:3AE67FADDA1309FABC05",
+    messageTimestamp: 1_719_000_000,
+  },
+});
+assert(flatAudioComposite.length === 1, "audio com id composto");
+assert(
+  flatAudioComposite[0]?.whatsappKeyId === "5519989854940:3AE67FADDA1309FABC05",
+  "prioriza id phone:messageid para download",
+);
+assert(
+  flatAudioComposite[0]?.debug?.downloadIds?.[0] ===
+    "5519989854940:3AE67FADDA1309FABC05",
+  "downloadIds com id composto primeiro",
+);
 
 const flatAudioB64 = provider.parseWebhook({
   event: "messages",

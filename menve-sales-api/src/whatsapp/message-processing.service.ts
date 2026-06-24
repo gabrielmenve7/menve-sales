@@ -284,6 +284,7 @@ export class MessageProcessingService {
         const fetched = await fetchFn({
           keyId,
           keyIdAlt: args.inbound.debug?.keyIdAlt,
+          downloadIds: args.inbound.debug?.downloadIds,
           remoteJid: remoteJid ?? remoteJidAlt ?? "",
           remoteJidAlt,
         }).catch(() => null);
@@ -305,6 +306,7 @@ export class MessageProcessingService {
             connectionId: conn.id,
             keyId,
             keyIdAlt: args.inbound.debug?.keyIdAlt ?? null,
+            downloadIds: args.inbound.debug?.downloadIds ?? null,
             body: args.inbound.body,
             provider: conn.provider,
           });
