@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ForbiddenException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -10,6 +12,7 @@ import {
   ProspectStatus,
 } from "@prisma/client";
 import { z } from "zod";
+import { DealsService } from "../deals/deals.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { resolveBrazilianPhoneFromCandidates } from "./phone-utils";
 import {
@@ -49,7 +52,11 @@ const bulkConvertSchema = z.object({
 
 @Injectable()
 export class ProspectingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => DealsService))
+    private readonly dealsService: DealsService,
+  ) {}
 
   private async ensureResearchEnabled(tenantId: string) {
     const t = await this.prisma.tenant.findUnique({
@@ -514,17 +521,19 @@ export class ProspectingService {
       actorUserId,
     );
 
-    await this.prisma.deal.create({
-      data: {
-        tenantId,
-        contactId: contact.id,
-        pipelineId: pipeline.id,
-        stageId: stage0.id,
-        title,
-        value: data.value,
-        ...(assignedToId ? { assignedToId } : {}),
-      },
+    const created = await this.dealsService.create(tenantId, actorUserId, {
+      contactId: contact.id,
+      pipelineId: pipeline.id,
+      stageId: stage0.id,
+      title,
+      value: data.value,
     });
+
+    if (assignedToId) {
+      await this.dealsService.patch(tenantId, actorUserId, created.id, {
+        assignedToId,
+      });
+    }
 
     await this.prisma.prospectResult.update({
       where: { id: resultId },

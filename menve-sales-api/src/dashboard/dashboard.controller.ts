@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from "@nestjs/common";
 import { ZodError } from "zod";
 import { ReqUser } from "../common/req-user.decorator";
@@ -34,6 +35,15 @@ export class DashboardController {
   @Get("stats")
   stats(@ReqUser() u: RequestUser) {
     return this.dashboard.stats(u.tenantId);
+  }
+
+  @Get("revenue")
+  revenue(
+    @ReqUser() u: RequestUser,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.dashboard.revenue(u.tenantId, from, to);
   }
 
   @Get("boards")

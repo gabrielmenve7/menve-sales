@@ -46,16 +46,17 @@ import { Label } from "@/components/ui/label";
 import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
 import { cn } from "@/lib/utils";
 
-type ChannelOption = "evolution" | "meta" | "instagram";
+type ChannelOption = "zappfy" | "evolution" | "meta" | "instagram";
 
 const PROVIDER_LABELS: Record<string, string> = {
+  ZAPPFY: "WhatsApp (Zappfy)",
   EVOLUTION: "WhatsApp (Evolution)",
   META: "WhatsApp Official",
   INSTAGRAM: "Instagram",
 };
 
 function providerIcon(provider: string) {
-  if (provider === "EVOLUTION" || provider === "META") {
+  if (provider === "EVOLUTION" || provider === "META" || provider === "ZAPPFY") {
     return (
       <span className="flex size-8 items-center justify-center rounded-lg bg-green-500/10 text-green-600">
         <WhatsAppLogo className="size-4" />
@@ -78,14 +79,14 @@ function reloadSettingsChannelsPage() {
   window.location.assign("/settings?tab=channels");
 }
 
-type EvolutionPairOk = { ok: true; connectionId: string; qrDataUrl: string };
+type PairOk = { ok: true; connectionId: string; qrDataUrl: string };
 
-async function evolutionPairHttp(): Promise<EvolutionPairOk> {
+async function pairHttp(provider: "ZAPPFY" | "EVOLUTION" = "ZAPPFY"): Promise<PairOk> {
   const res = await fetch("/api/whatsapp/pair", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ provider }),
   });
   let data: unknown;
   try {
@@ -147,6 +148,7 @@ export function SettingsChannels({
   /** Modal abre já com spinner: pareamento pode levar vários segundos (Evolution + API). */
   const [pairingStarting, setPairingStarting] = useState(false);
   const [pairingConnId, setPairingConnId] = useState<string | null>(null);
+  const [pairingProvider, setPairingProvider] = useState<"ZAPPFY" | "EVOLUTION">("ZAPPFY");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(QR_COUNTDOWN);
@@ -188,8 +190,10 @@ export function SettingsChannels({
   function selectChannelType(type: ChannelOption) {
     setNewOpen(false);
     setSelectedType(type);
-    if (type === "evolution") {
-      void startEvolutionFlow();
+    if (type === "zappfy") {
+      void startPairingFlow("ZAPPFY");
+    } else if (type === "evolution") {
+      void startPairingFlow("EVOLUTION");
     } else if (type === "meta") {
       setMetaWizardStep(0);
       setMetaCreatedConnectionId(null);
@@ -203,17 +207,22 @@ export function SettingsChannels({
     }
   }
 
-  async function startEvolutionFlow() {
+  async function startPairingFlow(provider: "ZAPPFY" | "EVOLUTION") {
     setLoading(true);
     setPairingStarting(true);
     setPairingError(null);
     setQrDataUrl(null);
     setPairingConnId(null);
+    setPairingProvider(provider);
     setPairingOpen(true);
     try {
-      const r = await evolutionPairHttp();
+      const r = await pairHttp(provider);
       if (!r.qrDataUrl?.trim()) {
-        throw new Error("A API não retornou o QR Code. Verifique Evolution e PUBLIC_APP_URL.");
+        throw new Error(
+          provider === "ZAPPFY"
+            ? "A API não retornou o QR Code. Verifique Zappfy e PUBLIC_APP_URL."
+            : "A API não retornou o QR Code. Verifique Evolution e PUBLIC_APP_URL.",
+        );
       }
       setPairingConnId(r.connectionId);
       setQrDataUrl(r.qrDataUrl);
@@ -427,7 +436,7 @@ export function SettingsChannels({
     }
   }
 
-  async function onReapplyEvolutionWebhook(connectionId: string) {
+  async function onReapplyPairingWebhook(connectionId: string) {
     setReapplyWebhookId(connectionId);
     try {
       const res = await fetch(
@@ -599,12 +608,13 @@ export function SettingsChannels({
             {connections.map((c) => (
               <div key={c.id} className="rounded-lg border p-3">
                 <p className="font-medium">{c.name} — {PROVIDER_LABELS[c.provider] ?? c.provider}</p>
-                {c.provider === "EVOLUTION" ? (
+                {c.provider === "EVOLUTION" || c.provider === "ZAPPFY" ? (
                   <div className="mt-2 space-y-2">
                     <p className="break-all text-xs text-muted-foreground">
                       POST{" "}
                       <code>
-                        {webhookBaseUrl}/webhooks/whatsapp/evolution/{c.id}
+                        {webhookBaseUrl}/webhooks/whatsapp/
+                        {c.provider === "ZAPPFY" ? "zappfy" : "evolution"}/{c.id}
                       </code>
                     </p>
                     <Button
@@ -613,14 +623,14 @@ export function SettingsChannels({
                       size="sm"
                       className="gap-1.5"
                       disabled={reapplyWebhookId === c.id}
-                      onClick={() => void onReapplyEvolutionWebhook(c.id)}
+                      onClick={() => void onReapplyPairingWebhook(c.id)}
                     >
                       {reapplyWebhookId === c.id ? (
                         <Loader2 className="size-3.5 animate-spin" />
                       ) : (
                         <RefreshCw className="size-3.5" />
                       )}
-                      Reaplicar webhook na Evolution
+                      Reaplicar webhook na {c.provider === "ZAPPFY" ? "Zappfy" : "Evolution"}
                     </Button>
                     <p className="text-[11px] text-muted-foreground">
                       Use após mudar a URL pública da API (ex.: túnel ngrok) em{" "}
@@ -806,6 +816,19 @@ export function SettingsChannels({
             <button
               type="button"
               className="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted/50"
+              onClick={() => selectChannelType("zappfy")}
+            >
+              {providerIcon("ZAPPFY")}
+              <div>
+                <p className="text-sm font-medium">WhatsApp (Zappfy)</p>
+                <p className="text-xs text-muted-foreground">
+                  Conecte via Zappfy — recomendado para novas conexões
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted/50"
               onClick={() => selectChannelType("evolution")}
             >
               {providerIcon("EVOLUTION")}
@@ -873,7 +896,9 @@ export function SettingsChannels({
             {pairingStarting ? (
               <div className="flex h-56 w-56 flex-col items-center justify-center gap-2 rounded-md border bg-muted px-4 text-center">
                 <Loader2 className="size-10 animate-spin text-muted-foreground" aria-hidden />
-                <p className="text-xs text-muted-foreground">Gerando QR com a Evolution… pode levar até um minuto.</p>
+                <p className="text-xs text-muted-foreground">
+                  Gerando QR com a {pairingProvider === "ZAPPFY" ? "Zappfy" : "Evolution"}… pode levar até um minuto.
+                </p>
               </div>
             ) : qrDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element

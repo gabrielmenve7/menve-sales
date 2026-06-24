@@ -166,4 +166,73 @@ export class DashboardService {
 
     return { total, won, open, contactRate, funnel };
   }
+
+  async revenue(
+    tenantId: string,
+    from?: string,
+    to?: string,
+  ) {
+    const fromDate = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const toDate = to ? new Date(to) : new Date();
+    toDate.setHours(23, 59, 59, 999);
+
+    const [wonAgg, openAgg, openCount, wonDeals] = await Promise.all([
+      this.prisma.deal.aggregate({
+        where: {
+          tenantId,
+          status: "WON",
+          updatedAt: { gte: fromDate, lte: toDate },
+        },
+        _sum: { value: true },
+        _count: { _all: true },
+      }),
+      this.prisma.deal.aggregate({
+        where: { tenantId, status: "OPEN" },
+        _sum: { value: true },
+      }),
+      this.prisma.deal.count({ where: { tenantId, status: "OPEN" } }),
+      this.prisma.deal.findMany({
+        where: {
+          tenantId,
+          status: "WON",
+          updatedAt: { gte: fromDate, lte: toDate },
+          assignedToId: { not: null },
+        },
+        select: {
+          assignedToId: true,
+          value: true,
+          assignedTo: { select: { id: true, name: true } },
+        },
+      }),
+    ]);
+
+    const sellerMap = new Map<
+      string,
+      { userId: string; name: string | null; wonCount: number; wonValueBrl: number }
+    >();
+    for (const d of wonDeals) {
+      const uid = d.assignedToId!;
+      const cur = sellerMap.get(uid) ?? {
+        userId: uid,
+        name: d.assignedTo?.name ?? null,
+        wonCount: 0,
+        wonValueBrl: 0,
+      };
+      cur.wonCount += 1;
+      cur.wonValueBrl += Number(d.value ?? 0);
+      sellerMap.set(uid, cur);
+    }
+
+    return {
+      from: fromDate.toISOString(),
+      to: toDate.toISOString(),
+      wonValueBrl: Number(wonAgg._sum.value ?? 0),
+      wonCount: wonAgg._count._all,
+      forecastBrl: Number(openAgg._sum.value ?? 0),
+      openCount,
+      sellers: [...sellerMap.values()].sort(
+        (a, b) => b.wonValueBrl - a.wonValueBrl,
+      ),
+    };
+  }
 }

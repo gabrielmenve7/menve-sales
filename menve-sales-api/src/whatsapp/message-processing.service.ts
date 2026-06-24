@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import {
   ConversationStatus,
   MessageAckStatus,
@@ -7,6 +7,7 @@ import {
   WhatsAppProvider,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { OutreachService } from "../outreach/outreach.service";
 import { extractEvolutionMessageAckUpdates } from "./evolution-provider";
 import type { EvolutionMessageAckLevel } from "./evolution-provider";
 import { createWhatsAppProvider } from "./factory";
@@ -42,7 +43,10 @@ function normalizePhone(raw: string) {
 
 @Injectable()
 export class MessageProcessingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly outreach?: OutreachService,
+  ) {}
 
   async processInboundWhatsApp(args: {
     tenantId: string;
@@ -240,6 +244,20 @@ export class MessageProcessingService {
       },
     });
 
+    if (!outboundFromDevice && this.outreach) {
+      void this.outreach
+        .handleInboundReply({
+          tenantId: args.tenantId,
+          phone,
+          contactId: contact.id,
+          conversationId: conversation.id,
+          messageId: args.inbound.externalId,
+        })
+        .catch(() => {
+          /* não bloquear webhook */
+        });
+    }
+
     // Só quando o cliente envia mensagem: marcar mensagens nossas anteriores como lidas por ele.
     if (!outboundFromDevice) {
       await this.prisma.message.updateMany({
@@ -255,6 +273,12 @@ export class MessageProcessingService {
         },
         data: { ackStatus: MessageAckStatus.READ },
       });
+    }
+
+    if (!outboundFromDevice && this.outreach) {
+      await this.outreach
+        .handleInboundOptOut(args.tenantId, phone, args.inbound.body)
+        .catch(() => 0);
     }
 
     return { ok: true as const };

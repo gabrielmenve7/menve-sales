@@ -21,6 +21,7 @@ export async function updateTenantResearchEnabled(researchEnabled: boolean) {
   });
   revalidatePath("/settings");
   revalidatePath("/dashboard");
+  revalidatePath("/lista");
   revalidatePath("/pesquisa");
 }
 

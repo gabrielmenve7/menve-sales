@@ -1,6 +1,10 @@
 import { getSessionCached } from "@/lib/get-session-cached";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { fetchAuthMeForWebSession } from "@/lib/fetch-user-workspaces";
+import {
+  canConfigureTenant,
+  canManageWorkspaceFeatures,
+} from "@/lib/session";
 import { getTenantFromRequest } from "@/lib/tenant";
 import { redirect } from "next/navigation";
 
@@ -39,11 +43,18 @@ export default async function DashboardLayout({
     ? await fetchAuthMeForWebSession(session.user.accessToken)
     : null;
 
+  const [canManageWorkspace, canConfigure] = await Promise.all([
+    canManageWorkspaceFeatures(),
+    canConfigureTenant(),
+  ]);
+
   return (
     <DashboardShell
       tenant={tenantForShell}
       workspaces={me?.workspaces?.length ? me.workspaces : []}
       isSuperAdmin={isSuperAdmin}
+      canManageWorkspace={canManageWorkspace}
+      canConfigureTenant={canConfigure}
       researchEnabled={researchEnabled}
       userName={me?.name ?? session.user.name}
       userEmail={me?.email ?? session.user.email ?? ""}

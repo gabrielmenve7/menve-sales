@@ -16,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Public } from "../common/public.decorator";
 import { createWhatsAppProvider } from "../whatsapp/factory";
 import { getEvolutionWebhookParseMeta } from "../whatsapp/evolution-provider";
+import { getZappfyWebhookParseMeta } from "../whatsapp/zappfy-provider";
 import { MessageProcessingService } from "../whatsapp/message-processing.service";
 import { verifyMetaHubSignature256 } from "./meta-signature";
 
@@ -222,6 +223,77 @@ export class WebhooksController {
           `evolution webhook: evento MESSAGES_UPSERT sem campo data reconhecível. connectionId=${connectionId}`,
         );
       }
+    }
+    return {
+      ok: true,
+      processed,
+      duplicated,
+      failed: 0,
+      event: meta.event,
+      blobs: meta.blobCount,
+    };
+  }
+
+  @Public()
+  @Post("zappfy/:connectionId")
+  async zappfyWebhook(
+    @Param("connectionId") connectionId: string,
+    @Req() req: Request,
+    @Body() payload: unknown,
+  ) {
+    const conn = await this.prisma.whatsAppConnection.findUnique({
+      where: { id: connectionId },
+    });
+    if (!conn || conn.provider !== "ZAPPFY") {
+      throw new HttpException({ error: "not_found" }, HttpStatus.NOT_FOUND);
+    }
+    const secret = req.headers["x-webhook-secret"];
+    const expected = process.env.ZAPPFY_WEBHOOK_SECRET;
+    if (expected && secret !== expected) {
+      throw new HttpException({ error: "unauthorized" }, HttpStatus.UNAUTHORIZED);
+    }
+    if (payload == null || typeof payload !== "object") {
+      throw new HttpException({ ok: false }, HttpStatus.BAD_REQUEST);
+    }
+    const provider = createWhatsAppProvider(conn);
+    const items = provider.parseWebhook(payload);
+    let processed = 0;
+    let failed = 0;
+    let duplicated = 0;
+    for (const inbound of items) {
+      try {
+        const res = await this.messages.processInboundWhatsApp({
+          tenantId: conn.tenantId,
+          connectionId: conn.id,
+          inbound,
+        });
+        if ("duplicated" in res && res.duplicated) {
+          duplicated += 1;
+          continue;
+        }
+        processed += 1;
+      } catch (e) {
+        failed += 1;
+        this.log.error(
+          `zappfy inbound falhou connectionId=${connectionId} externalId=${inbound.externalId}`,
+          e instanceof Error ? e.stack : String(e),
+        );
+      }
+    }
+    if (failed > 0) {
+      throw new HttpException(
+        { ok: false, processed, duplicated, failed },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    const meta = getZappfyWebhookParseMeta(payload);
+    this.log.log(
+      `zappfy webhook connectionId=${connectionId} event=${String(meta.event)} blobs=${meta.blobCount} parsed=${items.length} processed=${processed} duplicated=${duplicated}`,
+    );
+    if (items.length === 0 && meta.blobCount > 0) {
+      this.log.warn(
+        `zappfy webhook: ${meta.blobCount} blob(s) mas nenhuma mensagem inbound. connectionId=${connectionId}`,
+      );
     }
     return {
       ok: true,

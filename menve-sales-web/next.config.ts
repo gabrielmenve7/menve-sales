@@ -19,8 +19,10 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      { source: "/analytics", destination: "/dashboard", permanent: true },
-      { source: "/activities", destination: "/dashboard", permanent: true },
+      { source: "/analytics", destination: "/relatorios", permanent: true },
+      { source: "/activities", destination: "/agenda", permanent: true },
+      { source: "/pesquisa", destination: "/lista", permanent: true },
+      { source: "/pesquisa/:path*", destination: "/lista/:path*", permanent: true },
     ];
   },
 };

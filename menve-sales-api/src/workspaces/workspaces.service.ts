@@ -299,4 +299,107 @@ export class WorkspacesService {
 
     return { tenantId: inv.tenantId };
   }
+
+  async patchMemberRole(
+    u: RequestUser,
+    tenantId: string,
+    memberUserId: string,
+    role: WorkspaceRole,
+  ) {
+    assertCanManageWorkspaceFeatures(u.role);
+    if (useWorkspaceMembership()) {
+      await this.workspaceAccess.assertMember(u.userId, tenantId);
+      const target = await this.workspaceAccess.getMembership(
+        memberUserId,
+        tenantId,
+      );
+      if (!target) throw new NotFoundException("Membro não encontrado");
+      if (target.role === WorkspaceRole.OWNER && role !== WorkspaceRole.OWNER) {
+        const owners = await this.prisma.workspaceMembership.count({
+          where: { tenantId, role: WorkspaceRole.OWNER },
+        });
+        if (owners <= 1) {
+          throw new BadRequestException(
+            "Não é possível rebaixar o único proprietário",
+          );
+        }
+      }
+      await this.prisma.workspaceMembership.update({
+        where: {
+          userId_tenantId: { userId: memberUserId, tenantId },
+        },
+        data: { role },
+      });
+      return { ok: true as const };
+    }
+
+    if (u.userTenantId !== tenantId) {
+      throw new ForbiddenException("Workspace inválido");
+    }
+    const member = await this.prisma.user.findFirst({
+      where: { id: memberUserId, tenantId },
+    });
+    if (!member) throw new NotFoundException("Membro não encontrado");
+    const userRole = workspaceRoleToUserRole(role);
+    await this.prisma.user.update({
+      where: { id: memberUserId },
+      data: { role: userRole },
+    });
+    return { ok: true as const };
+  }
+
+  async removeMember(u: RequestUser, tenantId: string, memberUserId: string) {
+    assertCanManageWorkspaceFeatures(u.role);
+    if (memberUserId === u.userId) {
+      throw new BadRequestException("Não é possível remover a si mesmo");
+    }
+
+    if (useWorkspaceMembership()) {
+      await this.workspaceAccess.assertMember(u.userId, tenantId);
+      const target = await this.workspaceAccess.getMembership(
+        memberUserId,
+        tenantId,
+      );
+      if (!target) throw new NotFoundException("Membro não encontrado");
+      if (target.role === WorkspaceRole.OWNER) {
+        const owners = await this.prisma.workspaceMembership.count({
+          where: { tenantId, role: WorkspaceRole.OWNER },
+        });
+        if (owners <= 1) {
+          throw new BadRequestException(
+            "Não é possível remover o único proprietário",
+          );
+        }
+      }
+      await this.prisma.workspaceMembership.delete({
+        where: {
+          userId_tenantId: { userId: memberUserId, tenantId },
+        },
+      });
+      return { ok: true as const };
+    }
+
+    if (u.userTenantId !== tenantId) {
+      throw new ForbiddenException("Workspace inválido");
+    }
+    const member = await this.prisma.user.findFirst({
+      where: { id: memberUserId, tenantId },
+    });
+    if (!member) throw new NotFoundException("Membro não encontrado");
+    if (member.role === UserRole.OWNER) {
+      const owners = await this.prisma.user.count({
+        where: { tenantId, role: UserRole.OWNER },
+      });
+      if (owners <= 1) {
+        throw new BadRequestException(
+          "Não é possível remover o único proprietário",
+        );
+      }
+    }
+    await this.prisma.user.update({
+      where: { id: memberUserId },
+      data: { tenantId: null },
+    });
+    return { ok: true as const };
+  }
 }

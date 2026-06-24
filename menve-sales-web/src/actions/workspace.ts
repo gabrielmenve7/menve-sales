@@ -129,3 +129,56 @@ export async function sendWorkspaceInvite(input: {
   }
   return { ok: true };
 }
+
+export async function updateWorkspaceMemberRole(input: {
+  tenantId: string;
+  userId: string;
+  role: "OWNER" | "ADMIN" | "MANAGER" | "SELLER";
+}): Promise<{ ok: boolean }> {
+  const session = await auth();
+  const token = session?.user?.accessToken;
+  if (!session?.user?.id || !token) throw new Error("Não autenticado");
+
+  const r = await fetch(
+    `${apiBase()}/workspaces/${encodeURIComponent(input.tenantId)}/members/${encodeURIComponent(input.userId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "x-tenant-id": input.tenantId,
+      },
+      body: JSON.stringify({ role: input.role }),
+      cache: "no-store",
+    },
+  );
+  if (!r.ok) {
+    throw new Error((await r.text()) || "Falha ao atualizar papel");
+  }
+  return { ok: true };
+}
+
+export async function removeWorkspaceMember(input: {
+  tenantId: string;
+  userId: string;
+}): Promise<{ ok: boolean }> {
+  const session = await auth();
+  const token = session?.user?.accessToken;
+  if (!session?.user?.id || !token) throw new Error("Não autenticado");
+
+  const r = await fetch(
+    `${apiBase()}/workspaces/${encodeURIComponent(input.tenantId)}/members/${encodeURIComponent(input.userId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "x-tenant-id": input.tenantId,
+      },
+      cache: "no-store",
+    },
+  );
+  if (!r.ok) {
+    throw new Error((await r.text()) || "Falha ao remover membro");
+  }
+  return { ok: true };
+}

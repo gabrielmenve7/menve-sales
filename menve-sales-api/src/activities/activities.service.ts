@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { ActivityType } from "@prisma/client";
+import { ActivityType, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { z } from "zod";
 
@@ -12,16 +12,38 @@ const activitySchema = z.object({
   description: z.string().optional(),
 });
 
+const listQuerySchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  assigneeId: z.string().optional(),
+  type: z.nativeEnum(ActivityType).optional(),
+});
+
 @Injectable()
 export class ActivitiesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(tenantId: string) {
+  async list(tenantId: string, query: unknown = {}) {
+    const q = listQuerySchema.parse(query);
+    const where: Prisma.ActivityWhereInput = { tenantId };
+
+    if (q.assigneeId) {
+      where.userId = q.assigneeId;
+    }
+    if (q.type) {
+      where.type = q.type;
+    }
+    if (q.from || q.to) {
+      where.dueAt = {};
+      if (q.from) where.dueAt.gte = new Date(q.from);
+      if (q.to) where.dueAt.lte = new Date(q.to);
+    }
+
     return this.prisma.activity.findMany({
-      where: { tenantId },
+      where,
       orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }],
       include: { contact: true, deal: true, user: true },
-      take: 100,
+      take: 500,
     });
   }
 

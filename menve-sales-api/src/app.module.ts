@@ -25,6 +25,11 @@ import { TenantsModule } from "./tenants/tenants.module";
 import { ProspectingModule } from "./prospecting/prospecting.module";
 import { PipelineAutomationsModule } from "./pipeline-automations/pipeline-automations.module";
 import { ProductsModule } from "./products/products.module";
+import { ProspectListsModule } from "./prospect-lists/prospect-lists.module";
+import { OutreachModule } from "./outreach/outreach.module";
+import { GoogleCalendarModule } from "./google-calendar/google-calendar.module";
+import { ReportsModule } from "./reports/reports.module";
+import { LeadScoringModule } from "./lead-scoring/lead-scoring.module";
 
 @Module({
   imports: [
@@ -54,6 +59,11 @@ import { ProductsModule } from "./products/products.module";
     ProspectingModule,
     PipelineAutomationsModule,
     ProductsModule,
+    ProspectListsModule,
+    OutreachModule,
+    GoogleCalendarModule,
+    ReportsModule,
+    LeadScoringModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

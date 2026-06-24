@@ -17,9 +17,14 @@ export async function POST(req: Request) {
   try {
     await assertCanConfigureTenantApiRoute();
     let name: string | undefined;
+    let provider: "EVOLUTION" | "ZAPPFY" | undefined;
     try {
-      const b = (await req.json()) as { name?: string };
+      const b = (await req.json()) as { name?: string; provider?: string };
       name = typeof b?.name === "string" ? b.name : undefined;
+      provider =
+        b?.provider === "EVOLUTION" || b?.provider === "ZAPPFY"
+          ? b.provider
+          : undefined;
     } catch {
       /* corpo vazio */
     }
@@ -29,7 +34,10 @@ export async function POST(req: Request) {
       qrDataUrl: string;
     }>("/whatsapp-connections/pair", {
       method: "POST",
-      json: name?.trim() ? { name: name.trim() } : {},
+      json: {
+        ...(name?.trim() ? { name: name.trim() } : {}),
+        ...(provider ? { provider } : {}),
+      },
     });
     return Response.json(r);
   } catch (e) {

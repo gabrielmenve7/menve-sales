@@ -1,7 +1,8 @@
 import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ContactPhotoAvatar } from "./contact-photo-avatar";
-import type { InboxConversation } from "./inbox-types";
+import type { InboxContact, InboxConversation } from "./inbox-types";
 import { OutboundAckIcons, type OutboundAckStatus } from "./outbound-ack-icons";
 import { relativeTime, getContactPhotoUrl } from "./inbox-utils";
 
@@ -11,9 +12,23 @@ type BadgeConfig =
 
 const PROVIDER_BADGE: Record<string, BadgeConfig> = {
   EVOLUTION: { bg: "bg-green-500", kind: "whatsapp" },
+  ZAPPFY: { bg: "bg-emerald-600", kind: "whatsapp" },
   META: { bg: "bg-green-600", kind: "whatsapp" },
   INSTAGRAM: { bg: "bg-fuchsia-500", kind: "text", label: "IG" },
 };
+
+function outreachCampaignLabel(contact: InboxContact): string | null {
+  if (contact.outreachCampaignName?.trim()) {
+    return contact.outreachCampaignName.trim();
+  }
+  if (contact.utmSource === "outreach") {
+    return contact.campaignSource?.name ?? "Campanha";
+  }
+  if (contact.campaignSource?.code === "outreach") {
+    return contact.campaignSource.name;
+  }
+  return null;
+}
 
 export function ConversationItem({
   conversation,
@@ -36,6 +51,7 @@ export function ConversationItem({
       : lastMsg.body
     : null;
   const badge = PROVIDER_BADGE[c.whatsappConnection?.provider ?? ""];
+  const campaignLabel = outreachCampaignLabel(c.contact);
 
   return (
     <button
@@ -68,7 +84,20 @@ export function ConversationItem({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="truncate text-sm font-medium">{c.contact.name}</p>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <p className="truncate text-sm font-medium">{c.contact.name}</p>
+            {campaignLabel ? (
+              <Badge
+                variant="secondary"
+                className="h-4 shrink-0 px-1 text-[9px] font-normal"
+                title={`Origem: ${campaignLabel}`}
+              >
+                {campaignLabel.length > 14
+                  ? `${campaignLabel.slice(0, 14)}…`
+                  : campaignLabel}
+              </Badge>
+            ) : null}
+          </div>
           <span className="shrink-0 text-[11px] text-muted-foreground">
             {c.lastMessageAt ? relativeTime(new Date(c.lastMessageAt)) : ""}
           </span>

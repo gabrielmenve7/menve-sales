@@ -57,6 +57,7 @@ export async function prospectingDeleteSearch(searchId: string) {
       method: "DELETE",
     }),
   );
+  revalidatePath("/lista");
   revalidatePath("/pesquisa");
 }
 
@@ -81,6 +82,7 @@ export async function prospectingPatchResult(
       },
     }),
   );
+  revalidatePath("/lista");
   revalidatePath("/pesquisa");
 }
 
@@ -113,6 +115,7 @@ export async function prospectingConvert(input: z.infer<typeof convertSchema>) {
         : {}),
     },
   }));
+  revalidatePath("/lista");
   revalidatePath("/pesquisa");
   revalidatePath("/pipeline");
   revalidatePath("/contacts");
@@ -139,6 +142,7 @@ export async function prospectingConvertBulk(
       json: data,
     }),
   );
+  revalidatePath("/lista");
   revalidatePath("/pesquisa");
   revalidatePath("/pipeline");
   revalidatePath("/contacts");

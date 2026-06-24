@@ -12,12 +12,25 @@ import {
   prospectingLoadMoreWeb,
   prospectingSearch,
 } from "@/actions/pesquisa";
+import {
+  addProspectResultsToList,
+  createProspectList,
+  listProspectLists,
+  type ProspectListSummary,
+} from "@/actions/prospect-lists";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { ExternalLink, Loader2, MessageCircle, Search, Trash2 } from "lucide-react";
+import { ExternalLink, List, Loader2, MessageCircle, Search, Trash2 } from "lucide-react";
 import type { Pipeline, Stage } from "@prisma/client";
 
 type ProspectRow = {
@@ -54,13 +67,25 @@ type FilterKey = "all" | "site" | "nosite" | "wa";
 
 export function PesquisaClient({
   initialSearches,
+  initialProspectLists = [],
   pipelines,
   existingPhones,
+  title = "Pesquisa",
 }: {
   initialSearches: SearchHistory[];
+  initialProspectLists?: ProspectListSummary[];
   pipelines: (Pipeline & { stages: Stage[] })[];
   existingPhones: Set<string>;
+  title?: string;
 }) {
+  const [viewTab, setViewTab] = useState<"search" | "lists">("search");
+  const [prospectLists, setProspectLists] = useState(initialProspectLists);
+  const [saveListOpen, setSaveListOpen] = useState(false);
+  const [saveListMode, setSaveListMode] = useState<"existing" | "new">("existing");
+  const [selectedListId, setSelectedListId] = useState("");
+  const [newListName, setNewListName] = useState("");
+  const [savingList, setSavingList] = useState(false);
+  const [saveListNotice, setSaveListNotice] = useState<string | null>(null);
   const [activeSearchId, setActiveSearchId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [sourceFilter, setSourceFilter] = useState<"all" | "GOOGLE_SEARCH" | "GOOGLE_MAPS">("all");
@@ -223,10 +248,45 @@ export function PesquisaClient({
   const progressPct =
     totalWithSite > 0 ? Math.round((enrichedCount / totalWithSite) * 100) : 100;
 
+  async function onSaveToList() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    setSavingList(true);
+    setSaveListNotice(null);
+    try {
+      let listId = selectedListId;
+      if (saveListMode === "new") {
+        const name = newListName.trim();
+        if (!name) throw new Error("Informe o nome da lista");
+        const created = await createProspectList({ name });
+        listId = created.id;
+        setProspectLists((prev) => [created, ...prev]);
+      }
+      if (!listId) throw new Error("Selecione uma lista");
+      const res = await addProspectResultsToList({
+        listId,
+        prospectResultIds: ids,
+      });
+      const parts = [`${res.added} adicionado(s)`];
+      if (res.skipped > 0) parts.push(`${res.skipped} ignorado(s) (duplicata)`);
+      setSaveListOpen(false);
+      setSaveListNotice(null);
+      setSelected(new Set());
+      setConvertNotice({ type: "info", text: parts.join(" · ") });
+      router.refresh();
+      const refreshed = await listProspectLists();
+      setProspectLists(refreshed);
+    } catch (e) {
+      setSaveListNotice(e instanceof Error ? e.message : "Falha ao salvar lista");
+    } finally {
+      setSavingList(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Pesquisa</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
         <p className="text-sm text-muted-foreground">
           Encontre empresas no Google e envie para o{" "}
           <strong className="font-medium text-foreground">pipeline padrão</strong>{" "}
@@ -244,6 +304,58 @@ export function PesquisaClient({
         </p>
       </div>
 
+      <div className="flex gap-2 border-b border-border/60 pb-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={viewTab === "search" ? "secondary" : "ghost"}
+          onClick={() => setViewTab("search")}
+        >
+          <Search className="size-4" />
+          <span className="ml-2">Busca</span>
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={viewTab === "lists" ? "secondary" : "ghost"}
+          onClick={() => setViewTab("lists")}
+        >
+          <List className="size-4" />
+          <span className="ml-2">Minhas listas ({prospectLists.length})</span>
+        </Button>
+      </div>
+
+      {viewTab === "lists" ? (
+        <div className="space-y-3">
+          {prospectLists.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhuma lista salva. Selecione resultados na busca e use{" "}
+              <strong className="font-medium text-foreground">Salvar em lista</strong>.
+            </p>
+          ) : (
+            <ul className="divide-y rounded-lg border">
+              {prospectLists.map((l) => (
+                <li
+                  key={l.id}
+                  className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
+                >
+                  <div>
+                    <p className="font-medium">{l.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {l.itemCount} contato(s) ·{" "}
+                      {l.createdBy.name ?? l.createdBy.email ?? "—"}
+                    </p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link href="/disparo">Usar no disparo</Link>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <>
       <form
         className="flex flex-col gap-2 sm:flex-row sm:items-end"
         onSubmit={(e) => {
@@ -454,6 +566,22 @@ export function PesquisaClient({
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
+                disabled={selected.size === 0}
+                onClick={() => {
+                  setSaveListNotice(null);
+                  setSaveListMode(prospectLists.length > 0 ? "existing" : "new");
+                  setSelectedListId(prospectLists[0]?.id ?? "");
+                  setNewListName("");
+                  setSaveListOpen(true);
+                }}
+              >
+                <List className="size-4" />
+                <span className="ml-2">Salvar em lista</span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
                 disabled={
                   bulkConverting || !defaultPipeline?.id || !activeSearchId
                 }
@@ -600,6 +728,75 @@ export function PesquisaClient({
       ) : activeSearchId && !statusQ.isLoading ? (
         <p className="text-sm text-muted-foreground">Nenhum resultado nesta busca.</p>
       ) : null}
+        </>
+      )}
+
+      <Dialog open={saveListOpen} onOpenChange={setSaveListOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Salvar em lista</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {selected.size} resultado(s) selecionado(s)
+          </p>
+          {saveListNotice ? (
+            <p className="text-sm text-destructive">{saveListNotice}</p>
+          ) : null}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={saveListMode === "existing" ? "secondary" : "ghost"}
+              disabled={prospectLists.length === 0}
+              onClick={() => setSaveListMode("existing")}
+            >
+              Lista existente
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={saveListMode === "new" ? "secondary" : "ghost"}
+              onClick={() => setSaveListMode("new")}
+            >
+              Nova lista
+            </Button>
+          </div>
+          {saveListMode === "existing" ? (
+            <select
+              className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+              value={selectedListId}
+              onChange={(e) => setSelectedListId(e.target.value)}
+            >
+              <option value="">Selecione…</option>
+              {prospectLists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.itemCount})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-list-name">Nome da lista</Label>
+              <Input
+                id="new-list-name"
+                value={newListName}
+                onChange={(e) => setNewListName(e.target.value)}
+                placeholder="Ex.: Clínicas SP"
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              disabled={savingList}
+              onClick={() => void onSaveToList()}
+            >
+              {savingList ? <Loader2 className="size-4 animate-spin" /> : null}
+              <span className={savingList ? "ml-2" : ""}>Salvar</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

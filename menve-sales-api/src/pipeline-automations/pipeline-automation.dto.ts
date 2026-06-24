@@ -73,9 +73,31 @@ const actionSetDealCustomFieldSchema = z.object({
   staticValue: z.unknown().optional(),
 });
 
+const actionSendWhatsappSchema = z.object({
+  type: z.literal("SEND_WHATSAPP"),
+  connectionId: z.string().min(1).optional(),
+  text: z.string().min(1).max(4096),
+});
+
+const actionCreateActivitySchema = z.object({
+  type: z.literal("CREATE_ACTIVITY"),
+  title: z.string().min(1).max(500),
+  activityType: z.enum(["MEETING", "TASK"]),
+  dueAt: z.string().min(1).max(120).optional(),
+  description: z.string().max(5000).optional(),
+});
+
+const actionAssignUserSchema = z.object({
+  type: z.literal("ASSIGN_USER"),
+  userId: z.string().min(1),
+});
+
 export const automationActionSchema = z.union([
   actionMoveToStageSchema,
   actionSetDealCustomFieldSchema,
+  actionSendWhatsappSchema,
+  actionCreateActivitySchema,
+  actionAssignUserSchema,
 ]);
 
 function assertSetDealCustomFieldActionValid(
@@ -128,6 +150,11 @@ export const automationActionsSchema = z
     });
   });
 
+/**
+ * Gatilho PROSPECT_REPLIED: dispara quando um destinatário de campanha de outreach
+ * responde via WhatsApp (webhook inbound). Não usa triggerFilter legado; opcionalmente
+ * filtre por campaignSourceIds no filtro legado (origem do contato).
+ */
 export const createPipelineAutomationRuleSchema = z
   .object({
     name: z.string().min(1).max(200),

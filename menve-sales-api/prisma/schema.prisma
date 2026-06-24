@@ -63,6 +63,7 @@ enum PipelineAutomationTriggerType {
   CONTACT_TAG_REMOVED
   DEAL_MARKED_WON
   DEAL_MARKED_LOST
+  PROSPECT_REPLIED
   COMPOSITE
 }
 
@@ -75,7 +76,26 @@ enum PipelineAutomationRunStatus {
 enum WhatsAppProvider {
   META
   EVOLUTION
+  ZAPPFY
   INSTAGRAM
+}
+
+enum OutreachCampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum OutreachRecipientStatus {
+  PENDING
+  SENT
+  DELIVERED
+  REPLIED
+  FAILED
+  OPT_OUT
 }
 
 enum ConversationStatus {
@@ -122,9 +142,13 @@ model Tenant {
   /// Logo do workspace (URL https ou data URL).
   image           String?  @db.Text
   /// Quando false, Pesquisa (/prospecting) fica desativada para o workspace.
-  researchEnabled Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  researchEnabled         Boolean  @default(true)
+  /// Segundos entre envios de disparo (throttle por instância).
+  outreachThrottleSeconds Int      @default(45)
+  /// Regras de lead scoring (JSON).
+  leadScoringRules        Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   users                   User[]
   contacts                Contact[]
@@ -148,6 +172,8 @@ model Tenant {
   products                Product[]
   productCollections      ProductCollection[]
   dealItems               DealItem[]
+  prospectLists           ProspectList[]
+  outreachCampaigns       OutreachCampaign[]
 }
 
 /// Coleções do catálogo (agrupamento opcional de produtos por tenant).
@@ -291,6 +317,9 @@ model User {
   prospectSearches               ProspectSearch[]         @relation("ProspectSearches")
   dashboardBoards                DashboardBoard[]
   createdPipelineAutomationRules PipelineAutomationRule[] @relation("PipelineAutomationCreatedBy")
+  prospectListsCreated         ProspectList[]           @relation("ProspectListsCreated")
+  outreachCampaignsCreated     OutreachCampaign[]       @relation("OutreachCampaignsCreated")
+  googleCalendar               UserGoogleCalendar?
 }
 
 model DashboardBoard {
@@ -321,16 +350,20 @@ model Contact {
   utmCampaign      String?
   campaignSourceId String?
   campaignSource   CampaignSource? @relation(fields: [campaignSourceId], references: [id])
-  customData       Json?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  customData           Json?
+  leadScore            Int             @default(0)
+  leadScoreUpdatedAt   DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
   deals           Deal[]
   activities      Activity[]
   messages        Message[]
   conversations   Conversation[]
   contactTags     ContactTag[]
-  prospectResults ProspectResult[]
+  prospectResults         ProspectResult[]
+  prospectListItems       ProspectListItem[]
+  outreachRecipients      OutreachCampaignRecipient[]
 
   @@unique([tenantId, phone])
   @@index([tenantId, email])
@@ -393,6 +426,98 @@ model ProspectResult {
   @@index([tenantId, searchId])
   @@index([tenantId, status])
   @@index([searchId, enrichedAt])
+  prospectListItems ProspectListItem[]
+}
+
+model ProspectList {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdById String
+  createdBy   User     @relation("ProspectListsCreated", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items     ProspectListItem[]
+  campaigns OutreachCampaign[]
+
+  @@index([tenantId, createdAt])
+}
+
+model ProspectListItem {
+  id               String          @id @default(cuid())
+  listId           String
+  list             ProspectList    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  prospectResultId String?
+  prospectResult   ProspectResult? @relation(fields: [prospectResultId], references: [id], onDelete: SetNull)
+  contactId        String?
+  contact          Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+
+  @@unique([listId, prospectResultId])
+  @@index([listId])
+}
+
+model OutreachCampaign {
+  id           String                 @id @default(cuid())
+  tenantId     String
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  listId       String?
+  list         ProspectList?          @relation(fields: [listId], references: [id], onDelete: SetNull)
+  connectionId String
+  connection   WhatsAppConnection     @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  name         String
+  templateBody String                 @db.Text
+  status       OutreachCampaignStatus @default(DRAFT)
+  scheduledAt  DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdById  String
+  createdBy    User                   @relation("OutreachCampaignsCreated", fields: [createdById], references: [id])
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  recipients   OutreachCampaignRecipient[]
+  sequenceSteps OutreachSequenceStep[]
+
+  @@index([tenantId, status])
+}
+
+model OutreachCampaignRecipient {
+  id             String                  @id @default(cuid())
+  campaignId     String
+  campaign       OutreachCampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  phone          String
+  name           String?
+  company        String?
+  status         OutreachRecipientStatus @default(PENDING)
+  sentAt         DateTime?
+  repliedAt      DateTime?
+  errorMessage   String?
+  contactId      String?
+  contact        Contact?                @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  conversationId String?
+  messageId      String?
+  nextSendAt     DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@unique([campaignId, phone])
+  @@index([campaignId, status])
+}
+
+model OutreachSequenceStep {
+  id           String           @id @default(cuid())
+  campaignId   String
+  campaign     OutreachCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  sortOrder    Int              @default(0)
+  delayDays    Int              @default(3)
+  templateBody String           @db.Text
+  createdAt    DateTime         @default(now())
+
+  @@index([campaignId, sortOrder])
 }
 
 model Pipeline {
@@ -589,11 +714,23 @@ model Activity {
   type        ActivityType
   title       String
   description String?
-  dueAt       DateTime?
-  completedAt DateTime?
-  createdAt   DateTime     @default(now())
+  dueAt         DateTime?
+  completedAt   DateTime?
+  meetLink      String?
+  googleEventId String?
+  createdAt     DateTime     @default(now())
 
   @@index([tenantId, dueAt])
+}
+
+model UserGoogleCalendar {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @db.Text
+  calendarId   String?
+  connectedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model WhatsAppConnection {
@@ -609,6 +746,7 @@ model WhatsAppConnection {
 
   messages      Message[]
   conversations Conversation[]
+  outreachCampaigns OutreachCampaign[]
 }
 
 model Conversation {

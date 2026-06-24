@@ -21,7 +21,7 @@ export const ActivityType = {
 
 export type ActivityType = (typeof ActivityType)[keyof typeof ActivityType];
 
-export type WhatsAppProvider = "META" | "EVOLUTION" | "INSTAGRAM";
+export type WhatsAppProvider = "META" | "EVOLUTION" | "INSTAGRAM" | "ZAPPFY";
 
 export type ConversationStatus = "WAITING" | "IN_PROGRESS" | "RESOLVED";
 

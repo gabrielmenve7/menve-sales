@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, BadRequestException } from "@nestjs/common";
 import { WorkspaceRole } from "@prisma/client";
 import { ReqUser } from "../common/req-user.decorator";
 import { OptionalActiveTenant } from "../common/optional-active-tenant.decorator";
@@ -46,5 +46,27 @@ export class WorkspacesController {
       email: body.email ?? "",
       role: body.role,
     });
+  }
+
+  @Patch(":tenantId/members/:userId")
+  patchMember(
+    @ReqUser() u: RequestUser,
+    @Param("tenantId") tenantId: string,
+    @Param("userId") userId: string,
+    @Body() body: { role?: WorkspaceRole },
+  ) {
+    if (!body.role) {
+      throw new BadRequestException("role é obrigatório");
+    }
+    return this.workspaces.patchMemberRole(u, tenantId, userId, body.role);
+  }
+
+  @Delete(":tenantId/members/:userId")
+  removeMember(
+    @ReqUser() u: RequestUser,
+    @Param("tenantId") tenantId: string,
+    @Param("userId") userId: string,
+  ) {
+    return this.workspaces.removeMember(u, tenantId, userId);
   }
 }

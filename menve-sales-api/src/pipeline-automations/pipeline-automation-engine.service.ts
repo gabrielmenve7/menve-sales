@@ -2,10 +2,12 @@ import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import {
   PipelineAutomationRunStatus,
   PipelineAutomationTriggerType,
+  ActivityType,
 } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { DealsService } from "../deals/deals.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { createWhatsAppProvider } from "../whatsapp/factory";
 import { PIPELINE_AUTOMATION_MAX_DEPTH } from "./pipeline-automation.constants";
 import {
   addCalendarDaysIso,
@@ -45,7 +47,8 @@ type AutomationEvent =
   | { kind: "lost" }
   | { kind: "custom_field"; fieldKey: string; fromValue: unknown; toValue: unknown }
   | { kind: "assignee"; assigned: boolean }
-  | { kind: "contact_tag"; tagId: string; added: boolean };
+  | { kind: "contact_tag"; tagId: string; added: boolean }
+  | { kind: "prospect_replied"; campaignSourceId: string | null };
 
 type TriggerFilterShape = {
   toStageId?: string;
@@ -182,6 +185,13 @@ export class PipelineAutomationEngineService {
         return event.kind === "won";
       case PipelineAutomationTriggerType.DEAL_MARKED_LOST:
         return event.kind === "lost";
+      case PipelineAutomationTriggerType.PROSPECT_REPLIED:
+        if (event.kind !== "prospect_replied") return false;
+        if (f.campaignSourceIds && f.campaignSourceIds.length > 0) {
+          const c = event.campaignSourceId;
+          if (!c || !f.campaignSourceIds.includes(c)) return false;
+        }
+        return true;
       default:
         return false;
     }
@@ -330,7 +340,13 @@ export class PipelineAutomationEngineService {
         tenantId: rule.tenantId,
         pipelineId: rule.pipelineId,
       },
-      select: { id: true, stageId: true, status: true },
+      select: {
+        id: true,
+        stageId: true,
+        status: true,
+        contactId: true,
+        contact: { select: { phone: true } },
+      },
     });
     if (!deal) {
       await this.recordRun(
@@ -402,6 +418,60 @@ export class PipelineAutomationEngineService {
             type: action.type,
             fieldKey: action.fieldKey,
             result: "set",
+          });
+        } else if (action.type === "SEND_WHATSAPP") {
+          const phone = deal.contact?.phone?.trim();
+          if (!phone) {
+            throw new Error("Contato sem telefone para SEND_WHATSAPP");
+          }
+          const conn = action.connectionId
+            ? await this.prisma.whatsAppConnection.findFirst({
+                where: {
+                  id: action.connectionId,
+                  tenantId: rule.tenantId,
+                  isActive: true,
+                },
+              })
+            : await this.prisma.whatsAppConnection.findFirst({
+                where: { tenantId: rule.tenantId, isActive: true },
+                orderBy: { createdAt: "asc" },
+              });
+          if (!conn) throw new Error("Nenhuma conexão WhatsApp ativa");
+          const provider = createWhatsAppProvider(conn);
+          const sent = await provider.sendTextMessage(phone, action.text);
+          if (!sent.ok) {
+            throw new Error(sent.error ?? "Falha ao enviar WhatsApp");
+          }
+          executed.push({
+            type: action.type,
+            connectionId: conn.id,
+            result: "sent",
+          });
+        } else if (action.type === "CREATE_ACTIVITY") {
+          await this.prisma.activity.create({
+            data: {
+              tenantId: rule.tenantId,
+              userId: actorUserId,
+              dealId,
+              contactId: deal.contactId,
+              type:
+                action.activityType === "MEETING"
+                  ? ActivityType.MEETING
+                  : ActivityType.TASK,
+              title: action.title,
+              description: action.description,
+              dueAt: action.dueAt ? new Date(action.dueAt) : undefined,
+            },
+          });
+          executed.push({ type: action.type, result: "created" });
+        } else if (action.type === "ASSIGN_USER") {
+          await this.dealsService.patch(rule.tenantId, actorUserId, dealId, {
+            assignedToId: action.userId,
+          });
+          executed.push({
+            type: action.type,
+            userId: action.userId,
+            result: "assigned",
           });
         }
       }
@@ -772,6 +842,52 @@ export class PipelineAutomationEngineService {
         ctx.dealId,
         ctx.actorUserId,
         PipelineAutomationTriggerType.DEAL_MARKED_LOST,
+        ctx.depth,
+      );
+    }
+  }
+
+  async afterProspectReplied(
+    ctx: SimpleDealCtx & { campaignSourceId?: string | null },
+  ): Promise<void> {
+    if (ctx.depth >= PIPELINE_AUTOMATION_MAX_DEPTH) return;
+
+    let campaignSourceId: string | null;
+    if (ctx.campaignSourceId !== undefined) {
+      campaignSourceId = ctx.campaignSourceId;
+    } else {
+      const deal = await this.prisma.deal.findFirst({
+        where: { id: ctx.dealId, tenantId: ctx.tenantId },
+        select: { contact: { select: { campaignSourceId: true } } },
+      });
+      campaignSourceId = deal?.contact?.campaignSourceId ?? null;
+    }
+
+    const rules = await this.loadEnabledRules(ctx.tenantId, ctx.pipelineId);
+    const event: AutomationEvent = {
+      kind: "prospect_replied",
+      campaignSourceId,
+    };
+    for (const rule of rules) {
+      if (rule.triggerType === PipelineAutomationTriggerType.COMPOSITE) {
+        await this.tryCompositeRule(
+          rule,
+          event,
+          ctx.dealId,
+          ctx.actorUserId,
+          ctx.depth,
+        );
+        continue;
+      }
+      if (rule.triggerType !== PipelineAutomationTriggerType.PROSPECT_REPLIED)
+        continue;
+      if (!this.filterMatches(rule.triggerType, rule.triggerFilter, event))
+        continue;
+      await this.executeRule(
+        rule,
+        ctx.dealId,
+        ctx.actorUserId,
+        PipelineAutomationTriggerType.PROSPECT_REPLIED,
         ctx.depth,
       );
     }

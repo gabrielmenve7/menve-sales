@@ -38,6 +38,8 @@ export function DashboardShell({
   tenant,
   workspaces = [],
   isSuperAdmin,
+  canManageWorkspace = false,
+  canConfigureTenant = false,
   researchEnabled,
   userName,
   userEmail,
@@ -47,6 +49,8 @@ export function DashboardShell({
   tenant: WorkspaceSwitcherTenant;
   workspaces?: WorkspaceSwitcherTenant[];
   isSuperAdmin: boolean;
+  canManageWorkspace?: boolean;
+  canConfigureTenant?: boolean;
   researchEnabled: boolean;
   userName?: string | null;
   userEmail?: string | null;
@@ -190,6 +194,8 @@ export function DashboardShell({
 
         <Sidebar
           isSuperAdmin={isSuperAdmin}
+          canManageWorkspace={canManageWorkspace}
+          canConfigureTenant={canConfigureTenant}
           userName={userName}
           userEmail={userEmail}
           userImage={userImage}

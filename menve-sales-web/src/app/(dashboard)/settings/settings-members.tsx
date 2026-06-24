@@ -1,7 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { sendWorkspaceInvite } from "@/actions/workspace";
+import {
+  removeWorkspaceMember,
+  sendWorkspaceInvite,
+  updateWorkspaceMemberRole,
+} from "@/actions/workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,11 +35,14 @@ export function SettingsMembers({
   tenantId,
   members,
   canInvite,
+  canManageMembers = false,
 }: {
   tenantId: string;
   members: Member[];
   canInvite: boolean;
+  canManageMembers?: boolean;
 }) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<(typeof INVITE_ROLES)[number]>("SELLER");
   const [msg, setMsg] = useState<string | null>(null);
@@ -140,6 +148,47 @@ export function SettingsMembers({
                   <Badge variant="secondary" className="text-[11px]">
                     {ROLE_LABELS[m.role] ?? m.role}
                   </Badge>
+                  {canManageMembers && m.role !== "OWNER" && m.role !== "SUPER_ADMIN" ? (
+                    <div className="flex items-center gap-1">
+                      <select
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        value={m.role}
+                        onChange={async (e) => {
+                          try {
+                            await updateWorkspaceMemberRole({
+                              tenantId,
+                              userId: m.id,
+                              role: e.target.value as "ADMIN" | "MANAGER" | "SELLER",
+                            });
+                            router.refresh();
+                          } catch (er) {
+                            setErr(er instanceof Error ? er.message : "Erro ao atualizar papel");
+                          }
+                        }}
+                      >
+                        <option value="SELLER">Vendedor</option>
+                        <option value="MANAGER">Gestor</option>
+                        <option value="ADMIN">Admin</option>
+                      </select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs text-destructive"
+                        onClick={async () => {
+                          if (!confirm(`Remover ${m.email}?`)) return;
+                          try {
+                            await removeWorkspaceMember({ tenantId, userId: m.id });
+                            router.refresh();
+                          } catch (er) {
+                            setErr(er instanceof Error ? er.message : "Erro ao remover");
+                          }
+                        }}
+                      >
+                        Remover
+                      </Button>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

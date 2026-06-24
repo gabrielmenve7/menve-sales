@@ -16,7 +16,10 @@ export class WhatsappConnectionsController {
   constructor(private readonly wa: WhatsappConnectionsService) {}
 
   @Post("pair")
-  pair(@ReqUser() u: RequestUser, @Body() body: { name?: string }) {
+  pair(
+    @ReqUser() u: RequestUser,
+    @Body() body: { name?: string; provider?: "EVOLUTION" | "ZAPPFY" },
+  ) {
     return this.wa.startPairing(u, body);
   }
 

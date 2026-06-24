@@ -18,6 +18,9 @@ export type InboxOpenDeal = {
 
 export type InboxContact = Contact & {
   deals: InboxOpenDeal[];
+  campaignSource?: { id: string; name: string; code: string } | null;
+  /** Nome da campanha de disparo, quando o contato veio de outreach */
+  outreachCampaignName?: string | null;
 };
 
 export type NoteRow = InternalNote & {

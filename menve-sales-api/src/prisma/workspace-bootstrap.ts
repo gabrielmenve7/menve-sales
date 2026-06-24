@@ -133,6 +133,19 @@ export async function ensureDefaultWorkspace(
     });
   }
 
+  let outreach = await prisma.campaignSource.findFirst({
+    where: { tenantId, code: "outreach" },
+  });
+  if (!outreach) {
+    outreach = await prisma.campaignSource.create({
+      data: {
+        tenantId,
+        name: "Disparo",
+        code: "outreach",
+      },
+    });
+  }
+
   for (const name of ["MQL", "SQL", "Quente"]) {
     await prisma.tag.upsert({
       where: {

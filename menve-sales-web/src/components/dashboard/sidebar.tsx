@@ -2,23 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ChevronsRight,
-  MessageCircle,
-  Trello,
-  LayoutGrid,
-  Package,
-  Settings2,
-  Shield,
-  Users,
-  Search,
-} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ChevronDown, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { UserAccountMenu } from "@/components/dashboard/user-account-menu";
+import {
+  FOOTER_NAV_ITEMS,
+  NAV_SECTIONS,
+  filterFooterItems,
+  filterNavSections,
+  readExpandedSections,
+  writeExpandedSections,
+  type NavContext,
+} from "@/lib/nav-config";
 
 export function Sidebar({
   isSuperAdmin,
+  canManageWorkspace = false,
+  canConfigureTenant = false,
   userName,
   userEmail,
   userImage,
@@ -27,6 +29,8 @@ export function Sidebar({
   onRequestExpand,
 }: {
   isSuperAdmin: boolean;
+  canManageWorkspace?: boolean;
+  canConfigureTenant?: boolean;
   userName?: string | null;
   userEmail?: string | null;
   userImage?: string | null;
@@ -35,23 +39,52 @@ export function Sidebar({
   onRequestExpand?: () => void;
 }) {
   const pathname = usePathname();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const ctx: NavContext = {
+    researchEnabled,
+    isSuperAdmin,
+    canManageWorkspace,
+    canConfigureTenant,
+  };
+
+  const sections = filterNavSections(NAV_SECTIONS, ctx);
+  const footerItems = filterFooterItems(FOOTER_NAV_ITEMS, ctx);
+
+  useEffect(() => {
+    const stored = readExpandedSections();
+    const defaults: Record<string, boolean> = {};
+    for (const s of sections) {
+      defaults[s.id] = stored[s.id] ?? true;
+    }
+    setExpanded(defaults);
+  }, [sections.length, researchEnabled]);
+
+  const toggleSection = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      writeExpandedSections(next);
+      return next;
+    });
+  }, []);
 
   const linkClass = (active: boolean) =>
     cn(
       "flex items-center rounded-lg text-[15px] font-medium leading-snug transition-colors",
       collapsed ? "justify-center px-4 py-2.5" : "gap-2.5 px-5 py-2",
       active
-        ? "bg-neutral-200/90 font-semibold text-foreground dark:bg-white/[0.14] dark:text-white"
+        ? "border-l-2 border-amber-400 bg-neutral-200/90 font-semibold text-foreground dark:bg-white/[0.14] dark:text-amber-300"
         : "text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.08] dark:hover:text-white",
     );
 
-  const isInboxRoute = pathname === "/inbox" || pathname.startsWith("/inbox/");
+  const isItemActive = (href: string, activeMatch?: (p: string) => boolean) =>
+    activeMatch ? activeMatch(pathname) : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <aside className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-0 bg-transparent text-foreground ring-0">
       <nav
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto py-2",
+          "flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto py-2",
           collapsed ? "items-center px-2" : "px-3",
         )}
       >
@@ -75,92 +108,88 @@ export function Sidebar({
           </>
         ) : null}
 
-        <Link
-          href="/inbox"
-          prefetch={true}
-          title={collapsed ? "WhatsApp" : undefined}
-          className={linkClass(isInboxRoute)}
-        >
-          <MessageCircle
-            className="size-[18px] shrink-0 text-current opacity-95"
-            strokeWidth={1.35}
-            aria-hidden
-          />
-          {collapsed ? <span className="sr-only">WhatsApp</span> : "WhatsApp"}
-        </Link>
+        {sections.map((section) => {
+          const isOpen = expanded[section.id] !== false;
+          return (
+            <div key={section.id} className="mb-1">
+              {!collapsed ? (
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.id)}
+                  className="mb-0.5 flex w-full items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 shrink-0 transition-transform",
+                      !isOpen && "-rotate-90",
+                    )}
+                    aria-hidden
+                  />
+                  {section.label}
+                </button>
+              ) : null}
 
-        <Link
-          href="/pipeline"
-          prefetch={true}
-          title={collapsed ? "Funil de vendas" : undefined}
-          className={linkClass(pathname === "/pipeline" || pathname.startsWith("/pipeline/"))}
-        >
-          <Trello className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Funil de vendas</span> : "Funil de vendas"}
-        </Link>
+              {(collapsed || isOpen) &&
+                section.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isItemActive(item.href, item.activeMatch);
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      prefetch={true}
+                      title={collapsed ? item.label : undefined}
+                      className={linkClass(active)}
+                    >
+                      <Icon
+                        className={cn(
+                          "size-[18px] shrink-0 opacity-95",
+                          active && "text-amber-500 dark:text-amber-400",
+                        )}
+                        strokeWidth={1.75}
+                        aria-hidden
+                      />
+                      {collapsed ? (
+                        <span className="sr-only">{item.label}</span>
+                      ) : (
+                        item.label
+                      )}
+                    </Link>
+                  );
+                })}
+            </div>
+          );
+        })}
 
-        <Link
-          href="/produtos"
-          prefetch={true}
-          title={collapsed ? "Produtos" : undefined}
-          className={linkClass(pathname === "/produtos" || pathname.startsWith("/produtos/"))}
-        >
-          <Package className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Produtos</span> : "Produtos"}
-        </Link>
-
-        <Link
-          href="/contacts"
-          prefetch={true}
-          title={collapsed ? "Contatos" : undefined}
-          className={linkClass(pathname === "/contacts" || pathname.startsWith("/contacts/"))}
-        >
-          <Users className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Contatos</span> : "Contatos"}
-        </Link>
-
-        <Link
-          href="/dashboard"
-          prefetch={true}
-          title={collapsed ? "Dashboard" : undefined}
-          className={linkClass(pathname === "/dashboard" || pathname.startsWith("/dashboard/"))}
-        >
-          <LayoutGrid className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Dashboard</span> : "Dashboard"}
-        </Link>
-
-        <Link
-          href="/settings"
-          prefetch={true}
-          title={collapsed ? "Configurações" : undefined}
-          className={linkClass(pathname === "/settings" || pathname.startsWith("/settings/"))}
-        >
-          <Settings2 className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Configurações</span> : "Configurações"}
-        </Link>
-
-        {researchEnabled ? (
-          <Link
-            href="/pesquisa"
-            prefetch={true}
-            title={collapsed ? "Pesquisa" : undefined}
-            className={linkClass(pathname === "/pesquisa" || pathname.startsWith("/pesquisa/"))}
+        {footerItems.length > 0 ? (
+          <div
+            className={cn(
+              "mt-auto border-t border-border/40 pt-2 dark:border-border/30",
+              collapsed && "w-full",
+            )}
           >
-            <Search className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-            {collapsed ? <span className="sr-only">Pesquisa</span> : "Pesquisa"}
-          </Link>
-        ) : null}
-
-        {isSuperAdmin ? (
-          <Link
-            href="/admin"
-            prefetch={true}
-            title={collapsed ? "Admin" : undefined}
-            className={linkClass(pathname.startsWith("/admin"))}
-          >
-            <Shield className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} />
-            {collapsed ? <span className="sr-only">Admin</span> : "Admin"}
-          </Link>
+            {!collapsed ? (
+              <p className="mb-0.5 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                Mais
+              </p>
+            ) : null}
+            {footerItems.map((item) => {
+              const Icon = item.icon;
+              const active = isItemActive(item.href, item.activeMatch);
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  prefetch={true}
+                  title={collapsed ? item.label : undefined}
+                  className={linkClass(active)}
+                >
+                  <Icon className="size-[18px] shrink-0 opacity-95" strokeWidth={1.75} aria-hidden />
+                  {collapsed ? <span className="sr-only">{item.label}</span> : item.label}
+                </Link>
+              );
+            })}
+          </div>
         ) : null}
       </nav>
       <div className="shrink-0 border-t border-border/40 dark:border-border/30">
