@@ -7,7 +7,8 @@ import {
   type ProspectStats,
 } from "@/actions/pesquisa";
 import { LARISSA_CONFIG_FALLBACK } from "@/lib/larissa-config-fallback";
-import { canConfigureTenant, getTenantFromRequest } from "@/lib/session";
+import { canConfigureTenant } from "@/lib/session";
+import { getTenantFromRequest } from "@/lib/tenant";
 import { PesquisaClient } from "../pesquisa/pesquisa-client";
 import { redirect } from "next/navigation";
 
