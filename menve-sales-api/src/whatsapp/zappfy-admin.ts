@@ -7,6 +7,38 @@ import {
 
 const DEFAULT_ZAPPFY_BASE_URL = "https://api.zappfy.io";
 
+const ALLOW_GROUPS =
+  process.env.WHATSAPP_ALLOW_GROUPS?.trim().toLowerCase() === "true";
+
+/** Filtros «Ignorar mensagens» alinhados ao painel Zappfy (Uazapi/Evolution). */
+export function getZappfyExcludeMessages(): string[] {
+  const out = ["wasSentByApi"];
+  if (!ALLOW_GROUPS) out.push("isGroupYes");
+  return out;
+}
+
+/** URL pública do webhook Menve; secret na query quando o painel não suporta headers. */
+export function buildZappfyMenveWebhookUrl(connectionId: string): string {
+  const base = (
+    process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") ||
+    ""
+  );
+  if (!base) return "";
+  const path = `${base}/webhooks/whatsapp/zappfy/${connectionId}`;
+  const secret = process.env.ZAPPFY_WEBHOOK_SECRET?.trim();
+  if (!secret) return path;
+  const u = new URL(path);
+  u.searchParams.set("webhook_secret", secret);
+  return u.toString();
+}
+
+export type ZappfyWebhookFindResult = {
+  enabled?: boolean;
+  url?: string;
+  events?: string[];
+};
+
 /** Credenciais globais Zappfy (admintoken nunca expor ao cliente). */
 export function getZappfyEnv() {
   const baseUrl = (
@@ -115,11 +147,25 @@ export async function connectZappfyInstance(args: {
   return json;
 }
 
-/** GET /instance/status */
-export async function fetchZappfyStatus(args: {
+function pickString(...candidates: unknown[]): string | undefined {
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return undefined;
+}
+
+export type ZappfyInstanceInfo = {
+  connected: boolean;
+  detail?: string;
+  webhookUrl?: string;
+  instanceKey?: string;
+};
+
+/** GET /instance/status (+ campos úteis para diagnóstico). */
+export async function fetchZappfyInstanceInfo(args: {
   baseUrl: string;
   instanceToken: string;
-}) {
+}): Promise<ZappfyInstanceInfo> {
   const base = args.baseUrl.replace(/\/$/, "");
   const res = await fetch(`${base}/instance/status`, {
     headers: zappfyInstanceHeaders(args.instanceToken),
@@ -140,6 +186,10 @@ export async function fetchZappfyStatus(args: {
     json.instance && typeof json.instance === "object"
       ? (json.instance as Record<string, unknown>)
       : null;
+  const dataObj =
+    json.data && typeof json.data === "object"
+      ? (json.data as Record<string, unknown>)
+      : null;
 
   const stateRaw =
     json.state ??
@@ -148,8 +198,8 @@ export async function fetchZappfyStatus(args: {
     instanceObj?.status ??
     statusObj?.state ??
     (typeof statusObj?.status === "string" ? statusObj.status : null) ??
-    (json.data as Record<string, unknown> | undefined)?.state ??
-    (json.data as Record<string, unknown> | undefined)?.status;
+    dataObj?.state ??
+    dataObj?.status;
 
   const state = typeof stateRaw === "string" ? stateRaw.toLowerCase() : "";
   const connectedFlag =
@@ -164,6 +214,23 @@ export async function fetchZappfyStatus(args: {
     state === "connected" ||
     state === "online";
 
+  const webhookUrl = pickString(
+    json.webhookUrl,
+    json.webhook,
+    instanceObj?.webhookUrl,
+    instanceObj?.webhook,
+    dataObj?.webhookUrl,
+    statusObj?.webhookUrl,
+  );
+  const instanceKey = pickString(
+    json.key,
+    json.instanceKey,
+    instanceObj?.key,
+    instanceObj?.instanceKey,
+    dataObj?.key,
+    dataObj?.instanceKey,
+  );
+
   return {
     connected,
     detail:
@@ -172,43 +239,170 @@ export async function fetchZappfyStatus(args: {
         : connected
           ? "connected"
           : String(stateRaw ?? statusObj?.connected ?? ""),
+    webhookUrl,
+    instanceKey,
   };
 }
 
-/** Modo simples: url + events messages + excludeMessages wasSentByApi. */
+/** GET /instance/status */
+export async function fetchZappfyStatus(args: {
+  baseUrl: string;
+  instanceToken: string;
+}) {
+  const info = await fetchZappfyInstanceInfo(args);
+  return { connected: info.connected, detail: info.detail };
+}
+
+/** GET /webhook/find — lê configuração gravada na instância Zappfy. */
+export async function fetchZappfyWebhookFind(args: {
+  baseUrl: string;
+  instanceToken: string;
+}): Promise<ZappfyWebhookFindResult | null> {
+  const base = args.baseUrl.replace(/\/$/, "");
+  const paths = [
+    "/webhook/find",
+    "/instance/webhook/find",
+    "/webhook",
+    "/instance/webhook",
+  ];
+  for (const path of paths) {
+    try {
+      const res = await fetch(`${base}${path}`, {
+        headers: zappfyInstanceHeaders(args.instanceToken),
+      });
+      if (!res.ok) continue;
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const root =
+        json.webhook && typeof json.webhook === "object"
+          ? (json.webhook as Record<string, unknown>)
+          : json;
+      const url = pickString(root.url, root.webhookUrl, json.url, json.webhookUrl);
+      const eventsRaw = root.events ?? json.events;
+      const events = Array.isArray(eventsRaw)
+        ? eventsRaw.filter((e): e is string => typeof e === "string")
+        : undefined;
+      const enabled =
+        typeof root.enabled === "boolean"
+          ? root.enabled
+          : typeof json.enabled === "boolean"
+            ? json.enabled
+            : undefined;
+      if (url || events || enabled !== undefined) {
+        return { enabled, url, events };
+      }
+    } catch {
+      // try next path
+    }
+  }
+  return null;
+}
+
+const ZAPPFY_WEBHOOK_EVENT_SETS = [
+  ["messages"],
+  ["messages", "message"],
+  ["messages", "message", "messages.upsert", "MESSAGES_UPSERT"],
+] as const;
+
+/** Painel Zapfy legado (api.zapfy.me) — só URL, eventos NEW-MESSAGE automáticos. */
+export async function setZapfyMeWebhookDelivery(args: {
+  instanceKey: string;
+  instanceToken: string;
+  webhookUrl: string;
+}) {
+  const key = args.instanceKey.trim();
+  const token = args.instanceToken.trim();
+  if (!key || !token) return false;
+
+  const bases = [
+    process.env.ZAPPFY_LEGACY_BASE_URL?.trim().replace(/\/$/, ""),
+    "https://api.zapfy.me/v1",
+    "https://api.zapfy.me",
+  ].filter((u): u is string => !!u);
+
+  for (const base of bases) {
+    const url = `${base}/instance/${encodeURIComponent(key)}/token/${encodeURIComponent(token)}/updateWebhook`;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookUrl: args.webhookUrl }),
+      });
+      if (res.ok) return true;
+    } catch {
+      // try next base
+    }
+  }
+  return false;
+}
+
+/** Modo simples: url + events + headers (vários formatos de body). */
 export async function setZappfyWebhook(args: {
   baseUrl: string;
   instanceToken: string;
   webhookUrl: string;
   webhookHeaders?: Record<string, string>;
+  instanceKey?: string;
 }) {
   const base = args.baseUrl.replace(/\/$/, "");
-  const body: Record<string, unknown> = {
-    url: args.webhookUrl,
-    events: ["messages"],
-    excludeMessages: ["wasSentByApi"],
-    enabled: true,
-  };
-  if (args.webhookHeaders && Object.keys(args.webhookHeaders).length > 0) {
-    body.headers = args.webhookHeaders;
+  const headers = args.webhookHeaders;
+  const excludeMessages = getZappfyExcludeMessages();
+  const bodies: Record<string, unknown>[] = [];
+
+  for (const events of ZAPPFY_WEBHOOK_EVENT_SETS) {
+    const core = {
+      url: args.webhookUrl,
+      events: [...events],
+      excludeMessages,
+      enabled: true,
+      webhookByEvents: false,
+      webhookBase64: false,
+    };
+    if (headers && Object.keys(headers).length > 0) {
+      bodies.push({ ...core, headers });
+      bodies.push({ ...core, webhookHeaders: headers });
+      bodies.push({ webhook: { ...core, headers } });
+    } else {
+      bodies.push(core);
+      bodies.push({ webhook: core });
+    }
   }
 
   const paths = ["/webhook", "/instance/webhook", "/webhook/set", "/instance/webhook/set"];
   const attempts: string[] = [];
 
   for (const path of paths) {
-    const res = await fetch(`${base}${path}`, {
-      method: "POST",
-      headers: zappfyInstanceHeaders(args.instanceToken),
-      body: JSON.stringify(body),
+    for (const body of bodies) {
+      const res = await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: zappfyInstanceHeaders(args.instanceToken),
+        body: JSON.stringify(body),
+      });
+      if (res.ok) return;
+      const text = await res.text().catch(() => "");
+      attempts.push(`${path} HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
+  }
+
+  let instanceKey = args.instanceKey?.trim();
+  if (!instanceKey) {
+    const info = await fetchZappfyInstanceInfo({
+      baseUrl: args.baseUrl,
+      instanceToken: args.instanceToken,
+    }).catch(() => null);
+    instanceKey = info?.instanceKey;
+  }
+  if (instanceKey) {
+    const legacyOk = await setZapfyMeWebhookDelivery({
+      instanceKey,
+      instanceToken: args.instanceToken,
+      webhookUrl: args.webhookUrl,
     });
-    if (res.ok) return;
-    const text = await res.text().catch(() => "");
-    attempts.push(`${path} HTTP ${res.status}: ${text.slice(0, 300)}`);
+    if (legacyOk) return;
+    attempts.push("zapfy.me updateWebhook falhou");
   }
 
   throw new Error(
-    `Zappfy webhook falhou. ${attempts.join(" | ") || "sem detalhe"}`,
+    `Zappfy webhook falhou. ${attempts.slice(0, 6).join(" | ") || "sem detalhe"}`,
   );
 }
 

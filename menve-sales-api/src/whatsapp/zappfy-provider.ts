@@ -238,6 +238,38 @@ function extractZappfyMessageBlobs(payload: unknown): Record<string, unknown>[] 
   return [];
 }
 
+/** Campos úteis para log/diagnóstico sem serializar o body inteiro. */
+export function getZappfyWebhookInboxSample(payload: unknown): {
+  event: unknown;
+  hasDataKey: boolean;
+  fromMe: unknown;
+  remoteJid: string | null;
+} {
+  const p = payload as Record<string, unknown>;
+  const event = p.event ?? p.type ?? p.action;
+  let data: Record<string, unknown> | null = null;
+  const d = p.data ?? p.message ?? p.payload;
+  if (d && typeof d === "object" && !Array.isArray(d)) {
+    data = d as Record<string, unknown>;
+  } else if (Array.isArray(d) && d[0] && typeof d[0] === "object") {
+    data = d[0] as Record<string, unknown>;
+  }
+  const key = data?.key as Record<string, unknown> | undefined;
+  const hasDataKey = !!(key && typeof key === "object");
+  const fromMe = key?.fromMe ?? data?.fromMe ?? p.fromMe;
+  const remoteJid =
+    typeof key?.remoteJid === "string"
+      ? key.remoteJid
+      : typeof data?.remoteJid === "string"
+        ? data.remoteJid
+        : typeof data?.chatId === "string"
+          ? data.chatId
+          : typeof data?.from === "string"
+            ? data.from
+            : null;
+  return { event, hasDataKey, fromMe, remoteJid };
+}
+
 export function getZappfyWebhookParseMeta(payload: unknown): {
   event: unknown;
   blobCount: number;
@@ -318,8 +350,9 @@ function parseTimestamp(raw: unknown): Date {
 function digitsFromJidOrPhone(raw: unknown): string {
   const s = String(raw ?? "").trim();
   if (!s) return "";
-  if (s.includes("@")) return s.split("@")[0]?.replace(/\D/g, "") ?? "";
-  return s.replace(/\D/g, "");
+  let local = s.includes("@") ? (s.split("@")[0] ?? "") : s;
+  if (local.includes(":")) local = local.split(":")[0] ?? local;
+  return local.replace(/\D/g, "");
 }
 
 function unwrapProtoContent(

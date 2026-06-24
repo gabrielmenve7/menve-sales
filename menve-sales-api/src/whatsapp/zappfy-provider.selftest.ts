@@ -55,4 +55,21 @@ const skipped = provider.parseWebhook({
 });
 assert(skipped.length === 0, "MESSAGE-UPDATED ignorado");
 
+const inboundText = provider.parseWebhook({
+  type: "NEW-MESSAGE",
+  data: {
+    key: {
+      remoteJid: "5527997320619@s.whatsapp.net",
+      fromMe: false,
+      id: "3EB0CBF3275965A42934",
+    },
+    pushName: "Lead Teste",
+    messageTimestamp: 1674318916,
+    message: { conversation: "Opa, beleza?" },
+  },
+});
+assert(inboundText.length === 1, "NEW-MESSAGE texto recebido");
+assert(inboundText[0]?.body === "Opa, beleza?", "conversation texto");
+assert(inboundText[0]?.from === "5527997320619", "from digits");
+
 console.log("zappfy-provider.selftest: OK");

@@ -16,7 +16,10 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Public } from "../common/public.decorator";
 import { createWhatsAppProvider } from "../whatsapp/factory";
 import { getEvolutionWebhookParseMeta } from "../whatsapp/evolution-provider";
-import { getZappfyWebhookParseMeta } from "../whatsapp/zappfy-provider";
+import {
+  getZappfyWebhookInboxSample,
+  getZappfyWebhookParseMeta,
+} from "../whatsapp/zappfy-provider";
 import { MessageProcessingService } from "../whatsapp/message-processing.service";
 import { verifyMetaHubSignature256 } from "./meta-signature";
 
@@ -247,14 +250,26 @@ export class WebhooksController {
     if (!conn || conn.provider !== "ZAPPFY") {
       throw new HttpException({ error: "not_found" }, HttpStatus.NOT_FOUND);
     }
-    const secret = req.headers["x-webhook-secret"];
-    const expected = process.env.ZAPPFY_WEBHOOK_SECRET;
+    const headerSecret = req.headers["x-webhook-secret"];
+    const querySecret = req.query["webhook_secret"];
+    const secret =
+      (typeof headerSecret === "string" ? headerSecret : undefined) ??
+      (typeof querySecret === "string" ? querySecret : undefined);
+    const expected = process.env.ZAPPFY_WEBHOOK_SECRET?.trim();
     if (expected && secret !== expected) {
+      this.log.warn(
+        `zappfy webhook 401 connectionId=${connectionId} tenantId=${conn.tenantId} (secret ausente ou inválido — use header x-webhook-secret ou ?webhook_secret= na URL registrada; reaplique webhook no Menve)`,
+      );
+      await this.touchWebhookAuthFailure(conn.id);
       throw new HttpException({ error: "unauthorized" }, HttpStatus.UNAUTHORIZED);
     }
     if (payload == null || typeof payload !== "object") {
       throw new HttpException({ ok: false }, HttpStatus.BAD_REQUEST);
     }
+    const inboxSample = getZappfyWebhookInboxSample(payload);
+    this.log.log(
+      `zappfy webhook recv tenantId=${conn.tenantId} connectionId=${connectionId} event=${String(inboxSample.event ?? "—")} hasKey=${inboxSample.hasDataKey} fromMe=${String(inboxSample.fromMe ?? "—")} remoteJid=${inboxSample.remoteJid ?? "—"}`,
+    );
     const provider = createWhatsAppProvider(conn);
     const items = provider.parseWebhook(payload);
     let processed = 0;
@@ -284,6 +299,9 @@ export class WebhooksController {
       parsed: items.length,
       blobs: getZappfyWebhookParseMeta(payload).blobCount,
       processed,
+      event: inboxSample.event,
+      fromMe: inboxSample.fromMe,
+      remoteJid: inboxSample.remoteJid,
     });
     if (failed > 0) {
       throw new HttpException(
@@ -314,9 +332,34 @@ export class WebhooksController {
     };
   }
 
+  private async touchWebhookAuthFailure(connectionId: string) {
+    const conn = await this.prisma.whatsAppConnection.findUnique({
+      where: { id: connectionId },
+      select: { config: true },
+    });
+    if (!conn) return;
+    const cfg = (conn.config as Record<string, unknown>) ?? {};
+    await this.prisma.whatsAppConnection.update({
+      where: { id: connectionId },
+      data: {
+        config: {
+          ...cfg,
+          lastWebhookAuthFailedAt: new Date().toISOString(),
+        },
+      },
+    });
+  }
+
   private async touchWebhookMeta(
     connectionId: string,
-    meta: { parsed: number; blobs: number; processed: number },
+    meta: {
+      parsed: number;
+      blobs: number;
+      processed: number;
+      event?: unknown;
+      fromMe?: unknown;
+      remoteJid?: string | null;
+    },
   ) {
     const conn = await this.prisma.whatsAppConnection.findUnique({
       where: { id: connectionId },
@@ -333,6 +376,15 @@ export class WebhooksController {
           lastWebhookParsed: meta.parsed,
           lastWebhookBlobs: meta.blobs,
           lastWebhookProcessed: meta.processed,
+          ...(meta.event !== undefined
+            ? { lastWebhookEvent: String(meta.event) }
+            : {}),
+          ...(meta.fromMe !== undefined
+            ? { lastWebhookFromMe: meta.fromMe === true }
+            : {}),
+          ...(meta.remoteJid != null
+            ? { lastWebhookRemoteJid: meta.remoteJid }
+            : {}),
         },
       },
     });

@@ -170,6 +170,18 @@ function connectionWebhookMeta(c: WhatsAppConnection) {
       typeof cfg.lastWebhookProcessed === "number"
         ? cfg.lastWebhookProcessed
         : null,
+    lastWebhookEvent:
+      typeof cfg.lastWebhookEvent === "string" ? cfg.lastWebhookEvent : null,
+    lastWebhookFromMe:
+      typeof cfg.lastWebhookFromMe === "boolean" ? cfg.lastWebhookFromMe : null,
+    lastWebhookRemoteJid:
+      typeof cfg.lastWebhookRemoteJid === "string"
+        ? cfg.lastWebhookRemoteJid
+        : null,
+    lastWebhookAuthFailedAt:
+      typeof cfg.lastWebhookAuthFailedAt === "string"
+        ? cfg.lastWebhookAuthFailedAt
+        : null,
   };
 }
 
@@ -581,9 +593,24 @@ export function SettingsChannels({
       } catch {
         throw new Error(`Resposta inválida (HTTP ${res.status}).`);
       }
-      const o = data as { error?: string; ok?: boolean };
+      const o = data as {
+        error?: string;
+        ok?: boolean;
+        remoteWebhookUrl?: string | null;
+        remoteWebhookEvents?: string[] | null;
+      };
       if (!res.ok) {
         throw new Error(o.error?.trim() || `Falha ao reaplicar webhook (HTTP ${res.status}).`);
+      }
+      const remote = o.remoteWebhookUrl?.trim();
+      if (remote) {
+        alert(
+          `Webhook reaplicado.\n\nURL na Zappfy:\n${remote}${
+            o.remoteWebhookEvents?.length
+              ? `\n\nEventos: ${o.remoteWebhookEvents.join(", ")}`
+              : ""
+          }`,
+        );
       }
       reloadSettingsChannelsPage();
     } catch (e) {
@@ -759,10 +786,33 @@ export function SettingsChannels({
                         {c.provider === "ZAPPFY" ? "zappfy" : "evolution"}/{c.id}
                       </code>
                     </p>
+                    {wh.lastWebhookAuthFailedAt && (
+                      <p className="text-[11px] font-medium text-destructive">
+                        Webhook rejeitado (401) em {formatWebhookTime(wh.lastWebhookAuthFailedAt)} —
+                        secret ausente ou incorreto. Com ZAPPFY_WEBHOOK_SECRET no Railway, use
+                        «Reaplicar webhook» (registra{" "}
+                        <code className="rounded bg-muted px-1">?webhook_secret=</code> na URL).
+                      </p>
+                    )}
                     <p className="text-[11px] text-muted-foreground">
                       {lastWebhookLabel
                         ? `Último webhook: ${lastWebhookLabel} (parsed=${wh.lastWebhookParsed ?? 0}, gravados=${wh.lastWebhookProcessed ?? 0})`
                         : "Nenhum webhook recebido ainda — envie uma mensagem de texto teste ou use «Testar webhook»."}
+                    </p>
+                    {wh.lastWebhookEvent && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Último evento: {wh.lastWebhookEvent}
+                        {wh.lastWebhookRemoteJid
+                          ? ` · ${wh.lastWebhookRemoteJid}`
+                          : ""}
+                        {wh.lastWebhookFromMe != null
+                          ? ` · fromMe=${wh.lastWebhookFromMe ? "sim" : "não"}`
+                          : ""}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                      «Testar webhook» só valida a API Menve (números 5511999999999 / 5511888888888).
+                      Mensagens reais dependem da Zappfy chamar a URL acima após «Reaplicar webhook».
                     </p>
                     <div className="flex flex-wrap gap-2">
                     <Button

@@ -19,10 +19,13 @@ import {
   setEvolutionInstanceWebhook,
 } from "../whatsapp/evolution-admin";
 import {
+  buildZappfyMenveWebhookUrl,
   connectZappfyInstance,
   createZappfyInstance,
   deleteZappfyInstance,
+  fetchZappfyInstanceInfo,
   fetchZappfyStatus,
+  fetchZappfyWebhookFind,
   getZappfyBaseUrlForDisplay,
   getZappfyEnv,
   getZappfyPairingQrDataUrl,
@@ -78,6 +81,16 @@ function assertProductionWebhookUrl(url: string) {
   );
 }
 
+function normalizeWebhookUrlForCompare(url: string): string {
+  try {
+    const u = new URL(url);
+    u.search = "";
+    return u.href.replace(/\/$/, "");
+  } catch {
+    return url.split("?")[0]?.replace(/\/$/, "") ?? url;
+  }
+}
+
 function buildWebhookHeaders(provider: "EVOLUTION" | "ZAPPFY"): Record<string, string> | undefined {
   const secret =
     provider === "ZAPPFY"
@@ -90,6 +103,7 @@ function buildWebhookHeaders(provider: "EVOLUTION" | "ZAPPFY"): Record<string, s
 type ZappfyConnConfig = {
   baseUrl: string;
   instanceToken: string;
+  instanceKey?: string;
 };
 
 function parseZappfyConfig(raw: unknown): ZappfyConnConfig | null {
@@ -97,7 +111,21 @@ function parseZappfyConfig(raw: unknown): ZappfyConnConfig | null {
   const baseUrl = String(c.baseUrl ?? "");
   const instanceToken = String(c.instanceToken ?? "");
   if (!baseUrl || !instanceToken) return null;
-  return { baseUrl, instanceToken };
+  const instanceKey =
+    typeof c.instanceKey === "string" && c.instanceKey.trim()
+      ? c.instanceKey.trim()
+      : undefined;
+  return { baseUrl, instanceToken, instanceKey };
+}
+
+async function applyZappfyWebhook(cfg: ZappfyConnConfig, webhookUrl: string) {
+  await setZappfyWebhook({
+    baseUrl: cfg.baseUrl,
+    instanceToken: cfg.instanceToken,
+    webhookUrl,
+    webhookHeaders: buildWebhookHeaders("ZAPPFY"),
+    instanceKey: cfg.instanceKey,
+  });
 }
 
 type PairingProvider = "EVOLUTION" | "ZAPPFY";
@@ -124,10 +152,12 @@ export class WhatsappConnectionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   webhookPath(connectionId: string, provider: PairingProvider = "ZAPPFY") {
+    if (provider === "ZAPPFY") {
+      return buildZappfyMenveWebhookUrl(connectionId);
+    }
     const base = appPublicUrl();
     if (!base) return "";
-    const segment = provider === "EVOLUTION" ? "evolution" : "zappfy";
-    return `${base}/webhooks/whatsapp/${segment}/${connectionId}`;
+    return `${base}/webhooks/whatsapp/evolution/${connectionId}`;
   }
 
   async startPairing(
@@ -226,7 +256,7 @@ export class WhatsappConnectionsService {
     }
     assertProductionWebhookUrl(appUrl);
     const baseUrl = getZappfyBaseUrlForDisplay();
-    const status = await fetchZappfyStatus({ baseUrl, instanceToken }).catch(
+    const info = await fetchZappfyInstanceInfo({ baseUrl, instanceToken }).catch(
       (e) => {
         throw this.wrapZappfyError(
           e,
@@ -234,22 +264,22 @@ export class WhatsappConnectionsService {
         );
       },
     );
+    const zcfg: ZappfyConnConfig = {
+      baseUrl,
+      instanceToken,
+      ...(info.instanceKey ? { instanceKey: info.instanceKey } : {}),
+    };
     const connection = await this.prisma.whatsAppConnection.create({
       data: {
         tenantId: u.tenantId,
         name: input.name?.trim() || "Zappfy",
         provider: "ZAPPFY",
-        isActive: status.connected,
-        config: { baseUrl, instanceToken },
+        isActive: info.connected,
+        config: zcfg,
       },
     });
     try {
-      await setZappfyWebhook({
-        baseUrl,
-        instanceToken,
-        webhookUrl: this.webhookPath(connection.id, "ZAPPFY"),
-        webhookHeaders: buildWebhookHeaders("ZAPPFY"),
-      });
+      await applyZappfyWebhook(zcfg, this.webhookPath(connection.id, "ZAPPFY"));
     } catch (e) {
       await this.prisma.whatsAppConnection
         .delete({ where: { id: connection.id } })
@@ -259,8 +289,8 @@ export class WhatsappConnectionsService {
     return {
       ok: true as const,
       connectionId: connection.id,
-      connected: status.connected,
-      detail: status.detail,
+      connected: info.connected,
+      detail: info.detail,
     };
   }
 
@@ -388,30 +418,34 @@ export class WhatsappConnectionsService {
     if (conn.provider === "ZAPPFY") {
       const cfg = parseZappfyConfig(conn.config);
       if (!cfg) return { ok: false as const, error: "invalid_config" as const };
-      const state = await fetchZappfyStatus({
+      const info = await fetchZappfyInstanceInfo({
         baseUrl: cfg.baseUrl,
         instanceToken: cfg.instanceToken,
       });
+      const zcfg: ZappfyConnConfig = {
+        ...cfg,
+        ...(info.instanceKey ? { instanceKey: info.instanceKey } : {}),
+      };
       const appUrl = appPublicUrl();
-      if (state.connected && appUrl && !conn.isActive) {
-        await setZappfyWebhook({
-          baseUrl: cfg.baseUrl,
-          instanceToken: cfg.instanceToken,
-          webhookUrl: this.webhookPath(conn.id, "ZAPPFY"),
-          webhookHeaders: buildWebhookHeaders("ZAPPFY"),
-        }).catch((err) => {
-          this.log.warn(
-            `Webhook Zappfy não reaplicado ao conectar (connectionId=${conn.id}): ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
+      if (info.connected && appUrl && !conn.isActive) {
+        await applyZappfyWebhook(zcfg, this.webhookPath(conn.id, "ZAPPFY")).catch(
+          (err) => {
+            this.log.warn(
+              `Webhook Zappfy não reaplicado ao conectar (connectionId=${conn.id}): ${err instanceof Error ? err.message : String(err)}`,
+            );
+          },
+        );
       }
-      if (state.connected) {
+      if (info.connected) {
         await this.prisma.whatsAppConnection.update({
           where: { id: conn.id },
-          data: { isActive: true },
+          data: {
+            isActive: true,
+            config: zcfg,
+          },
         });
       }
-      return { ok: true as const, connected: state.connected, detail: state.detail };
+      return { ok: true as const, connected: info.connected, detail: info.detail };
     }
 
     const cfg = parseEvolutionConfig(conn.config);
@@ -465,16 +499,23 @@ export class WhatsappConnectionsService {
       const cfg = parseZappfyConfig(conn.config);
       if (!cfg) throw new BadRequestException("Configuração inválida");
       try {
-        await setZappfyWebhook({
+        await applyZappfyWebhook(cfg, this.webhookPath(conn.id, "ZAPPFY"));
+        const found = await fetchZappfyWebhookFind({
           baseUrl: cfg.baseUrl,
           instanceToken: cfg.instanceToken,
-          webhookUrl: this.webhookPath(conn.id, "ZAPPFY"),
-          webhookHeaders: buildWebhookHeaders("ZAPPFY"),
-        });
+        }).catch(() => null);
+        const info = await fetchZappfyInstanceInfo({
+          baseUrl: cfg.baseUrl,
+          instanceToken: cfg.instanceToken,
+        }).catch(() => null);
+        return {
+          ok: true as const,
+          remoteWebhookUrl: found?.url ?? info?.webhookUrl ?? null,
+          remoteWebhookEvents: found?.events ?? null,
+        };
       } catch (e) {
         throw this.wrapZappfyError(e, "Falha ao reaplicar webhook");
       }
-      return { ok: true as const };
     }
 
     const cfg = parseEvolutionConfig(conn.config);
@@ -504,20 +545,38 @@ export class WhatsappConnectionsService {
     }
 
     const appUrl = appPublicUrl();
-    const segment = conn.provider === "ZAPPFY" ? "zappfy" : "evolution";
-    const expectedWebhookUrl = appUrl
-      ? `${appUrl}/webhooks/whatsapp/${segment}/${conn.id}`
-      : "";
+    const expectedWebhookUrl =
+      conn.provider === "ZAPPFY"
+        ? buildZappfyMenveWebhookUrl(conn.id)
+        : appUrl
+          ? `${appUrl}/webhooks/whatsapp/evolution/${conn.id}`
+          : "";
 
     const cfg = conn.config as Record<string, unknown>;
     let connectionStatus: { connected: boolean; detail?: string } | null = null;
+    let remoteWebhookUrl: string | null = null;
+    let remoteWebhookEvents: string[] | null = null;
+    let remoteWebhookEnabled: boolean | null = null;
     if (conn.provider === "ZAPPFY") {
       const zcfg = parseZappfyConfig(conn.config);
       if (zcfg) {
-        connectionStatus = await fetchZappfyStatus({
-          baseUrl: zcfg.baseUrl,
-          instanceToken: zcfg.instanceToken,
-        }).catch(() => ({ connected: false, detail: "status indisponível" }));
+        const [info, found] = await Promise.all([
+          fetchZappfyInstanceInfo({
+            baseUrl: zcfg.baseUrl,
+            instanceToken: zcfg.instanceToken,
+          }).catch(() => null),
+          fetchZappfyWebhookFind({
+            baseUrl: zcfg.baseUrl,
+            instanceToken: zcfg.instanceToken,
+          }).catch(() => null),
+        ]);
+        if (info) {
+          connectionStatus = { connected: info.connected, detail: info.detail };
+        }
+        remoteWebhookUrl = found?.url ?? info?.webhookUrl ?? null;
+        remoteWebhookEvents = found?.events ?? null;
+        remoteWebhookEnabled =
+          typeof found?.enabled === "boolean" ? found.enabled : null;
       }
     } else {
       const ecfg = parseEvolutionConfig(conn.config);
@@ -530,6 +589,12 @@ export class WhatsappConnectionsService {
       }
     }
 
+    const webhookUrlMatchesExpected =
+      !!remoteWebhookUrl &&
+      !!expectedWebhookUrl &&
+      normalizeWebhookUrlForCompare(remoteWebhookUrl) ===
+        normalizeWebhookUrlForCompare(expectedWebhookUrl);
+
     return {
       ok: true as const,
       connectionId: conn.id,
@@ -538,9 +603,13 @@ export class WhatsappConnectionsService {
       isActive: conn.isActive,
       publicAppUrl: appUrl || null,
       expectedWebhookUrl,
+      webhookUrlMatchesExpected,
       webhookSecretConfigured: conn.provider === "ZAPPFY"
         ? !!process.env.ZAPPFY_WEBHOOK_SECRET?.trim()
         : !!process.env.EVOLUTION_WEBHOOK_SECRET?.trim(),
+      webhookSecretUsesQuery:
+        conn.provider === "ZAPPFY" &&
+        !!process.env.ZAPPFY_WEBHOOK_SECRET?.trim(),
       lastWebhookAt:
         typeof cfg.lastWebhookAt === "string" ? cfg.lastWebhookAt : null,
       lastWebhookParsed:
@@ -551,6 +620,21 @@ export class WhatsappConnectionsService {
         typeof cfg.lastWebhookProcessed === "number"
           ? cfg.lastWebhookProcessed
           : null,
+      lastWebhookEvent:
+        typeof cfg.lastWebhookEvent === "string" ? cfg.lastWebhookEvent : null,
+      lastWebhookFromMe:
+        typeof cfg.lastWebhookFromMe === "boolean" ? cfg.lastWebhookFromMe : null,
+      lastWebhookRemoteJid:
+        typeof cfg.lastWebhookRemoteJid === "string"
+          ? cfg.lastWebhookRemoteJid
+          : null,
+      lastWebhookAuthFailedAt:
+        typeof cfg.lastWebhookAuthFailedAt === "string"
+          ? cfg.lastWebhookAuthFailedAt
+          : null,
+      remoteWebhookUrl,
+      remoteWebhookEvents,
+      remoteWebhookEnabled,
       connectionStatus,
       warnings: [
         ...(!appUrl ? ["PUBLIC_APP_URL não configurado na API"] : []),
@@ -560,6 +644,35 @@ export class WhatsappConnectionsService {
           : []),
         ...(typeof cfg.lastWebhookAt !== "string"
           ? ["Nenhum webhook recebido ainda nesta conexão"]
+          : []),
+        ...(conn.provider === "ZAPPFY" &&
+        process.env.ZAPPFY_WEBHOOK_SECRET?.trim()
+          ? [
+              "ZAPPFY_WEBHOOK_SECRET ativo: use «Reaplicar webhook» para registrar a URL com ?webhook_secret= (painel Zappfy não suporta headers custom).",
+            ]
+          : []),
+        ...(typeof cfg.lastWebhookAuthFailedAt === "string"
+          ? [
+              "Última tentativa de webhook da Zappfy foi rejeitada (401) — secret ausente ou incorreto na URL/header.",
+            ]
+          : []),
+        ...(remoteWebhookUrl &&
+        expectedWebhookUrl &&
+        !remoteWebhookUrl.includes(conn.id)
+          ? [
+              `URL de webhook na Zappfy (${remoteWebhookUrl}) não contém o connectionId atual — reaplique o webhook.`,
+            ]
+          : []),
+        ...(remoteWebhookUrl &&
+        expectedWebhookUrl &&
+        remoteWebhookUrl.includes(conn.id) &&
+        !webhookUrlMatchesExpected
+          ? [
+              `URL na Zappfy difere da esperada (query/path) — esperado: ${expectedWebhookUrl}`,
+            ]
+          : []),
+        ...(remoteWebhookEnabled === false
+          ? ["Webhook desabilitado na instância Zappfy"]
           : []),
       ],
     };
@@ -580,7 +693,10 @@ export class WhatsappConnectionsService {
       throw new BadRequestException("Configure PUBLIC_APP_URL na API.");
     }
     const segment = conn.provider === "ZAPPFY" ? "zappfy" : "evolution";
-    const webhookUrl = `${appUrl}/webhooks/whatsapp/${segment}/${conn.id}`;
+    const webhookUrl =
+      conn.provider === "ZAPPFY"
+        ? this.webhookPath(conn.id, "ZAPPFY")
+        : `${appUrl}/webhooks/whatsapp/${segment}/${conn.id}`;
     const secret =
       conn.provider === "ZAPPFY"
         ? process.env.ZAPPFY_WEBHOOK_SECRET?.trim()
@@ -656,7 +772,11 @@ export class WhatsappConnectionsService {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
-      if (secret) headers["x-webhook-secret"] = secret;
+      if (secret && conn.provider !== "ZAPPFY") {
+        headers["x-webhook-secret"] = secret;
+      } else if (secret && !webhookUrl.includes("webhook_secret=")) {
+        headers["x-webhook-secret"] = secret;
+      }
 
       try {
         const res = await fetch(webhookUrl, {
