@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
+  Bot,
   Calendar,
   CreditCard,
   LayoutGrid,
@@ -92,10 +93,10 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/lista",
         icon: List,
         activeMatch: (p) =>
-          p === "/lista" ||
-          p.startsWith("/lista/") ||
           p === "/pesquisa" ||
-          p.startsWith("/pesquisa/"),
+          p.startsWith("/pesquisa/") ||
+          p === "/lista" ||
+          (p.startsWith("/lista/") && !p.startsWith("/lista/agentes")),
       },
       {
         id: "disparo",
@@ -103,6 +104,18 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/disparo",
         icon: Send,
         activeMatch: defaultActive("/disparo"),
+      },
+      {
+        id: "agentes-ia",
+        label: "Agentes IA",
+        href: "/lista/agentes",
+        icon: Bot,
+        activeMatch: (p) =>
+          p === "/lista/agentes" ||
+          p.startsWith("/lista/agentes/") ||
+          p === "/agentes" ||
+          p.startsWith("/agentes/"),
+        visible: (ctx) => ctx.canConfigureTenant,
       },
       {
         id: "atendimento",

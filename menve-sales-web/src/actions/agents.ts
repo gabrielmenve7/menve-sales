@@ -45,11 +45,15 @@ export async function updateLarissaConfig(input: {
     json: input,
   });
   revalidatePath("/agentes");
+  revalidatePath("/lista");
+  revalidatePath("/lista/agentes");
 }
 
 export async function syncLarissaSkills() {
   await apiServer("/agents/larissa/sync-skills", { method: "POST" });
   revalidatePath("/agentes");
+  revalidatePath("/lista");
+  revalidatePath("/lista/agentes");
 }
 
 export async function takeoverConversation(conversationId: string) {
