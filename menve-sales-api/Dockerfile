@@ -27,6 +27,7 @@ COPY menve-sales-api ./menve-sales-api
 
 # Client em ../../node_modules/.prisma/client (relativo ao schema)
 RUN npx prisma generate --schema menve-sales-api/prisma/schema.prisma
+RUN node menve-sales-api/scripts/sync-prisma-client.js
 
 WORKDIR /repo/menve-sales-api
 RUN npm run build

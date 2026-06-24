@@ -4,6 +4,7 @@ import {
   MessageAckStatus,
   MessageDirection,
   MessageSenderType,
+  Prisma,
   type WhatsAppConnection,
   WhatsAppProvider,
 } from "@prisma/client";
@@ -208,7 +209,7 @@ export class MessageProcessingService {
       ) {
         contact = await this.prisma.contact.update({
           where: { id: contact.id },
-          data: { customData: patch },
+          data: { customData: patch as Prisma.InputJsonValue },
         });
       }
     }
