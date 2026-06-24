@@ -521,6 +521,95 @@ function digitsFromJidOrPhone(raw: unknown): string {
   return local.replace(/\D/g, "");
 }
 
+function isLidJid(jid: string): boolean {
+  return jid.endsWith("@lid");
+}
+
+function isPhoneChatJid(jid: string): boolean {
+  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@c.us");
+}
+
+/** Dígitos plausíveis de telefone (evita tratar LID longo como número). */
+function plausiblePhoneDigits(digits: string): boolean {
+  if (digits.length < 10 || digits.length > 13) return false;
+  if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) {
+    return true;
+  }
+  return digits.length >= 10 && digits.length <= 12;
+}
+
+/**
+ * Resolve telefone real vs LID (@lid). WhatsApp multidevice envia remoteJid como LID
+ * e o PN em remoteJidAlt / cleanedSenderPn.
+ */
+function resolveZappfySenderIdentity(blob: Record<string, unknown>): {
+  from: string;
+  remoteJid: string;
+} | null {
+  const key = (
+    blob.key && typeof blob.key === "object" && !Array.isArray(blob.key)
+      ? (blob.key as Record<string, unknown>)
+      : {}
+  ) as Record<string, unknown>;
+
+  const remoteJid = String(
+    key.remoteJid ?? blob.remoteJid ?? pickZappfyJidFromIsOnWhatsApp(blob) ?? "",
+  );
+  const remoteJidAlt =
+    typeof key.remoteJidAlt === "string" ? key.remoteJidAlt.trim() : "";
+  const participantAlt =
+    typeof key.participantAlt === "string" ? key.participantAlt.trim() : "";
+  const participant =
+    typeof key.participant === "string" ? key.participant.trim() : "";
+
+  const explicitPhoneCandidates: unknown[] = [
+    key.cleanedSenderPn,
+    key.cleanedParticipantPn,
+    blob.from,
+    blob.number,
+    blob.phone,
+    blob.sender,
+    blob.senderPn,
+  ];
+
+  for (const c of explicitPhoneCandidates) {
+    const d = digitsFromJidOrPhone(c);
+    if (plausiblePhoneDigits(d)) {
+      return {
+        from: d,
+        remoteJid: remoteJid || remoteJidAlt || `${d}@s.whatsapp.net`,
+      };
+    }
+  }
+
+  const jidPhoneSources = [remoteJidAlt, participantAlt, participant];
+  if (isPhoneChatJid(remoteJid)) jidPhoneSources.push(remoteJid);
+
+  for (const jid of jidPhoneSources) {
+    if (!jid || isLidJid(jid)) continue;
+    const d = digitsFromJidOrPhone(jid);
+    if (plausiblePhoneDigits(d)) {
+      return { from: d, remoteJid: remoteJid || jid };
+    }
+  }
+
+  if (isLidJid(remoteJid)) {
+    const local = remoteJid.split("@")[0] ?? "";
+    if (local) {
+      return { from: `lid:${local}`, remoteJid };
+    }
+  }
+
+  if (remoteJid && !isLidJid(remoteJid)) {
+    const d = digitsFromJidOrPhone(remoteJid);
+    if (plausiblePhoneDigits(d)) {
+      return { from: d, remoteJid };
+    }
+  }
+
+  return null;
+}
+
 function unwrapProtoContent(
   message: Record<string, unknown> | undefined,
 ): Record<string, unknown> | null {
@@ -655,37 +744,16 @@ function extractZappfyMedia(
 function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound | null {
   const blob = normalizeZappfyMessageBlob(data);
   const key = blob.key as Record<string, unknown> | undefined;
-  const remoteJid = String(
-    key?.remoteJid ??
-      blob.chatId ??
-      blob.from ??
-      blob.remoteJid ??
-      blob.number ??
-      blob.phone ??
-      pickZappfyJidFromIsOnWhatsApp(blob) ??
-      "",
-  );
-  const fromDigits =
-    digitsFromJidOrPhone(blob.from) ||
-    digitsFromJidOrPhone(blob.number) ||
-    digitsFromJidOrPhone(blob.phone) ||
-    digitsFromJidOrPhone(blob.chatId) ||
-    digitsFromJidOrPhone(key?.cleanedSenderPn) ||
-    digitsFromJidOrPhone(key?.cleanedParticipantPn) ||
-    digitsFromJidOrPhone(remoteJid);
+  const sender = resolveZappfySenderIdentity(blob);
+  if (!sender) return null;
 
-  if (!fromDigits && !remoteJid.endsWith("@lid")) return null;
+  const { from, remoteJid } = sender;
   if (remoteJid.includes("status@broadcast")) return null;
 
   const isGroupLike =
     remoteJid.includes("@g.us") ||
     String(key?.participant ?? "").includes("@g.us");
   if (isGroupLike && !ALLOW_GROUPS) return null;
-
-  const from = remoteJid.endsWith("@lid")
-    ? `lid:${remoteJid.split("@")[0] ?? ""}`
-    : fromDigits;
-  if (!from) return null;
 
   const rawMsg = blob.message ?? blob.msg;
   let message: Record<string, unknown> | undefined;
@@ -728,6 +796,8 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
     debug: {
       remoteJid: remoteJid || undefined,
       participant: key?.participant ? String(key.participant) : undefined,
+      remoteJidAlt:
+        typeof key?.remoteJidAlt === "string" ? key.remoteJidAlt : undefined,
     },
   };
 }

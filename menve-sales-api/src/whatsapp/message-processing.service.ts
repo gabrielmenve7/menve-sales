@@ -38,9 +38,13 @@ function ackLevelToPrisma(level: EvolutionMessageAckLevel): MessageAckStatus {
 }
 
 function normalizePhone(raw: string) {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length >= 10) return `+${digits}`;
-  return raw;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("lid:")) {
+    return trimmed;
+  }
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length >= 10 && digits.length <= 13) return `+${digits}`;
+  return trimmed;
 }
 
 @Injectable()

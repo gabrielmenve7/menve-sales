@@ -18,6 +18,7 @@ export type NormalizedInbound = {
   debug?: {
     remoteJid?: string;
     participant?: string;
+    remoteJidAlt?: string;
   };
 };
 

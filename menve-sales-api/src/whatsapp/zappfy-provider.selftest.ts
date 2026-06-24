@@ -125,4 +125,34 @@ const messageBody = provider.parseWebhook({
 assert(messageBody.length === 1, "messageBody");
 assert(messageBody[0]?.body === "Via messageBody", "body messageBody");
 
+const lidWithAlt = provider.parseWebhook({
+  type: "NEW-MESSAGE",
+  data: {
+    key: {
+      remoteJid: "271361050177610@lid",
+      remoteJidAlt: "5519992105272@s.whatsapp.net",
+      fromMe: false,
+      id: "LID1",
+    },
+    pushName: "Lead",
+    message: { conversation: "Teste 04" },
+  },
+});
+assert(lidWithAlt.length === 1, "LID com remoteJidAlt");
+assert(lidWithAlt[0]?.from === "5519992105272", "telefone via remoteJidAlt");
+
+const cleanedPn = provider.parseWebhook({
+  type: "NEW-MESSAGE",
+  data: {
+    key: {
+      remoteJid: "271361050177610@lid",
+      cleanedSenderPn: "5519992105272",
+      fromMe: false,
+      id: "LID2",
+    },
+    message: { conversation: "Oi" },
+  },
+});
+assert(cleanedPn[0]?.from === "5519992105272", "telefone via cleanedSenderPn");
+
 console.log("zappfy-provider.selftest: OK");
