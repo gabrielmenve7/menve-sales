@@ -46,10 +46,10 @@ import { Label } from "@/components/ui/label";
 import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
 import { cn } from "@/lib/utils";
 
-type ChannelOption = "zappfy" | "evolution" | "meta" | "instagram";
+type ChannelOption = "zappfy" | "meta" | "instagram";
 
 const PROVIDER_LABELS: Record<string, string> = {
-  ZAPPFY: "WhatsApp (Zappfy)",
+  ZAPPFY: "Zappfy (não oficial)",
   EVOLUTION: "WhatsApp (Evolution)",
   META: "WhatsApp Official",
   INSTAGRAM: "Instagram",
@@ -81,12 +81,12 @@ function reloadSettingsChannelsPage() {
 
 type PairOk = { ok: true; connectionId: string; qrDataUrl: string };
 
-async function pairHttp(provider: "ZAPPFY" | "EVOLUTION" = "ZAPPFY"): Promise<PairOk> {
+async function pairHttp(): Promise<PairOk> {
   const res = await fetch("/api/whatsapp/pair", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify({ provider: "ZAPPFY" }),
   });
   let data: unknown;
   try {
@@ -105,7 +105,39 @@ async function pairHttp(provider: "ZAPPFY" | "EVOLUTION" = "ZAPPFY"): Promise<Pa
   return { ok: true, connectionId: o.connectionId, qrDataUrl: o.qrDataUrl };
 }
 
-async function evolutionRefreshQrHttp(connectionId: string): Promise<{ ok: true; qrDataUrl: string }> {
+async function linkZappfyHttp(input: {
+  instanceToken: string;
+  name?: string;
+}): Promise<{ ok: true; connectionId: string; connected: boolean }> {
+  const res = await fetch("/api/whatsapp/zappfy/link", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`Resposta inválida (HTTP ${res.status}).`);
+  }
+  const o = data as {
+    error?: string;
+    connectionId?: string;
+    connected?: boolean;
+    ok?: boolean;
+  };
+  if (!res.ok) {
+    const errRaw = o.error?.trim() || `Falha ao vincular (HTTP ${res.status}).`;
+    throw new Error(nestExceptionJsonToMessage(errRaw));
+  }
+  if (!o.connectionId) {
+    throw new Error(o.error?.trim() || "Resposta sem connectionId.");
+  }
+  return { ok: true, connectionId: o.connectionId, connected: o.connected === true };
+}
+
+async function refreshQrHttp(connectionId: string): Promise<{ ok: true; qrDataUrl: string }> {
   const res = await fetch(
     `/api/whatsapp/connections/${encodeURIComponent(connectionId)}/refresh-qr`,
     { method: "POST", credentials: "same-origin" },
@@ -143,12 +175,17 @@ export function SettingsChannels({
   const [newOpen, setNewOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<ChannelOption | null>(null);
 
-  // Evolution pairing
+  // Zappfy: escolher QR novo ou vincular token do painel
+  const [zappfySetupOpen, setZappfySetupOpen] = useState(false);
+  const [zappfyLinkName, setZappfyLinkName] = useState("");
+  const [zappfyLinkToken, setZappfyLinkToken] = useState("");
+  const [zappfyLinkError, setZappfyLinkError] = useState<string | null>(null);
+  const [zappfyLinkLoading, setZappfyLinkLoading] = useState(false);
+
+  // Zappfy QR pairing
   const [pairingOpen, setPairingOpen] = useState(false);
-  /** Modal abre já com spinner: pareamento pode levar vários segundos (Evolution + API). */
   const [pairingStarting, setPairingStarting] = useState(false);
   const [pairingConnId, setPairingConnId] = useState<string | null>(null);
-  const [pairingProvider, setPairingProvider] = useState<"ZAPPFY" | "EVOLUTION">("ZAPPFY");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(QR_COUNTDOWN);
@@ -191,9 +228,10 @@ export function SettingsChannels({
     setNewOpen(false);
     setSelectedType(type);
     if (type === "zappfy") {
-      void startPairingFlow("ZAPPFY");
-    } else if (type === "evolution") {
-      void startPairingFlow("EVOLUTION");
+      setZappfyLinkError(null);
+      setZappfyLinkName("");
+      setZappfyLinkToken("");
+      setZappfySetupOpen(true);
     } else if (type === "meta") {
       setMetaWizardStep(0);
       setMetaCreatedConnectionId(null);
@@ -207,21 +245,19 @@ export function SettingsChannels({
     }
   }
 
-  async function startPairingFlow(provider: "ZAPPFY" | "EVOLUTION") {
+  async function startPairingFlow() {
+    setZappfySetupOpen(false);
     setLoading(true);
     setPairingStarting(true);
     setPairingError(null);
     setQrDataUrl(null);
     setPairingConnId(null);
-    setPairingProvider(provider);
     setPairingOpen(true);
     try {
-      const r = await pairHttp(provider);
+      const r = await pairHttp();
       if (!r.qrDataUrl?.trim()) {
         throw new Error(
-          provider === "ZAPPFY"
-            ? "A API não retornou o QR Code. Verifique Zappfy e PUBLIC_APP_URL."
-            : "A API não retornou o QR Code. Verifique Evolution e PUBLIC_APP_URL.",
+          "A API não retornou o QR Code. Verifique ZAPPFY_ADMIN_TOKEN e PUBLIC_APP_URL na API (Railway).",
         );
       }
       setPairingConnId(r.connectionId);
@@ -252,6 +288,37 @@ export function SettingsChannels({
     } finally {
       setPairingStarting(false);
       setLoading(false);
+    }
+  }
+
+  async function onLinkZappfyExisting(e: React.FormEvent) {
+    e.preventDefault();
+    const token = zappfyLinkToken.trim();
+    if (!token) {
+      setZappfyLinkError("Cole o token da instância no painel Zappfy.");
+      return;
+    }
+    setZappfyLinkLoading(true);
+    setZappfyLinkError(null);
+    try {
+      const r = await linkZappfyHttp({
+        instanceToken: token,
+        name: zappfyLinkName.trim() || undefined,
+      });
+      setZappfySetupOpen(false);
+      if (r.connected) {
+        reloadSettingsChannelsPage();
+      } else {
+        setPairingConnId(r.connectionId);
+        setPairingOpen(true);
+        setPairingError(
+          "Instância vinculada, mas ainda não conectada no painel Zappfy. Conecte lá e use «Reaplicar webhook».",
+        );
+      }
+    } catch (err) {
+      setZappfyLinkError(err instanceof Error ? err.message : "Falha ao vincular");
+    } finally {
+      setZappfyLinkLoading(false);
     }
   }
 
@@ -373,7 +440,7 @@ export function SettingsChannels({
     setRefreshQrLoading(true);
     setPairingError(null);
     try {
-      const r = await evolutionRefreshQrHttp(pairingConnId);
+      const r = await refreshQrHttp(pairingConnId);
       setQrDataUrl(r.qrDataUrl);
       setSecondsLeft(QR_COUNTDOWN);
     } catch (e) {
@@ -820,22 +887,9 @@ export function SettingsChannels({
             >
               {providerIcon("ZAPPFY")}
               <div>
-                <p className="text-sm font-medium">WhatsApp (Zappfy)</p>
+                <p className="text-sm font-medium">Zappfy (não oficial)</p>
                 <p className="text-xs text-muted-foreground">
-                  Conecte via Zappfy — recomendado para novas conexões
-                </p>
-              </div>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-muted/50"
-              onClick={() => selectChannelType("evolution")}
-            >
-              {providerIcon("EVOLUTION")}
-              <div>
-                <p className="text-sm font-medium">WhatsApp (Evolution)</p>
-                <p className="text-xs text-muted-foreground">
-                  Conecte via Evolution API — sem restrição de 24h
+                  WhatsApp via Zappfy — QR novo ou vincular instância do painel
                 </p>
               </div>
             </button>
@@ -869,7 +923,75 @@ export function SettingsChannels({
         </DialogContent>
       </Dialog>
 
-      {/* Evolution QR pairing dialog */}
+      {/* Zappfy: QR novo ou vincular token */}
+      <Dialog open={zappfySetupOpen} onOpenChange={setZappfySetupOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Zappfy (não oficial)</DialogTitle>
+            <DialogDescription>
+              Mais simples que Evolution: uma instância = um token. Se já conectou no painel
+              Zappfy, cole o token. Para número novo, gere QR (exige{" "}
+              <code className="rounded bg-muted px-1">ZAPPFY_ADMIN_TOKEN</code> na API).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Button
+              type="button"
+              className="w-full justify-start gap-3 h-auto py-3"
+              variant="outline"
+              onClick={() => void startPairingFlow()}
+            >
+              <Radio className="size-4 shrink-0 text-emerald-600" />
+              <span className="text-left">
+                <span className="block text-sm font-medium">Nova conexão (QR Code)</span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  Cria instância na Zappfy e exibe QR para escanear
+                </span>
+              </span>
+            </Button>
+            <form onSubmit={(e) => void onLinkZappfyExisting(e)} className="space-y-3 rounded-lg border p-4">
+              <p className="text-sm font-medium">Já tenho instância no painel Zappfy</p>
+              <p className="text-xs text-muted-foreground">
+                Copie o <strong>Token</strong> da instância conectada no painel Zappfy e cole abaixo.
+              </p>
+              {zappfyLinkError && (
+                <p className="text-sm text-destructive">{zappfyLinkError}</p>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="zappfy-link-name">Nome (opcional)</Label>
+                <Input
+                  id="zappfy-link-name"
+                  value={zappfyLinkName}
+                  onChange={(e) => setZappfyLinkName(e.target.value)}
+                  placeholder="Ex.: Comercial 01"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="zappfy-link-token">Token da instância</Label>
+                <Input
+                  id="zappfy-link-token"
+                  value={zappfyLinkToken}
+                  onChange={(e) => setZappfyLinkToken(e.target.value)}
+                  placeholder="69419188-3e0f-468c-98f8-..."
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={zappfyLinkLoading}>
+                {zappfyLinkLoading ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Vinculando…
+                  </>
+                ) : (
+                  "Vincular instância"
+                )}
+              </Button>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Zappfy QR pairing dialog */}
       <Dialog
         open={pairingOpen}
         onOpenChange={(o) => {
@@ -885,7 +1007,7 @@ export function SettingsChannels({
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Conectar WhatsApp</DialogTitle>
+            <DialogTitle>Conectar Zappfy</DialogTitle>
             <DialogDescription>
               Abra o WhatsApp no celular → Menu → Aparelhos conectados → Conectar um aparelho.
               Escaneie o código abaixo.
@@ -897,7 +1019,7 @@ export function SettingsChannels({
               <div className="flex h-56 w-56 flex-col items-center justify-center gap-2 rounded-md border bg-muted px-4 text-center">
                 <Loader2 className="size-10 animate-spin text-muted-foreground" aria-hidden />
                 <p className="text-xs text-muted-foreground">
-                  Gerando QR com a {pairingProvider === "ZAPPFY" ? "Zappfy" : "Evolution"}… pode levar até um minuto.
+                  Gerando QR com a Zappfy… pode levar até um minuto.
                 </p>
               </div>
             ) : qrDataUrl ? (

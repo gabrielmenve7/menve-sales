@@ -207,6 +207,62 @@ export class WhatsappConnectionsService {
     }
   }
 
+  /** Vincula instância já criada no painel Zappfy (token da instância — não precisa de admintoken). */
+  async linkZappfyExisting(
+    u: RequestUser,
+    input: { instanceToken: string; name?: string },
+  ) {
+    assertCanConfigureTenant(u.role);
+    const instanceToken = input.instanceToken?.trim();
+    if (!instanceToken) {
+      throw new BadRequestException("Informe o token da instância Zappfy.");
+    }
+    const appUrl = appPublicUrl();
+    if (!appUrl) {
+      throw new BadRequestException(
+        "Configure PUBLIC_APP_URL na API para o webhook.",
+      );
+    }
+    assertProductionWebhookUrl(appUrl);
+    const baseUrl = getZappfyBaseUrlForDisplay();
+    const status = await fetchZappfyStatus({ baseUrl, instanceToken }).catch(
+      (e) => {
+        throw this.wrapZappfyError(
+          e,
+          "Token Zappfy inválido ou API indisponível",
+        );
+      },
+    );
+    const connection = await this.prisma.whatsAppConnection.create({
+      data: {
+        tenantId: u.tenantId,
+        name: input.name?.trim() || "Zappfy",
+        provider: "ZAPPFY",
+        isActive: status.connected,
+        config: { baseUrl, instanceToken },
+      },
+    });
+    try {
+      await setZappfyWebhook({
+        baseUrl,
+        instanceToken,
+        webhookUrl: this.webhookPath(connection.id, "ZAPPFY"),
+        webhookHeaders: buildWebhookHeaders("ZAPPFY"),
+      });
+    } catch (e) {
+      await this.prisma.whatsAppConnection
+        .delete({ where: { id: connection.id } })
+        .catch(() => {});
+      throw this.wrapZappfyError(e, "Falha ao configurar webhook Zappfy");
+    }
+    return {
+      ok: true as const,
+      connectionId: connection.id,
+      connected: status.connected,
+      detail: status.detail,
+    };
+  }
+
   async startEvolutionPairing(u: RequestUser, input?: { name?: string }) {
     assertCanConfigureTenant(u.role);
     const tenantId = u.tenantId;

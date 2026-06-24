@@ -15,7 +15,7 @@ export function getZappfyEnv() {
   const adminToken = process.env.ZAPPFY_ADMIN_TOKEN?.trim();
   if (!adminToken) {
     throw new ServiceUnavailableException(
-      "Configure ZAPPFY_ADMIN_TOKEN no ambiente.",
+      "Configure ZAPPFY_ADMIN_TOKEN na API (Railway): admintoken do painel Zappfy. Para instância já criada no painel, use «Vincular com token» em vez de QR.",
     );
   }
   return { baseUrl, adminToken };

@@ -23,6 +23,14 @@ export class WhatsappConnectionsController {
     return this.wa.startPairing(u, body);
   }
 
+  @Post("zappfy/link")
+  linkZappfy(
+    @ReqUser() u: RequestUser,
+    @Body() body: { instanceToken: string; name?: string },
+  ) {
+    return this.wa.linkZappfyExisting(u, body);
+  }
+
   @Post("create-meta")
   createMeta(
     @ReqUser() u: RequestUser,
