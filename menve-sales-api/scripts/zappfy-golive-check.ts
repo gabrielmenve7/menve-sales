@@ -1,16 +1,12 @@
 import "./load-api-env";
+import { ZappfyWhatsAppProvider } from "../src/whatsapp/zappfy-provider";
+import { fetchZappfyStatus } from "../src/whatsapp/zappfy-admin";
 
 type CheckResult = {
   name: string;
   ok: boolean;
   detail: string;
 };
-
-function requiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing env: ${name}`);
-  return value;
-}
 
 function optionalEnv(name: string): string | null {
   const value = process.env[name]?.trim();
@@ -35,10 +31,75 @@ async function checkHealth(appUrl: string): Promise<CheckResult> {
   return { name: "health", ok: false, detail: lastErr };
 }
 
+function checkLocalParse(): CheckResult {
+  const provider = new ZappfyWhatsAppProvider({
+    baseUrl: "https://api.zappfy.io",
+    instanceToken: "probe",
+  });
+  const text = provider.parseWebhook({
+    event: "messages",
+    data: {
+      messageId: "probe-text",
+      from: "5511999999999",
+      text: "probe",
+      fromMe: false,
+      timestamp: Date.now(),
+    },
+  });
+  const audio = provider.parseWebhook({
+    type: "NEW-MESSAGE",
+    data: {
+      key: {
+        remoteJid: "5511888888888@s.whatsapp.net",
+        fromMe: false,
+        id: "probe-audio",
+      },
+      message: {
+        audioMessage: {
+          url: "https://example.com/probe.m4a",
+          mimetype: "audio/mp4",
+        },
+      },
+      messageTimestamp: { low: Math.floor(Date.now() / 1000), high: 0 },
+    },
+  });
+  if (text.length !== 1 || audio.length !== 1) {
+    return {
+      name: "parser-local",
+      ok: false,
+      detail: `text=${text.length} audio=${audio.length}`,
+    };
+  }
+  return {
+    name: "parser-local",
+    ok: true,
+    detail: "texto simples + NEW-MESSAGE áudio",
+  };
+}
+
+async function checkZappfyStatus(instanceToken: string | null): Promise<CheckResult> {
+  if (!instanceToken) {
+    return {
+      name: "zappfy-status",
+      ok: true,
+      detail: "skipped (set ZAPPFY_INSTANCE_TOKEN or pass token as 2nd arg)",
+    };
+  }
+  const baseUrl = optionalEnv("ZAPPFY_BASE_URL") ?? "https://api.zappfy.io";
+  const status = await fetchZappfyStatus({ baseUrl, instanceToken });
+  return {
+    name: "zappfy-status",
+    ok: status.connected,
+    detail: status.connected
+      ? `conectado (${status.detail ?? "ok"})`
+      : `desconectado (${status.detail ?? "sem detalhe"})`,
+  };
+}
+
 async function checkWebhookAuth(args: {
   appUrl: string;
   connectionId: string;
-  webhookSecret: string;
+  webhookSecret: string | null;
 }): Promise<CheckResult> {
   const webhookUrl = `${args.appUrl.replace(/\/$/, "")}/webhooks/whatsapp/zappfy/${args.connectionId}`;
   const payload = {
@@ -53,43 +114,62 @@ async function checkWebhookAuth(args: {
   };
 
   try {
-    const unauthorized = await fetch(webhookUrl, {
+    if (args.webhookSecret) {
+      const unauthorized = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (unauthorized.status !== 401) {
+        return {
+          name: "webhook-secret",
+          ok: false,
+          detail: `expected 401 without header, got ${unauthorized.status}`,
+        };
+      }
+
+      const authorized = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-webhook-secret": args.webhookSecret,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!authorized.ok) {
+        return {
+          name: "webhook-secret",
+          ok: false,
+          detail: `expected 2xx with secret, got ${authorized.status}`,
+        };
+      }
+      return {
+        name: "webhook-secret",
+        ok: true,
+        detail: "401 sem header e 2xx com secret",
+      };
+    }
+
+    const res = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (unauthorized.status !== 401) {
+    if (!res.ok) {
       return {
-        name: "webhook-secret-unauthorized",
+        name: "webhook-reachable",
         ok: false,
-        detail: `expected 401, got ${unauthorized.status}`,
+        detail: `POST webhook HTTP ${res.status}`,
       };
     }
-
-    const authorized = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-webhook-secret": args.webhookSecret,
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!authorized.ok) {
-      return {
-        name: "webhook-secret-authorized",
-        ok: false,
-        detail: `expected 2xx, got ${authorized.status}`,
-      };
-    }
-
     return {
-      name: "webhook-secret",
+      name: "webhook-reachable",
       ok: true,
-      detail: "401 without header and 2xx with correct secret",
+      detail: `POST webhook HTTP ${res.status} (sem secret configurado)`,
     };
   } catch (error) {
     return {
-      name: "webhook-secret",
+      name: args.webhookSecret ? "webhook-secret" : "webhook-reachable",
       ok: false,
       detail: error instanceof Error ? error.message : String(error),
     };
@@ -98,21 +178,25 @@ async function checkWebhookAuth(args: {
 
 async function main() {
   const connectionIdArg = process.argv[2]?.trim();
+  const instanceTokenArg = process.argv[3]?.trim();
   const appUrl = (
     optionalEnv("PUBLIC_APP_URL") ||
     optionalEnv("INTERNAL_API_URL") ||
     optionalEnv("NEXT_PUBLIC_APP_URL") ||
     "http://127.0.0.1:4000"
   ).replace(/\/$/, "");
-  requiredEnv("ZAPPFY_ADMIN_TOKEN");
-  optionalEnv("ZAPPFY_BASE_URL");
 
   const results: CheckResult[] = [];
   results.push(await checkHealth(appUrl));
+  results.push(checkLocalParse());
+
+  const instanceToken =
+    instanceTokenArg || optionalEnv("ZAPPFY_INSTANCE_TOKEN");
+  results.push(await checkZappfyStatus(instanceToken));
 
   const connectionId = connectionIdArg || optionalEnv("WHATSAPP_CONNECTION_ID");
   const webhookSecret = optionalEnv("ZAPPFY_WEBHOOK_SECRET");
-  if (connectionId && webhookSecret) {
+  if (connectionId) {
     results.push(
       await checkWebhookAuth({
         appUrl,
@@ -122,10 +206,10 @@ async function main() {
     );
   } else {
     results.push({
-      name: "webhook-secret",
+      name: "webhook",
       ok: true,
       detail:
-        "skipped (pass connectionId arg or set WHATSAPP_CONNECTION_ID + ZAPPFY_WEBHOOK_SECRET)",
+        "skipped (pass connectionId arg or set WHATSAPP_CONNECTION_ID)",
     });
   }
 

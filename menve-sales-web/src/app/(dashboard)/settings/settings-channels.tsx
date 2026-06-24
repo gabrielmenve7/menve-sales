@@ -159,6 +159,29 @@ async function refreshQrHttp(connectionId: string): Promise<{ ok: true; qrDataUr
   return { ok: true, qrDataUrl: o.qrDataUrl };
 }
 
+function connectionWebhookMeta(c: WhatsAppConnection) {
+  const cfg = c.config as Record<string, unknown>;
+  return {
+    lastWebhookAt:
+      typeof cfg.lastWebhookAt === "string" ? cfg.lastWebhookAt : null,
+    lastWebhookParsed:
+      typeof cfg.lastWebhookParsed === "number" ? cfg.lastWebhookParsed : null,
+    lastWebhookProcessed:
+      typeof cfg.lastWebhookProcessed === "number"
+        ? cfg.lastWebhookProcessed
+        : null,
+  };
+}
+
+function formatWebhookTime(iso: string | null) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString("pt-BR");
+  } catch {
+    return iso;
+  }
+}
+
 export function SettingsChannels({
   connections,
   quickReplyCategories,
@@ -191,6 +214,8 @@ export function SettingsChannels({
   const [secondsLeft, setSecondsLeft] = useState(QR_COUNTDOWN);
   const [refreshQrLoading, setRefreshQrLoading] = useState(false);
   const [reapplyWebhookId, setReapplyWebhookId] = useState<string | null>(null);
+  const [probeWebhookId, setProbeWebhookId] = useState<string | null>(null);
+  const [probeResult, setProbeResult] = useState<Record<string, string | null>>({});
 
   // Meta wizard + edição
   const [metaOpen, setMetaOpen] = useState(false);
@@ -503,6 +528,46 @@ export function SettingsChannels({
     }
   }
 
+  async function onProbeWebhook(connectionId: string) {
+    setProbeWebhookId(connectionId);
+    setProbeResult((m) => ({ ...m, [connectionId]: null }));
+    try {
+      const res = await fetch(
+        `/api/whatsapp/connections/${encodeURIComponent(connectionId)}/probe-webhook`,
+        { method: "POST", credentials: "same-origin" },
+      );
+      let data: unknown;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Resposta inválida (HTTP ${res.status}).`);
+      }
+      const o = data as {
+        error?: string;
+        ok?: boolean;
+        results?: { label: string; ok: boolean; httpStatus: number; detail?: string }[];
+      };
+      if (!res.ok) {
+        throw new Error(o.error?.trim() || `Falha no probe (HTTP ${res.status}).`);
+      }
+      const summary =
+        o.results
+          ?.map((r) => `${r.label}: HTTP ${r.httpStatus} ${r.ok ? "OK" : "FALHA"}${r.detail ? ` (${r.detail})` : ""}`)
+          .join(" · ") ?? "Probe concluído";
+      setProbeResult((m) => ({
+        ...m,
+        [connectionId]: o.ok ? `OK — ${summary}` : `Falha — ${summary}`,
+      }));
+    } catch (e) {
+      setProbeResult((m) => ({
+        ...m,
+        [connectionId]: e instanceof Error ? e.message : "Falha no probe",
+      }));
+    } finally {
+      setProbeWebhookId(null);
+    }
+  }
+
   async function onReapplyPairingWebhook(connectionId: string) {
     setReapplyWebhookId(connectionId);
     try {
@@ -672,9 +737,19 @@ export function SettingsChannels({
             <CardDescription>URLs de webhook por canal conectado</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            {connections.map((c) => (
+            {connections.map((c) => {
+              const wh = connectionWebhookMeta(c);
+              const lastWebhookLabel = formatWebhookTime(wh.lastWebhookAt);
+              return (
               <div key={c.id} className="rounded-lg border p-3">
-                <p className="font-medium">{c.name} — {PROVIDER_LABELS[c.provider] ?? c.provider}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium">{c.name} — {PROVIDER_LABELS[c.provider] ?? c.provider}</p>
+                  {!c.isActive && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                      Desconectado — mensagens podem não chegar
+                    </span>
+                  )}
+                </div>
                 {c.provider === "EVOLUTION" || c.provider === "ZAPPFY" ? (
                   <div className="mt-2 space-y-2">
                     <p className="break-all text-xs text-muted-foreground">
@@ -684,6 +759,12 @@ export function SettingsChannels({
                         {c.provider === "ZAPPFY" ? "zappfy" : "evolution"}/{c.id}
                       </code>
                     </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {lastWebhookLabel
+                        ? `Último webhook: ${lastWebhookLabel} (parsed=${wh.lastWebhookParsed ?? 0}, gravados=${wh.lastWebhookProcessed ?? 0})`
+                        : "Nenhum webhook recebido ainda — envie uma mensagem de texto teste ou use «Testar webhook»."}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -699,9 +780,39 @@ export function SettingsChannels({
                       )}
                       Reaplicar webhook na {c.provider === "ZAPPFY" ? "Zappfy" : "Evolution"}
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={probeWebhookId === c.id || !webhookBaseUrl}
+                      onClick={() => void onProbeWebhook(c.id)}
+                    >
+                      {probeWebhookId === c.id ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Radio className="size-3.5" />
+                      )}
+                      Testar webhook
+                    </Button>
+                    </div>
+                    {probeResult[c.id] && (
+                      <p
+                        className={cn(
+                          "text-[11px]",
+                          probeResult[c.id]?.startsWith("OK")
+                            ? "text-green-700 dark:text-green-400"
+                            : "text-destructive",
+                        )}
+                      >
+                        {probeResult[c.id]}
+                      </p>
+                    )}
                     <p className="text-[11px] text-muted-foreground">
-                      Use após mudar a URL pública da API (ex.: túnel ngrok) em{" "}
+                      Use após mudar a URL pública da API em{" "}
                       <code className="rounded bg-muted px-1">PUBLIC_APP_URL</code>.
+                      Se usar <code className="rounded bg-muted px-1">ZAPPFY_WEBHOOK_SECRET</code>,
+                      configure o mesmo header na Zappfy.
                     </p>
                   </div>
                 ) : c.provider === "META" ? (
@@ -714,7 +825,8 @@ export function SettingsChannels({
                   </p>
                 )}
               </div>
-            ))}
+            );
+            })}
           </CardContent>
         </Card>
       )}

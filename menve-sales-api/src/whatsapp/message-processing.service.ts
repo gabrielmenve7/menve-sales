@@ -199,7 +199,8 @@ export class MessageProcessingService {
     if (
       !mediaUrl &&
       args.inbound.body === "[Áudio]" &&
-      conn.provider === WhatsAppProvider.EVOLUTION &&
+      (conn.provider === WhatsAppProvider.EVOLUTION ||
+        conn.provider === WhatsAppProvider.ZAPPFY) &&
       typeof fetchFn === "function"
     ) {
       const remoteJid = args.inbound.debug?.remoteJid;

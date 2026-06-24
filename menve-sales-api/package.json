@@ -16,6 +16,7 @@
     "test:meta-sig": "tsx src/webhooks/meta-signature.selftest.ts",
     "test:prospecting": "tsx src/prospecting/serpapi-maps.selftest.ts && tsx src/prospecting/prospect-normalize.selftest.ts && tsx src/prospecting/prospect-query.selftest.ts",
     "test:larissa": "tsx src/agents/prompt-builder.selftest.ts && tsx src/agents/skill-file-parse.selftest.ts && tsx src/agents/agent-file.selftest.ts",
+    "test:zappfy": "tsx src/whatsapp/zappfy-provider.selftest.ts",
     "backfill:prospect-phones": "tsx scripts/backfill-contact-phones-from-prospects.ts",
     "backfill:primary-list": "tsx scripts/backfill-primary-prospect-list.ts",
     "sync:larissa-skills": "tsx scripts/sync-larissa-skills.ts",

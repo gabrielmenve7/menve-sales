@@ -117,6 +117,16 @@ export class WhatsappConnectionsController {
     return this.wa.reapplyWebhook(u, id);
   }
 
+  @Get(":id/webhook-diagnostics")
+  webhookDiagnostics(@ReqUser() u: RequestUser, @Param("id") id: string) {
+    return this.wa.getWebhookDiagnostics(u, id);
+  }
+
+  @Post(":id/probe-webhook")
+  probeWebhook(@ReqUser() u: RequestUser, @Param("id") id: string) {
+    return this.wa.probeWebhook(u, id);
+  }
+
   @Delete(":id")
   remove(@ReqUser() u: RequestUser, @Param("id") id: string) {
     return this.wa.deleteConnection(u, id);

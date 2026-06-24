@@ -112,6 +112,50 @@ export class ZappfyWhatsAppProvider implements IWhatsAppProvider {
     });
   }
 
+  async fetchInboundMediaBase64(args: { keyId: string; remoteJid: string }) {
+    const body = JSON.stringify({
+      message: {
+        key: {
+          id: args.keyId,
+          remoteJid: args.remoteJid,
+        },
+      },
+      convertToMp4: false,
+    });
+    const paths = [
+      "/chat/getBase64FromMediaMessage",
+      "/message/getBase64FromMediaMessage",
+    ];
+    for (const path of paths) {
+      try {
+        const res = await fetch(`${this.base()}${path}`, {
+          method: "POST",
+          headers: this.headers(),
+          body,
+        });
+        if (!res.ok) continue;
+        const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const pick = (v: unknown): string | undefined =>
+          typeof v === "string" && v.trim() ? v.trim() : undefined;
+        const b64 =
+          pick(json.base64) ||
+          (json.data && typeof json.data === "object"
+            ? pick((json.data as Record<string, unknown>).base64)
+            : undefined);
+        if (!b64) continue;
+        const mimetype =
+          pick(json.mimetype) ||
+          (json.data && typeof json.data === "object"
+            ? pick((json.data as Record<string, unknown>).mimetype as string)
+            : undefined);
+        return { base64: b64, mimetype };
+      } catch {
+        // try next path
+      }
+    }
+    return null;
+  }
+
   parseWebhook(payload: unknown): NormalizedInbound[] {
     const blobs = extractZappfyMessageBlobs(payload);
     const out: NormalizedInbound[] = [];
@@ -128,6 +172,7 @@ function zappfyEventIsMessages(payload: Record<string, unknown>): boolean {
   if (ev == null) return true;
   if (typeof ev !== "string") return true;
   const n = ev.trim().replace(/[.-]/g, "_").toUpperCase();
+  if (n === "MESSAGE_UPDATED" || n === "MESSAGES_UPDATE") return false;
   return n === "MESSAGES" || n === "MESSAGE" || n === "NEW_MESSAGE";
 }
 
@@ -149,12 +194,12 @@ function extractZappfyMessageBlobs(payload: unknown): Record<string, unknown>[] 
   const bodyRaw = p.body;
   if (typeof bodyRaw === "string") {
     const parsed = tryParseJsonObject(bodyRaw.trim());
-    if (parsed && (parsed.data != null || parsed.event != null)) {
+    if (parsed && (parsed.data != null || parsed.event != null || parsed.type != null)) {
       p = parsed;
     }
   } else if (bodyRaw && typeof bodyRaw === "object" && !Array.isArray(bodyRaw)) {
     const b = bodyRaw as Record<string, unknown>;
-    if (b.data != null || b.event != null) p = b;
+    if (b.data != null || b.event != null || b.type != null) p = b;
   }
 
   if (!zappfyEventIsMessages(p)) return [];
@@ -196,15 +241,74 @@ function extractZappfyMessageBlobs(payload: unknown): Record<string, unknown>[] 
 export function getZappfyWebhookParseMeta(payload: unknown): {
   event: unknown;
   blobCount: number;
+  rejectReason?: string;
 } {
   const p = payload as Record<string, unknown>;
-  return {
-    event: p.event ?? p.type,
-    blobCount: extractZappfyMessageBlobs(payload).length,
-  };
+  const event = p.event ?? p.type ?? p.action;
+  if (!zappfyEventIsMessages(p)) {
+    return {
+      event,
+      blobCount: 0,
+      rejectReason: `evento ignorado (${String(event ?? "sem evento")})`,
+    };
+  }
+  const blobs = extractZappfyMessageBlobs(payload);
+  if (blobs.length === 0) {
+    return {
+      event,
+      blobCount: 0,
+      rejectReason: "nenhum blob em data/message",
+    };
+  }
+  const parsed = new ZappfyWhatsAppProvider({
+    baseUrl: "https://api.zappfy.io",
+    instanceToken: "probe",
+  }).parseWebhook(payload);
+  if (parsed.length === 0) {
+    return {
+      event,
+      blobCount: blobs.length,
+      rejectReason: describeZappfyParseFailure(blobs[0]),
+    };
+  }
+  return { event, blobCount: blobs.length };
+}
+
+function describeZappfyParseFailure(blob: Record<string, unknown> | undefined): string {
+  if (!blob) return "blob vazio";
+  const key = blob.key as Record<string, unknown> | undefined;
+  const remoteJid = String(
+    key?.remoteJid ?? blob.chatId ?? blob.from ?? blob.remoteJid ?? "",
+  );
+  if (!remoteJid && !String(blob.from ?? "").replace(/\D/g, "")) {
+    return "sem remoteJid/from";
+  }
+  const msg = blob.message;
+  const hasProto = msg && typeof msg === "object";
+  const hasFlatText =
+    typeof blob.text === "string" ||
+    typeof blob.body === "string" ||
+    typeof blob.messageText === "string";
+  if (!hasFlatText && !hasProto) {
+    return "sem texto nem message proto";
+  }
+  if (hasProto && !extractZappfyText(blob, msg as Record<string, unknown>)) {
+    return "message proto sem texto/mídia reconhecida";
+  }
+  return "filtro fromMe/grupo/JID";
 }
 
 function parseTimestamp(raw: unknown): Date {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as { low?: number; high?: number };
+    if (typeof o.low === "number") {
+      const low = o.low >>> 0;
+      const high = typeof o.high === "number" ? o.high : 0;
+      const n = high > 0 ? high * 0x100000000 + low : low;
+      if (n > 0 && n < 1e12) return new Date(n * 1000);
+      return new Date(n);
+    }
+  }
   const n = Number(raw);
   if (!Number.isFinite(n)) return new Date();
   if (n > 0 && n < 1e12) return new Date(n * 1000);
@@ -216,6 +320,136 @@ function digitsFromJidOrPhone(raw: unknown): string {
   if (!s) return "";
   if (s.includes("@")) return s.split("@")[0]?.replace(/\D/g, "") ?? "";
   return s.replace(/\D/g, "");
+}
+
+function unwrapProtoContent(
+  message: Record<string, unknown> | undefined,
+): Record<string, unknown> | null {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return null;
+  }
+  return message;
+}
+
+function extractTextFromProto(message: Record<string, unknown>): string {
+  const candidates: unknown[] = [
+    message.conversation,
+    (message.extendedTextMessage as Record<string, unknown> | undefined)?.text,
+    (message.imageMessage as Record<string, unknown> | undefined)?.caption,
+    (message.videoMessage as Record<string, unknown> | undefined)?.caption,
+    (message.documentMessage as Record<string, unknown> | undefined)?.caption,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return "";
+}
+
+function extractZappfyText(
+  data: Record<string, unknown>,
+  message?: Record<string, unknown>,
+): string {
+  const textRaw =
+    data.text ??
+    data.body ??
+    data.messageText ??
+    (message ? extractTextFromProto(message) : undefined);
+  if (typeof textRaw === "string" && textRaw.trim()) return textRaw.trim();
+
+  const root = unwrapProtoContent(message);
+  const typeRaw =
+    data.messageType ??
+    data.type ??
+    (root ? Object.keys(root)[0] : undefined);
+  const type = typeof typeRaw === "string" ? typeRaw.toLowerCase() : "";
+
+  if (
+    root?.audioMessage ||
+    root?.pttMessage ||
+    type.includes("audio") ||
+    type.includes("ptt")
+  ) {
+    return "[Áudio]";
+  }
+  if (root?.imageMessage || type.includes("image")) return "[Imagem]";
+  if (root?.videoMessage || root?.stickerMessage || type.includes("video")) {
+    return "[Mídia]";
+  }
+  if (root?.documentMessage || type.includes("document") || type.includes("pdf")) {
+    return "[Documento]";
+  }
+  if (type.includes("contact")) return "[Contato]";
+  if (type.includes("location")) return "[Localização]";
+  return "";
+}
+
+function extractZappfyMedia(
+  data: Record<string, unknown>,
+  message?: Record<string, unknown>,
+): { mediaUrl: string | null; mediaType: string | null } {
+  const root = unwrapProtoContent(message);
+  if (!root) {
+    const b64Raw =
+      (typeof data.base64 === "string" && data.base64) ||
+      (typeof data.messageBase64 === "string" && data.messageBase64) ||
+      (typeof data.mediaBase64 === "string" && data.mediaBase64) ||
+      null;
+    if (b64Raw) {
+      const trimmed = b64Raw.trim();
+      const mime =
+        typeof data.mimetype === "string"
+          ? data.mimetype.split(";")[0]?.trim()
+          : "application/octet-stream";
+      if (trimmed.startsWith("data:")) {
+        return { mediaUrl: trimmed, mediaType: mime };
+      }
+      return { mediaUrl: `data:${mime};base64,${trimmed}`, mediaType: mime };
+    }
+    return { mediaUrl: null, mediaType: null };
+  }
+
+  const aud = (root.audioMessage ?? root.pttMessage) as
+    | Record<string, unknown>
+    | undefined;
+  const img = root.imageMessage as Record<string, unknown> | undefined;
+  const vid = root.videoMessage as Record<string, unknown> | undefined;
+  const doc = root.documentMessage as Record<string, unknown> | undefined;
+  const node = aud ?? img ?? vid ?? doc;
+  if (!node) return { mediaUrl: null, mediaType: null };
+
+  const mimeRaw =
+    typeof node.mimetype === "string"
+      ? node.mimetype
+      : aud
+        ? "audio/ogg; codecs=opus"
+        : img
+          ? "image/jpeg"
+          : vid
+            ? "video/mp4"
+            : "application/pdf";
+  const mime = mimeRaw.split(";")[0]?.trim() || "application/octet-stream";
+
+  const urlRaw = typeof node.url === "string" ? node.url.trim() : "";
+  if (urlRaw.startsWith("http://") || urlRaw.startsWith("https://")) {
+    return { mediaUrl: urlRaw, mediaType: mime };
+  }
+
+  const b64Raw =
+    (typeof data.base64 === "string" && data.base64) ||
+    (typeof data.messageBase64 === "string" && data.messageBase64) ||
+    (typeof data.mediaBase64 === "string" && data.mediaBase64) ||
+    (typeof node.base64 === "string" && node.base64) ||
+    null;
+
+  if (!b64Raw) return { mediaUrl: null, mediaType: mime };
+
+  const trimmed = b64Raw.trim();
+  if (trimmed.startsWith("data:")) {
+    return { mediaUrl: trimmed, mediaType: mime };
+  }
+  const b64 = trimmed.replace(/^data:[^;]+;base64,/, "");
+  if (b64.length > 15_000_000) return { mediaUrl: null, mediaType: mime };
+  return { mediaUrl: `data:${mime};base64,${b64}`, mediaType: mime };
 }
 
 function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound | null {
@@ -241,30 +475,35 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
     : fromDigits;
   if (!from) return null;
 
-  const textRaw =
-    data.text ??
-    data.body ??
-    data.messageText ??
-    (data.message && typeof data.message === "object"
-      ? extractTextFromProto(data.message as Record<string, unknown>)
-      : undefined);
-  const text = typeof textRaw === "string" ? textRaw.trim() : "";
+  const rawMsg = data.message ?? data.msg;
+  let message: Record<string, unknown> | undefined;
+  if (rawMsg && typeof rawMsg === "object" && !Array.isArray(rawMsg)) {
+    message = rawMsg as Record<string, unknown>;
+  } else if (typeof rawMsg === "string" && rawMsg.trim()) {
+    message = tryParseJsonObject(rawMsg.trim()) ?? undefined;
+  }
+
+  const text = extractZappfyText(data, message);
   if (!text) return null;
 
+  const keyId = key?.id ? String(key.id) : undefined;
   const externalId = String(
-    data.messageId ??
+    keyId ??
+      data.messageId ??
       data.id ??
-      key?.id ??
       `${from}-${Date.now()}`,
   );
   const fromMe = data.fromMe === true || key?.fromMe === true;
+  const media = extractZappfyMedia(data, message);
 
   return {
     externalId,
-    whatsappKeyId: key?.id ? String(key.id) : undefined,
+    whatsappKeyId: keyId,
     from,
     body: text,
-    timestamp: parseTimestamp(data.timestamp ?? data.messageTimestamp),
+    timestamp: parseTimestamp(
+      data.messageTimestamp ?? data.timestamp ?? key?.messageTimestamp,
+    ),
     profileName:
       typeof data.pushName === "string"
         ? data.pushName
@@ -272,23 +511,11 @@ function parseOneZappfyMessage(data: Record<string, unknown>): NormalizedInbound
           ? data.profileName
           : undefined,
     fromMe,
+    mediaUrl: media.mediaUrl,
+    mediaType: media.mediaType,
     debug: {
       remoteJid: remoteJid || undefined,
       participant: key?.participant ? String(key.participant) : undefined,
     },
   };
-}
-
-function extractTextFromProto(message: Record<string, unknown>): string {
-  const candidates: unknown[] = [
-    message.conversation,
-    (message.extendedTextMessage as Record<string, unknown> | undefined)?.text,
-    (message.imageMessage as Record<string, unknown> | undefined)?.caption,
-    (message.videoMessage as Record<string, unknown> | undefined)?.caption,
-    (message.documentMessage as Record<string, unknown> | undefined)?.caption,
-  ];
-  for (const c of candidates) {
-    if (typeof c === "string" && c.trim()) return c.trim();
-  }
-  return "";
 }

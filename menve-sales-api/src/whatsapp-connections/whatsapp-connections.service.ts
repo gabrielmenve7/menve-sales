@@ -8,6 +8,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { assertCanConfigureTenant } from "../common/rbac";
 import type { RequestUser } from "../common/request-user";
 import { createWhatsAppProvider } from "../whatsapp/factory";
+import { getZappfyWebhookParseMeta } from "../whatsapp/zappfy-provider";
 import {
   createEvolutionInstance,
   deleteEvolutionInstance,
@@ -490,6 +491,214 @@ export class WhatsappConnectionsService {
       throw this.wrapEvolutionError(e, "Falha ao reaplicar webhook");
     }
     return { ok: true as const };
+  }
+
+  async getWebhookDiagnostics(u: RequestUser, connectionId: string) {
+    assertCanConfigureTenant(u.role);
+    const conn = await this.prisma.whatsAppConnection.findFirst({
+      where: { id: connectionId, tenantId: u.tenantId },
+    });
+    if (!conn) throw new BadRequestException("Conexão não encontrada");
+    if (conn.provider !== "ZAPPFY" && conn.provider !== "EVOLUTION") {
+      throw new BadRequestException("Diagnóstico disponível só para Zappfy/Evolution");
+    }
+
+    const appUrl = appPublicUrl();
+    const segment = conn.provider === "ZAPPFY" ? "zappfy" : "evolution";
+    const expectedWebhookUrl = appUrl
+      ? `${appUrl}/webhooks/whatsapp/${segment}/${conn.id}`
+      : "";
+
+    const cfg = conn.config as Record<string, unknown>;
+    let connectionStatus: { connected: boolean; detail?: string } | null = null;
+    if (conn.provider === "ZAPPFY") {
+      const zcfg = parseZappfyConfig(conn.config);
+      if (zcfg) {
+        connectionStatus = await fetchZappfyStatus({
+          baseUrl: zcfg.baseUrl,
+          instanceToken: zcfg.instanceToken,
+        }).catch(() => ({ connected: false, detail: "status indisponível" }));
+      }
+    } else {
+      const ecfg = parseEvolutionConfig(conn.config);
+      if (ecfg) {
+        connectionStatus = await fetchEvolutionConnectionState({
+          baseUrl: ecfg.baseUrl,
+          apiKey: ecfg.apiKey,
+          instanceName: ecfg.instanceName,
+        }).catch(() => ({ connected: false, detail: "status indisponível" }));
+      }
+    }
+
+    return {
+      ok: true as const,
+      connectionId: conn.id,
+      tenantId: conn.tenantId,
+      provider: conn.provider,
+      isActive: conn.isActive,
+      publicAppUrl: appUrl || null,
+      expectedWebhookUrl,
+      webhookSecretConfigured: conn.provider === "ZAPPFY"
+        ? !!process.env.ZAPPFY_WEBHOOK_SECRET?.trim()
+        : !!process.env.EVOLUTION_WEBHOOK_SECRET?.trim(),
+      lastWebhookAt:
+        typeof cfg.lastWebhookAt === "string" ? cfg.lastWebhookAt : null,
+      lastWebhookParsed:
+        typeof cfg.lastWebhookParsed === "number" ? cfg.lastWebhookParsed : null,
+      lastWebhookBlobs:
+        typeof cfg.lastWebhookBlobs === "number" ? cfg.lastWebhookBlobs : null,
+      lastWebhookProcessed:
+        typeof cfg.lastWebhookProcessed === "number"
+          ? cfg.lastWebhookProcessed
+          : null,
+      connectionStatus,
+      warnings: [
+        ...(!appUrl ? ["PUBLIC_APP_URL não configurado na API"] : []),
+        ...(!conn.isActive ? ["Canal marcado como desconectado no Menve"] : []),
+        ...(connectionStatus && !connectionStatus.connected
+          ? ["Instância desconectada no provedor"]
+          : []),
+        ...(typeof cfg.lastWebhookAt !== "string"
+          ? ["Nenhum webhook recebido ainda nesta conexão"]
+          : []),
+      ],
+    };
+  }
+
+  async probeWebhook(u: RequestUser, connectionId: string) {
+    assertCanConfigureTenant(u.role);
+    const conn = await this.prisma.whatsAppConnection.findFirst({
+      where: { id: connectionId, tenantId: u.tenantId },
+    });
+    if (!conn) throw new BadRequestException("Conexão não encontrada");
+    if (conn.provider !== "ZAPPFY" && conn.provider !== "EVOLUTION") {
+      throw new BadRequestException("Probe disponível só para Zappfy/Evolution");
+    }
+
+    const appUrl = appPublicUrl();
+    if (!appUrl) {
+      throw new BadRequestException("Configure PUBLIC_APP_URL na API.");
+    }
+    const segment = conn.provider === "ZAPPFY" ? "zappfy" : "evolution";
+    const webhookUrl = `${appUrl}/webhooks/whatsapp/${segment}/${conn.id}`;
+    const secret =
+      conn.provider === "ZAPPFY"
+        ? process.env.ZAPPFY_WEBHOOK_SECRET?.trim()
+        : process.env.EVOLUTION_WEBHOOK_SECRET?.trim();
+
+    const probeId = `menve-probe-${Date.now()}`;
+    const payloads: { label: string; body: Record<string, unknown> }[] =
+      conn.provider === "ZAPPFY"
+        ? [
+            {
+              label: "texto-simples",
+              body: {
+                event: "messages",
+                data: {
+                  messageId: probeId,
+                  from: "5511999999999",
+                  text: "probe texto",
+                  fromMe: false,
+                  timestamp: Date.now(),
+                },
+              },
+            },
+            {
+              label: "new-message-audio",
+              body: {
+                type: "NEW-MESSAGE",
+                data: {
+                  key: {
+                    remoteJid: "5511888888888@s.whatsapp.net",
+                    fromMe: false,
+                    id: `${probeId}-audio`,
+                  },
+                  message: {
+                    audioMessage: {
+                      url: "https://example.com/probe.m4a",
+                      mimetype: "audio/mp4",
+                      ptt: true,
+                    },
+                  },
+                  messageTimestamp: { low: Math.floor(Date.now() / 1000), high: 0 },
+                },
+              },
+            },
+          ]
+        : [
+            {
+              label: "messages-upsert",
+              body: {
+                event: "messages.upsert",
+                data: {
+                  key: {
+                    id: probeId,
+                    remoteJid: "5511999999999@s.whatsapp.net",
+                    fromMe: false,
+                  },
+                  message: { conversation: "probe evolution" },
+                  messageTimestamp: Math.floor(Date.now() / 1000),
+                },
+              },
+            },
+          ];
+
+    const results: {
+      label: string;
+      httpStatus: number;
+      parsed?: number;
+      processed?: number;
+      ok: boolean;
+      detail?: string;
+    }[] = [];
+
+    for (const p of payloads) {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (secret) headers["x-webhook-secret"] = secret;
+
+      try {
+        const res = await fetch(webhookUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(p.body),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          processed?: number;
+          parsed?: number;
+          error?: string;
+        };
+        const parseMeta =
+          conn.provider === "ZAPPFY"
+            ? getZappfyWebhookParseMeta(p.body)
+            : { blobCount: 0 };
+        results.push({
+          label: p.label,
+          httpStatus: res.status,
+          processed: json.processed,
+          ok: res.ok,
+          detail: res.ok
+            ? `blobs=${parseMeta.blobCount}`
+            : json.error ?? `HTTP ${res.status}`,
+        });
+      } catch (e) {
+        results.push({
+          label: p.label,
+          httpStatus: 0,
+          ok: false,
+          detail: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    const diag = await this.getWebhookDiagnostics(u, connectionId);
+    return {
+      ok: results.every((r) => r.ok),
+      webhookUrl,
+      results,
+      diagnostics: diag,
+    };
   }
 
   async createMetaConnection(

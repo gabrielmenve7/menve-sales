@@ -275,11 +275,16 @@ export class WebhooksController {
       } catch (e) {
         failed += 1;
         this.log.error(
-          `zappfy inbound falhou connectionId=${connectionId} externalId=${inbound.externalId}`,
+          `zappfy inbound falhou tenantId=${conn.tenantId} connectionId=${connectionId} externalId=${inbound.externalId}`,
           e instanceof Error ? e.stack : String(e),
         );
       }
     }
+    await this.touchWebhookMeta(conn.id, {
+      parsed: items.length,
+      blobs: getZappfyWebhookParseMeta(payload).blobCount,
+      processed,
+    });
     if (failed > 0) {
       throw new HttpException(
         { ok: false, processed, duplicated, failed },
@@ -288,11 +293,15 @@ export class WebhooksController {
     }
     const meta = getZappfyWebhookParseMeta(payload);
     this.log.log(
-      `zappfy webhook connectionId=${connectionId} event=${String(meta.event)} blobs=${meta.blobCount} parsed=${items.length} processed=${processed} duplicated=${duplicated}`,
+      `zappfy webhook tenantId=${conn.tenantId} connectionId=${connectionId} event=${String(meta.event)} blobs=${meta.blobCount} parsed=${items.length} processed=${processed} duplicated=${duplicated}`,
     );
     if (items.length === 0 && meta.blobCount > 0) {
       this.log.warn(
-        `zappfy webhook: ${meta.blobCount} blob(s) mas nenhuma mensagem inbound. connectionId=${connectionId}`,
+        `zappfy webhook: ${meta.blobCount} blob(s) mas nenhuma mensagem inbound (${meta.rejectReason ?? "motivo desconhecido"}). tenantId=${conn.tenantId} connectionId=${connectionId}`,
+      );
+    } else if (items.length === 0 && meta.rejectReason) {
+      this.log.warn(
+        `zappfy webhook ignorado: ${meta.rejectReason}. tenantId=${conn.tenantId} connectionId=${connectionId}`,
       );
     }
     return {
@@ -303,5 +312,29 @@ export class WebhooksController {
       event: meta.event,
       blobs: meta.blobCount,
     };
+  }
+
+  private async touchWebhookMeta(
+    connectionId: string,
+    meta: { parsed: number; blobs: number; processed: number },
+  ) {
+    const conn = await this.prisma.whatsAppConnection.findUnique({
+      where: { id: connectionId },
+      select: { config: true },
+    });
+    if (!conn) return;
+    const cfg = (conn.config as Record<string, unknown>) ?? {};
+    await this.prisma.whatsAppConnection.update({
+      where: { id: connectionId },
+      data: {
+        config: {
+          ...cfg,
+          lastWebhookAt: new Date().toISOString(),
+          lastWebhookParsed: meta.parsed,
+          lastWebhookBlobs: meta.blobs,
+          lastWebhookProcessed: meta.processed,
+        },
+      },
+    });
   }
 }
