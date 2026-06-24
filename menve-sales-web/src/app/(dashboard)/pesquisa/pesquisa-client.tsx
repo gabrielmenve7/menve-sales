@@ -100,6 +100,7 @@ export function PesquisaClient({
     text: string;
     contactId?: string;
   } | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -109,35 +110,20 @@ export function PesquisaClient({
   const searchMut = useMutation({
     mutationFn: (payload: CaptureFormPayload) => prospectingSearch(payload),
     onSuccess: (data) => {
-      const raw = data.search as Record<string, unknown>;
-      const search: ProspectSearchHistory = {
-        id: String(raw.id),
-        query: String(raw.query ?? ""),
-        segment: (raw.segment as string | null) ?? null,
-        state: (raw.state as string | null) ?? null,
-        city: (raw.city as string | null) ?? null,
-        location: (raw.location as string | null) ?? null,
-        engines: Array.isArray(raw.engines) ? (raw.engines as string[]) : [],
-        totalCount: Number(raw.totalCount ?? 0),
-        qualifiedCount: Number(raw.qualifiedCount ?? 0),
-        status: (raw.status as ProspectSearchHistory["status"]) ?? "ENRICHING",
-        webExhausted: raw.webExhausted === true,
-        createdAt:
-          typeof raw.createdAt === "string"
-            ? raw.createdAt
-            : new Date().toISOString(),
-        user: { name: null, email: null },
-      };
-      setActiveSearchId(search.id);
+      if (!data.ok) {
+        setCaptureError(data.message);
+        return;
+      }
+      setCaptureError(null);
+      setActiveSearchId(data.searchId);
       setSelected(new Set());
-      setSearches((prev) => {
-        const rest = prev.filter((s) => s.id !== search.id);
-        return [{ ...search, user: search.user ?? { name: null, email: null } }, ...rest];
-      });
       router.refresh();
       requestAnimationFrame(() => {
         document.getElementById("lista-results")?.scrollIntoView({ behavior: "smooth" });
       });
+    },
+    onError: () => {
+      setCaptureError("Falha na captura. Tente novamente.");
     },
   });
 
@@ -357,12 +343,11 @@ export function PesquisaClient({
 
       <ListaCaptureForm
         pending={searchMut.isPending}
-        error={
-          searchMut.isError
-            ? ((searchMut.error as Error)?.message ?? "Erro na captura")
-            : null
-        }
-        onSubmit={(payload) => searchMut.mutate(payload)}
+        error={captureError}
+        onSubmit={(payload) => {
+          setCaptureError(null);
+          searchMut.mutate(payload);
+        }}
       />
 
       <ListaHistoryDialog

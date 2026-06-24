@@ -56,27 +56,59 @@ async function wrapProspecting<T>(p: Promise<T>): Promise<T> {
   }
 }
 
+function prospectingErrorMessage(e: unknown): string {
+  if (e instanceof z.ZodError) {
+    return e.errors[0]?.message ?? "Preencha segmento, estado, cidade e fontes.";
+  }
+  if (e instanceof Error) {
+    const m = e.message;
+    const match = /^API \d+: ([\s\S]+)$/.exec(m);
+    if (match?.[1]) {
+      try {
+        const body = JSON.parse(match[1]) as {
+          message?: string | string[];
+        };
+        if (Array.isArray(body.message)) return body.message.join(", ");
+        if (typeof body.message === "string") return body.message;
+      } catch {
+        return match[1].slice(0, 500);
+      }
+    }
+    return m;
+  }
+  return "Falha na captura. Tente novamente.";
+}
+
 export async function prospectingGetStats(): Promise<ProspectStats> {
   return wrapProspecting(apiServer<ProspectStats>("/prospecting/stats"));
 }
 
+export type ProspectingSearchResult =
+  | { ok: true; searchId: string }
+  | { ok: false; message: string };
+
 export async function prospectingSearch(
   input: z.infer<typeof structuredSearchSchema> | string,
-) {
-  const json =
-    typeof input === "string"
-      ? legacyQuerySchema.parse({ query: input })
-      : structuredSearchSchema.parse(input);
+): Promise<ProspectingSearchResult> {
+  try {
+    const json =
+      typeof input === "string"
+        ? legacyQuerySchema.parse({ query: input })
+        : structuredSearchSchema.parse(input);
 
-  const res = await wrapProspecting(
-    apiServer<{ search: unknown; results: unknown[] }>(
-      "/prospecting/search",
-      { method: "POST", json },
-    ),
-  );
-  revalidatePath("/lista");
-  revalidatePath("/pesquisa");
-  return res;
+    const res = await wrapProspecting(
+      apiServer<{ search: { id: string }; results: unknown[] }>(
+        "/prospecting/search",
+        { method: "POST", json },
+      ),
+    );
+
+    revalidatePath("/lista");
+    revalidatePath("/pesquisa");
+    return { ok: true, searchId: res.search.id };
+  } catch (e) {
+    return { ok: false, message: prospectingErrorMessage(e) };
+  }
 }
 
 export async function prospectingGetSearch(searchId: string) {

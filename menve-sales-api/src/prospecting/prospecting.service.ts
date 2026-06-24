@@ -156,11 +156,23 @@ export class ProspectingService {
 
   async search(tenantId: string, userId: string, raw: unknown) {
     await this.ensureResearchEnabled(tenantId);
-    const parsed = searchBody.parse(raw);
+
+    let parsed: z.infer<typeof searchBody>;
+    try {
+      parsed = searchBody.parse(raw);
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        throw new BadRequestException(
+          e.errors[0]?.message ?? "Dados de captura inválidos",
+        );
+      }
+      throw e;
+    }
+
     const key = this.serperKey();
     if (!key) {
       throw new BadRequestException(
-        "SERPER_API_KEY não configurada na API",
+        "SERPER_API_KEY não configurada na API. Adicione a chave do Serper nas variáveis de ambiente do serviço da API (Railway).",
       );
     }
 
@@ -269,7 +281,11 @@ export class ProspectingService {
       return { search, results };
     } catch (e) {
       const message =
-        e instanceof Error ? e.message : "Falha na busca Serper";
+        e instanceof BadRequestException
+          ? String(e.message)
+          : e instanceof Error
+            ? e.message
+            : "Falha na busca Serper";
       await this.prisma.prospectSearch.update({
         where: { id: searchRow.id },
         data: {
@@ -277,7 +293,11 @@ export class ProspectingService {
           errorMessage: message,
         },
       });
-      throw e;
+      throw new BadRequestException(
+        message.startsWith("Serper")
+          ? `Falha ao consultar o Google (Serper): ${message}`
+          : message,
+      );
     }
   }
 
@@ -294,7 +314,7 @@ export class ProspectingService {
       where: { id: searchId, tenantId },
     });
     if (!search) throw new NotFoundException();
-    if (!search.engines.includes("search")) {
+    if (!search.engines.includes("search") && search.engines.length > 0) {
       throw new BadRequestException(
         "Esta busca não incluiu a rede de pesquisa.",
       );
