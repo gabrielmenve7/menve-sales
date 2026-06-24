@@ -44,16 +44,27 @@ export function buildLarissaSystemPrompt(args: {
 }
 
 export function buildChatHistory(
-  messages: { direction: string; body: string; senderType?: string }[],
+  messages: {
+    direction: string;
+    body: string;
+    senderType?: string;
+    audioTranscript?: string | null;
+  }[],
   maxMessages: number,
 ): { role: "user" | "assistant"; content: string }[] {
   const slice = messages.slice(-maxMessages);
   return slice.map((m) => {
     const isLead =
       m.direction === "INBOUND" || m.senderType === "LEAD";
+    const content =
+      isLead && m.audioTranscript?.trim()
+        ? `[Áudio do lead]: ${m.audioTranscript.trim()}`
+        : m.body === "[Áudio]" && isLead
+          ? "[Áudio do lead] (transcrição indisponível)"
+          : m.body;
     return {
       role: isLead ? ("user" as const) : ("assistant" as const),
-      content: m.body,
+      content,
     };
   });
 }

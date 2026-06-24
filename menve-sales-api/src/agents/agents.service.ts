@@ -153,6 +153,31 @@ export class AgentsService {
     return this.skillSync.syncSkillsForTenant(tenantId);
   }
 
+  async activateLarissaOnConversation(
+    tenantId: string,
+    conversationId: string,
+  ) {
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { contactId: true },
+    });
+    if (!conv) throw new NotFoundException("Conversa não encontrada");
+
+    try {
+      await this.orchestrator.activateOnConversation({
+        tenantId,
+        conversationId,
+        contactId: conv.contactId,
+      });
+    } catch (e) {
+      throw new BadRequestException(
+        e instanceof Error ? e.message : "Não foi possível ativar a Larissa",
+      );
+    }
+
+    return { ok: true as const };
+  }
+
   async takeoverConversation(
     tenantId: string,
     userId: string,

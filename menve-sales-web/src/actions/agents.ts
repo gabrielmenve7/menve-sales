@@ -58,3 +58,10 @@ export async function takeoverConversation(conversationId: string) {
   });
   revalidatePath("/inbox");
 }
+
+export async function activateLarissaOnConversation(conversationId: string) {
+  await apiServer(`/agents/conversations/${conversationId}/activate`, {
+    method: "POST",
+  });
+  revalidatePath("/inbox");
+}

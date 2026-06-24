@@ -27,6 +27,14 @@ export class AgentsController {
     return this.agents.syncSkills(u.tenantId);
   }
 
+  @Post("conversations/:id/activate")
+  activateLarissa(
+    @ReqUser() u: RequestUser,
+    @Param("id") conversationId: string,
+  ) {
+    return this.agents.activateLarissaOnConversation(u.tenantId, conversationId);
+  }
+
   @Post("conversations/:id/takeover")
   takeover(
     @ReqUser() u: RequestUser,

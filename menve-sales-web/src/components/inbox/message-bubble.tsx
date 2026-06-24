@@ -23,6 +23,7 @@ export function MessageBubble({
   ackStatus,
   mediaUrl,
   mediaType,
+  audioTranscript,
   messageId,
   contactPhotoUrl,
   contactName,
@@ -35,6 +36,7 @@ export function MessageBubble({
   ackStatus?: OutboundAckStatus | null;
   mediaUrl?: string | null;
   mediaType?: string | null;
+  audioTranscript?: string | null;
   messageId?: string;
   contactPhotoUrl?: string | null;
   contactName?: string;
@@ -100,6 +102,14 @@ export function MessageBubble({
           contactPhotoUrl={!isOut ? contactPhotoUrl : undefined}
           contactName={!isOut ? contactName : undefined}
         />
+        {audioTranscript?.trim() ? (
+          <p className="mt-1.5 px-1 text-[11px] leading-snug text-muted-foreground">
+            <span className="font-medium text-violet-700 dark:text-violet-300">
+              Larissa ouviu:
+            </span>{" "}
+            {audioTranscript.trim()}
+          </p>
+        ) : null}
         {isOut && ack ? (
           <div className="mt-1 flex justify-end gap-1 pr-1">
             <OutboundAckIcons status={ack} />

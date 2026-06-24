@@ -870,6 +870,8 @@ model Message {
   body                 String
   mediaUrl             String?
   mediaType            String?
+  /// Transcrição Whisper de áudio inbound (para agentes IA).
+  audioTranscript      String?
   externalId           String?
   /// Somente OUTBOUND; inbound permanece null.
   ackStatus            MessageAckStatus?

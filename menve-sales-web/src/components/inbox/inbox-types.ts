@@ -32,6 +32,7 @@ export type InboxMessage = Message & {
   ackStatus?: "SENT" | "DELIVERED" | "READ" | null;
   mediaUrl?: string | null;
   mediaType?: string | null;
+  audioTranscript?: string | null;
   senderType?:
     | "LEAD"
     | "HUMAN_AGENT"

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Optional, Inject, forwardRef } from "@nestjs/common";
 import {
   ConversationStatus,
+  ConversationQualificationMode,
   MessageAckStatus,
   MessageDirection,
   MessageSenderType,
@@ -9,6 +10,7 @@ import {
   WhatsAppProvider,
 } from "@prisma/client";
 import { LarissaOrchestratorService } from "../agents/larissa-orchestrator.service";
+import { isInboundAudioMessage } from "../agents/inbound-audio.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { OutreachService } from "../outreach/outreach.service";
 import { extractEvolutionMessageAckUpdates } from "./evolution-provider";
@@ -394,9 +396,35 @@ export class MessageProcessingService {
             conversationId: conversation.id,
             contactId: contact.id,
             outreachRecipientId: reply.recipientId,
+            triggerMessageId: created.id,
+            isAudio: isInboundAudioMessage({
+              body: args.inbound.body,
+              mediaType,
+            }),
+            mediaReady: Boolean(mediaUrl),
           })
           .catch(() => undefined);
+      } else if (!outboundFromDevice && this.larissa) {
+        await this.maybeNotifyLarissaInbound({
+          tenantId: args.tenantId,
+          conversationId: conversation.id,
+          contactId: contact.id,
+          messageId: created.id,
+          body: args.inbound.body,
+          mediaType,
+          mediaReady: Boolean(mediaUrl),
+        });
       }
+    } else if (!outboundFromDevice && this.larissa) {
+      await this.maybeNotifyLarissaInbound({
+        tenantId: args.tenantId,
+        conversationId: conversation.id,
+        contactId: contact.id,
+        messageId: created.id,
+        body: args.inbound.body,
+        mediaType,
+        mediaReady: Boolean(mediaUrl),
+      });
     }
 
     // Só quando o cliente envia mensagem: marcar mensagens nossas anteriores como lidas por ele.
@@ -543,7 +571,75 @@ export class MessageProcessingService {
         mediaType: resolved.mediaType,
       },
     });
+
+    if (isInboundAudioMessage({ body: msg.body, mediaType: resolved.mediaType })) {
+      await this.maybeNotifyLarissaAfterAudioHydrate(msg.id).catch(() => undefined);
+    }
+
     return true;
+  }
+
+  private async maybeNotifyLarissaInbound(args: {
+    tenantId: string;
+    conversationId: string;
+    contactId: string;
+    messageId: string;
+    body: string;
+    mediaType: string | null;
+    mediaReady: boolean;
+  }) {
+    if (!this.larissa) return;
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: args.conversationId, tenantId: args.tenantId },
+      select: { qualificationMode: true },
+    });
+    if (conv?.qualificationMode !== ConversationQualificationMode.AI_ACTIVE) {
+      return;
+    }
+    const isAudio = isInboundAudioMessage({
+      body: args.body,
+      mediaType: args.mediaType,
+    });
+    this.larissa.notifyInboundMessage({
+      tenantId: args.tenantId,
+      conversationId: args.conversationId,
+      contactId: args.contactId,
+      messageId: args.messageId,
+      isAudio,
+      mediaReady: args.mediaReady,
+    });
+  }
+
+  private async maybeNotifyLarissaAfterAudioHydrate(messageId: string) {
+    if (!this.larissa) return;
+    const row = await this.prisma.message.findFirst({
+      where: { id: messageId },
+      select: {
+        id: true,
+        tenantId: true,
+        conversationId: true,
+        contactId: true,
+        body: true,
+        mediaType: true,
+        mediaUrl: true,
+      },
+    });
+    if (!row?.conversationId || !row.mediaUrl) return;
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id: row.conversationId, tenantId: row.tenantId },
+      select: { qualificationMode: true },
+    });
+    if (conv?.qualificationMode !== ConversationQualificationMode.AI_ACTIVE) {
+      return;
+    }
+    this.larissa.notifyInboundMessage({
+      tenantId: row.tenantId,
+      conversationId: row.conversationId,
+      contactId: row.contactId,
+      messageId: row.id,
+      isAudio: true,
+      mediaReady: true,
+    });
   }
 
   /** Webhook Evolution `messages.update`: avança ACK só para cima (SENT→DELIVERED→READ). */

@@ -6,6 +6,8 @@ import {
 import { resolveJourneyContext } from "../deals/journey-context.util";
 import { PrismaService } from "../prisma/prisma.service";
 import { LarissaEligibilityService } from "./larissa-eligibility.service";
+import { AudioTranscriptionService } from "./audio-transcription.service";
+import { isInboundAudioMessage } from "./inbound-audio.util";
 import { OpenAiLlmProvider } from "./llm/openai.provider";
 import type { LlmMessage } from "./llm/llm-provider.interface";
 import {
@@ -30,13 +32,53 @@ export class LarissaOrchestratorService {
     private readonly prisma: PrismaService,
     private readonly eligibility: LarissaEligibilityService,
     private readonly tools: LarissaToolsService,
+    private readonly transcription: AudioTranscriptionService,
   ) {}
+
+  /** Ativa Larissa manualmente (teste / conversa sem disparo). */
+  async activateOnConversation(args: {
+    tenantId: string;
+    conversationId: string;
+    contactId: string;
+  }) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: args.tenantId },
+      select: { larissaEnabled: true },
+    });
+    if (!tenant?.larissaEnabled) {
+      throw new Error("Larissa desativada neste workspace");
+    }
+
+    const agent = await this.prisma.aiAgent.findUnique({
+      where: { key: LARISSA_KEY },
+    });
+    if (!agent?.isActive) {
+      throw new Error("Agente Larissa inativo");
+    }
+
+    await this.prisma.conversation.update({
+      where: { id: args.conversationId },
+      data: {
+        qualificationMode: ConversationQualificationMode.AI_ACTIVE,
+        aiAgentId: agent.id,
+      },
+    });
+
+    await this.enqueueTurn({
+      tenantId: args.tenantId,
+      conversationId: args.conversationId,
+      contactId: args.contactId,
+    });
+  }
 
   async activateOnInboundReply(args: {
     tenantId: string;
     conversationId: string;
     contactId: string;
     outreachRecipientId?: string | null;
+    triggerMessageId?: string;
+    isAudio?: boolean;
+    mediaReady?: boolean;
   }) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: args.tenantId },
@@ -62,6 +104,27 @@ export class LarissaOrchestratorService {
       tenantId: args.tenantId,
       conversationId: args.conversationId,
       contactId: args.contactId,
+      triggerMessageId: args.triggerMessageId,
+      waitForAudioMs:
+        args.isAudio && args.mediaReady === false ? 12_000 : 0,
+    });
+  }
+
+  /** Reage a nova mensagem inbound com Larissa já ativa. */
+  notifyInboundMessage(args: {
+    tenantId: string;
+    conversationId: string;
+    contactId: string;
+    messageId: string;
+    isAudio: boolean;
+    mediaReady: boolean;
+  }) {
+    void this.enqueueTurn({
+      tenantId: args.tenantId,
+      conversationId: args.conversationId,
+      contactId: args.contactId,
+      triggerMessageId: args.messageId,
+      waitForAudioMs: args.isAudio && !args.mediaReady ? 12_000 : 0,
     });
   }
 
@@ -70,6 +133,7 @@ export class LarissaOrchestratorService {
     conversationId: string;
     contactId: string;
     triggerMessageId?: string;
+    waitForAudioMs?: number;
   }) {
     const key = args.conversationId;
     const existing = this.pendingTurns.get(key);
@@ -81,7 +145,8 @@ export class LarissaOrchestratorService {
         select: { larissaReplyDelayMs: true },
       })
       .then((tenant) => {
-        const delay = tenant?.larissaReplyDelayMs ?? 1500;
+        const baseDelay = tenant?.larissaReplyDelayMs ?? 1500;
+        const delay = baseDelay + Math.max(0, args.waitForAudioMs ?? 0);
         const timer = setTimeout(() => {
           this.pendingTurns.delete(key);
           void this.runTurn(args).catch((e) => {
@@ -99,6 +164,7 @@ export class LarissaOrchestratorService {
     conversationId: string;
     contactId: string;
     triggerMessageId?: string;
+    waitForAudioMs?: number;
   }) {
     const check = await this.eligibility.shouldRun({
       tenantId: args.tenantId,
@@ -120,7 +186,7 @@ export class LarissaOrchestratorService {
       return;
     }
 
-    const [tenant, journey, messages] = await Promise.all([
+    const [tenant, journey, messagesRaw] = await Promise.all([
       this.prisma.tenant.findUnique({
         where: { id: args.tenantId },
         select: { name: true, larissaModel: true },
@@ -129,9 +195,23 @@ export class LarissaOrchestratorService {
       this.prisma.message.findMany({
         where: { conversationId: args.conversationId },
         orderBy: { createdAt: "asc" },
-        select: { direction: true, body: true, senderType: true },
+        select: {
+          id: true,
+          direction: true,
+          body: true,
+          senderType: true,
+          mediaUrl: true,
+          mediaType: true,
+          audioTranscript: true,
+        },
       }),
     ]);
+
+    const messages = await this.ensureAudioTranscripts({
+      messages: messagesRaw,
+      triggerMessageId: args.triggerMessageId,
+      waitForAudioMs: args.waitForAudioMs ?? 0,
+    });
 
     const model =
       tenant?.larissaModel?.trim() ||
@@ -268,6 +348,74 @@ export class LarissaOrchestratorService {
         },
       });
       throw e;
+    }
+  }
+
+  private async ensureAudioTranscripts(args: {
+    messages: {
+      id: string;
+      direction: string;
+      body: string;
+      senderType: string;
+      mediaUrl: string | null;
+      mediaType: string | null;
+      audioTranscript: string | null;
+    }[];
+    triggerMessageId?: string;
+    waitForAudioMs: number;
+  }) {
+    const deadline = Date.now() + args.waitForAudioMs;
+    let rows = [...args.messages];
+
+    while (true) {
+      for (const m of rows) {
+        if (m.direction !== "INBOUND" && m.senderType !== "LEAD") continue;
+        if (!this.transcription.needsTranscription(m)) continue;
+
+        const transcript = await this.transcription.transcribeMessage({
+          mediaUrl: m.mediaUrl!,
+          mediaType: m.mediaType,
+        });
+        if (transcript) {
+          await this.prisma.message.update({
+            where: { id: m.id },
+            data: { audioTranscript: transcript },
+          });
+          m.audioTranscript = transcript;
+          this.log.log(`audio transcribed message=${m.id} len=${transcript.length}`);
+        }
+      }
+
+      const trigger = args.triggerMessageId
+        ? rows.find((m) => m.id === args.triggerMessageId)
+        : undefined;
+      const triggerNeedsMedia =
+        trigger &&
+        isInboundAudioMessage(trigger) &&
+        !trigger.audioTranscript?.trim() &&
+        !trigger.mediaUrl?.trim();
+
+      if (!triggerNeedsMedia || Date.now() >= deadline) {
+        return rows;
+      }
+
+      await new Promise((r) => setTimeout(r, 2_000));
+      const fresh = await this.prisma.message.findMany({
+        where: {
+          id: { in: rows.map((m) => m.id) },
+        },
+        select: {
+          id: true,
+          direction: true,
+          body: true,
+          senderType: true,
+          mediaUrl: true,
+          mediaType: true,
+          audioTranscript: true,
+        },
+      });
+      const byId = new Map(fresh.map((m) => [m.id, m]));
+      rows = rows.map((m) => byId.get(m.id) ?? m);
     }
   }
 }

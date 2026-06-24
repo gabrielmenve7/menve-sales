@@ -111,11 +111,13 @@ function attachmentKind(file: File): "image" | "document" | null {
 export function ChatPanel({
   conversation,
   quickReplyCategories,
+  larissaEnabled = false,
   onRefetch,
   onDeleted,
 }: {
   conversation: InboxConversation;
   quickReplyCategories: QuickReplyCategoryDTO[];
+  larissaEnabled?: boolean;
   onRefetch: () => void;
   onDeleted?: () => void;
 }) {
@@ -602,7 +604,11 @@ export function ChatPanel({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <QualificationBanner conversation={conversation} onTakeover={onRefetch} />
+          <QualificationBanner
+            conversation={conversation}
+            larissaEnabled={larissaEnabled}
+            onTakeover={onRefetch}
+          />
           {/* Messages */}
           <div
             ref={scrollRef}
@@ -649,6 +655,7 @@ export function ChatPanel({
                     ackStatus={m.ackStatus}
                     mediaUrl={m.mediaUrl}
                     mediaType={m.mediaType}
+                    audioTranscript={m.audioTranscript}
                     messageId={m.id}
                     contactPhotoUrl={
                       m.direction === "INBOUND"

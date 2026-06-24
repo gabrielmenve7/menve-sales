@@ -8,6 +8,7 @@ import { HandoffService } from "./handoff.service";
 import { LarissaEligibilityService } from "./larissa-eligibility.service";
 import { LarissaOrchestratorService } from "./larissa-orchestrator.service";
 import { SkillSyncService } from "./skill-sync.service";
+import { AudioTranscriptionService } from "./audio-transcription.service";
 import { LarissaToolsService } from "./tools/larissa-tools.service";
 
 @Module({
@@ -20,6 +21,7 @@ import { LarissaToolsService } from "./tools/larissa-tools.service";
     LarissaOrchestratorService,
     HandoffService,
     LarissaToolsService,
+    AudioTranscriptionService,
     AiOutboundService,
   ],
   exports: [

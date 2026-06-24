@@ -1,6 +1,7 @@
 import type { CustomField } from "@prisma/client";
 import type { InboxConversation } from "@/components/inbox/inbox-types";
 import { InboxClient } from "@/inbox";
+import { getLarissaConfig } from "@/actions/agents";
 import { apiServer } from "@/lib/api-server";
 import type { TenantMemberOption } from "@/lib/custom-field-types";
 import { canConfigureTenant } from "@/lib/session";
@@ -32,6 +33,7 @@ export default async function InboxPage({
     dealCustomFieldDefs,
     tenantMembers,
     initialConversationDetail,
+    larissaConfig,
   ] = await Promise.all([
     apiServer<{
       whatsAppConnections: unknown[];
@@ -49,6 +51,7 @@ export default async function InboxPage({
           `/inbox/conversations/${encodeURIComponent(initialConversationId)}`,
         ).catch(() => null)
       : Promise.resolve(null),
+    getLarissaConfig().catch(() => null),
   ]);
 
   const { whatsAppConnections, quickReplyCategories, conversations } = inboxBundle;
@@ -71,6 +74,7 @@ export default async function InboxPage({
         initialContactId={initialContactId}
         initialConversationId={initialConversationId}
         initialConversationDetail={mergedInitialConversationDetail}
+        larissaEnabled={larissaConfig?.config.larissaEnabled ?? false}
         dealCustomFieldDefs={dealCustomFieldDefs}
         tenantMembers={tenantMembers}
         canManageConnections={canManageConnections}

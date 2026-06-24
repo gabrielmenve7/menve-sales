@@ -96,6 +96,7 @@ function InboxConversationThreadColumn({
   conversationId,
   initialConversationDetail,
   quickReplyCategories,
+  larissaEnabled = false,
   onRefetchInbox,
   onConversationDeleted,
 }: {
@@ -103,6 +104,7 @@ function InboxConversationThreadColumn({
   conversationId: string;
   initialConversationDetail: InboxConversation | null | undefined;
   quickReplyCategories: QuickReplyCategoryDTO[];
+  larissaEnabled?: boolean;
   onRefetchInbox: () => void;
   onConversationDeleted: () => void;
 }) {
@@ -155,6 +157,7 @@ function InboxConversationThreadColumn({
       <ChatPanel
         conversation={merged}
         quickReplyCategories={quickReplyCategories}
+        larissaEnabled={larissaEnabled}
         onRefetch={onRefetchInbox}
         onDeleted={onConversationDeleted}
       />
@@ -170,6 +173,7 @@ export function InboxClient({
   initialConversationId = null,
   /** Thread completo quando a página já resolveu o deep link (ex.: funil → inbox). */
   initialConversationDetail = null,
+  larissaEnabled = false,
   dealCustomFieldDefs,
   tenantMembers,
 }: {
@@ -181,6 +185,7 @@ export function InboxClient({
   /** ID exato retornado por `POST /inbox/ensure-conversation` (canal ativo). */
   initialConversationId?: string | null;
   initialConversationDetail?: InboxConversation | null;
+  larissaEnabled?: boolean;
   dealCustomFieldDefs: CustomField[];
   tenantMembers: TenantMemberOption[];
   canManageConnections?: boolean;
@@ -374,6 +379,7 @@ export function InboxClient({
             conversationId={selectedId}
             initialConversationDetail={initialConversationDetail}
             quickReplyCategories={quickReplyCategories}
+            larissaEnabled={larissaEnabled}
             onRefetchInbox={() => void refetchInbox()}
             onConversationDeleted={handleConversationDeleted}
           />
