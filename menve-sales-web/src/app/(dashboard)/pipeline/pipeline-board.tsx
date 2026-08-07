@@ -678,7 +678,7 @@ function StageColumn({
         </div>
         <div className="shrink-0 pt-3">
           <PipelineColumnNewDealFooterTrigger
-            stageColor={stage.color}
+            accentHex={stage.color}
             onClick={() => setNewDealOpen(true)}
           />
         </div>
