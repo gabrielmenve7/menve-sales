@@ -630,7 +630,7 @@ model Deal {
   assignedToId  String?
   assignedTo    User?      @relation("AssignedDeals", fields: [assignedToId], references: [id])
   customData    Json?
-  /// Visível em Gestão de leads (`/pipeline`) após agendar reunião com Google Meet.
+  /// Visível em Gestão de leads (`/pipeline`) após criação manual (POST /deals) ou promoção por Google Meet.
   pipelineVisible   Boolean   @default(false)
   pipelineEnteredAt DateTime?
   createdAt     DateTime   @default(now())

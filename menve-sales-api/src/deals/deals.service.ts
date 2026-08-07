@@ -639,7 +639,8 @@ export class DealsService {
         title: data.title,
         value: effectiveValue,
         probability: data.probability ?? null,
-        pipelineVisible: false,
+        pipelineVisible: true,
+        pipelineEnteredAt: new Date(),
       },
     });
 
